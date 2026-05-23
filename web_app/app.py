@@ -331,19 +331,60 @@ def load_case_from_path():
 
 # --- Rutas de Resultados OSINT ---
 
-@app.route('/api/osint/results/<caso_id>', methods=['GET'])
-def osint_results(caso_id):
-    """Retorna el resumen_osint.json del caso especificado."""
+def _osint_results_dir(caso_id):
+    return os.path.join(CASES_BASE_DIR, caso_id, '03_Results_(Resultados_Extraidos)', 'OSINT')
+
+def _osint_images_dir(caso_id):
+    return os.path.join(CASES_BASE_DIR, caso_id, '01_Images_(Fuentes_de_datos)', 'OSINT')
+
+
+@app.route('/api/osint/list/<caso_id>', methods=['GET'])
+def osint_list(caso_id):
+    """Retorna el índice de todas las búsquedas OSINT del caso (osint_index.json)."""
     caso_id = sanitize_case_id(caso_id)
     if not caso_id:
         return jsonify({"status": "error", "message": "caso_id inválido"}), 400
 
-    ruta_resumen = os.path.join(
-        CASES_BASE_DIR, caso_id,
-        '03_Results_(Resultados_Extraidos)', 'OSINT', 'resumen_osint.json'
-    )
+    ruta_index = os.path.join(_osint_results_dir(caso_id), 'osint_index.json')
+    if not os.path.exists(ruta_index):
+        return jsonify({"status": "ok", "busquedas": [], "ultima": None})
+
+    try:
+        with open(ruta_index, 'r', encoding='utf-8') as f:
+            indice = json.load(f)
+        return jsonify({
+            "status":    "ok",
+            "busquedas": indice.get('busquedas', []),
+            "ultima":    indice.get('ultima_busqueda'),
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/osint/results/<caso_id>', methods=['GET'])
+def osint_results(caso_id):
+    """
+    Retorna el resumen de una búsqueda específica.
+    Query param: ?alias=<alias>   (requerido)
+    """
+    caso_id = sanitize_case_id(caso_id)
+    if not caso_id:
+        return jsonify({"status": "error", "message": "caso_id inválido"}), 400
+
+    alias_raw = request.args.get('alias', '').strip()
+    if not alias_raw:
+        return jsonify({"status": "error", "message": "Parámetro 'alias' requerido."}), 400
+
+    # Sanitizar alias: solo alfanumérico, guion, subguion, punto
+    alias = ''.join(c for c in alias_raw if c.isalnum() or c in ('-', '_', '.'))
+    if not alias:
+        return jsonify({"status": "error", "message": "Alias inválido."}), 400
+
+    nombre_json = f"resumen_osint_{alias}.json"
+    ruta_resumen = os.path.join(_osint_results_dir(caso_id), nombre_json)
+
     if not os.path.exists(ruta_resumen):
-        return jsonify({"status": "error", "message": "No hay resultados OSINT para este caso."}), 404
+        return jsonify({"status": "error", "message": f"No hay resultados OSINT para el alias '{alias}' en el caso '{caso_id}'."}), 404
 
     try:
         with open(ruta_resumen, 'r', encoding='utf-8') as f:
@@ -355,28 +396,27 @@ def osint_results(caso_id):
 
 @app.route('/api/osint/report/<caso_id>', methods=['GET'])
 def osint_html_report(caso_id):
-    """Sirve el reporte HTML de Maigret directamente en el navegador."""
+    """
+    Sirve el reporte HTML de Maigret del alias especificado.
+    Query param: ?alias=<alias>   (requerido)
+    """
     from flask import send_file
     caso_id = sanitize_case_id(caso_id)
     if not caso_id:
         return "caso_id inválido", 400
 
-    osint_dir = os.path.join(
-        CASES_BASE_DIR, caso_id,
-        '01_Images_(Fuentes_de_datos)', 'OSINT'
-    )
-    if not os.path.exists(osint_dir):
-        return "<h2>No hay reporte OSINT para este caso.</h2>", 404
+    alias_raw = request.args.get('alias', '').strip()
+    if not alias_raw:
+        return "<h2>Falta el parámetro 'alias'. Selecciona una búsqueda desde el panel.</h2>", 400
 
-    # Busca el primer .html en la carpeta OSINT
-    html_file = None
-    for fname in os.listdir(osint_dir):
-        if fname.endswith('.html'):
-            html_file = os.path.join(osint_dir, fname)
-            break
+    alias = ''.join(c for c in alias_raw if c.isalnum() or c in ('-', '_', '.'))
+    if not alias:
+        return "Alias inválido", 400
 
-    if not html_file:
-        return "<h2>Reporte HTML no generado aún. Ejecuta primero el módulo OSINT.</h2>", 404
+    html_file = os.path.join(_osint_images_dir(caso_id), f"maigret_{alias}.html")
+
+    if not os.path.exists(html_file):
+        return f"<h2>Reporte HTML para '@{alias}' no encontrado. Ejecuta el módulo OSINT con ese alias primero.</h2>", 404
 
     return send_file(html_file, mimetype='text/html')
 

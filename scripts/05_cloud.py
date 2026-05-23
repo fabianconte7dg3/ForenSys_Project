@@ -227,7 +227,9 @@ def parsear_resultados(ruta_json, alias):
 
 def generar_vista_txt(perfiles, alias, perito, carpeta_views, total_sitios):
     """Genera un resumen legible para el perito."""
-    ruta = os.path.join(carpeta_views, 'perfil_digital.txt')
+    # Nombre de archivo por alias para no sobreescribir búsquedas anteriores
+    nombre_vista = f"perfil_digital_{alias}.txt"
+    ruta = os.path.join(carpeta_views, nombre_vista)
     with open(ruta, 'w', encoding='utf-8') as f:
         f.write("=" * 60 + "\n")
         f.write("    FOREN-SYS — PERFIL DIGITAL OSINT\n")
@@ -354,7 +356,7 @@ def buscar_osint(alias, caso_id, perito, top_sites):
         'disclaimer': DISCLAIMER,
     }
 
-    # Vista legible para el perito
+    # Vista legible para el perito (por alias)
     ruta_txt = generar_vista_txt(perfiles, alias, perito, carpetas['views'], total_sitios_analizados)
     log(f"[+] Vista legible: {ruta_txt}")
 
@@ -363,12 +365,45 @@ def buscar_osint(alias, caso_id, perito, top_sites):
     hash_post = sha256_dir(carpetas['results'])
     resumen['integridad']['hash_post_busqueda'] = hash_post
 
-    ruta_resumen = os.path.join(carpetas['results'], 'resumen_osint.json')
+    # ── Guardar resumen por alias (NUNCA sobreescribe otro alias) ────
+    nombre_json = f"resumen_osint_{alias}.json"
+    nombre_html = f"maigret_{alias}.html"
+    resumen['archivos'] = {
+        'resumen_json': nombre_json,
+        'reporte_html': nombre_html,
+        'vista_txt':    f"perfil_digital_{alias}.txt",
+    }
+    ruta_resumen = os.path.join(carpetas['results'], nombre_json)
     guardar_json(ruta_resumen, resumen)
+
+    # ── Actualizar índice de búsquedas del caso ──────────────────────
+    ruta_index = os.path.join(carpetas['results'], 'osint_index.json')
+    try:
+        if os.path.exists(ruta_index):
+            with open(ruta_index, 'r', encoding='utf-8') as f:
+                indice = json.load(f)
+        else:
+            indice = {'caso_id': caso_id, 'busquedas': []}
+
+        # Reemplazar entrada si el mismo alias ya existía
+        indice['busquedas'] = [b for b in indice['busquedas'] if b['alias'] != alias]
+        indice['busquedas'].append({
+            'alias':              alias,
+            'timestamp':          resumen['timestamp'],
+            'perito':             perito,
+            'total_encontrados':  total_encontrados,
+            'total_analizados':   total_sitios_analizados,
+            'resumen_json':       nombre_json,
+            'reporte_html':       nombre_html,
+        })
+        indice['ultima_busqueda'] = alias
+        guardar_json(ruta_index, indice)
+    except Exception as e:
+        log(f"[!] No se pudo actualizar indice OSINT: {e}")
 
     custodia(ruta_custodia, f"Hash SHA-256 post-busqueda (OSINT/): {hash_post}")
     custodia(ruta_custodia, f"Perfiles encontrados: {total_encontrados}")
-    custodia(ruta_custodia, f"resumen_osint.json guardado — listo para Modulo 8 IA.")
+    custodia(ruta_custodia, f"{nombre_json} guardado — listo para Modulo 8 IA.")
     custodia(ruta_custodia, f"FIN busqueda OSINT — alias: '{alias}'")
 
     # Resultado final

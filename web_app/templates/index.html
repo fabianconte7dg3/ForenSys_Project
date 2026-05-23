@@ -1787,17 +1787,19 @@
                                 <i class="bi bi-clock me-1"></i> Tiempo estimado: <span id="osint-time-text">5-10 minutos</span>. La consola mostrará los sitios encontrados en tiempo real.
                             </div>
 
-                            <!-- Botones acción -->
+                            <!-- Botones acción principal -->
                             <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                 <button class="btn-primary" id="btn-run-cloud" style="background: #475569; border-color: #475569;">
                                     <i class="bi bi-search me-2"></i>Iniciar Rastreo OSINT
                                 </button>
-                                <button class="btn-secondary" id="btn-osint-results" style="display:none; border:1px solid #94a3b8; color:#94a3b8; background:rgba(148,163,184,0.1); padding:8px 16px; border-radius:6px; cursor:pointer; font-size:0.85rem;" onclick="verResultadosOSINT()">
-                                    <i class="bi bi-table me-2"></i>Ver Resultados
-                                </button>
-                                <button class="btn-secondary" id="btn-osint-html" style="display:none; border:1px solid var(--border-dim); color:var(--text-muted); background:transparent; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:0.85rem;" onclick="verReporteOSINT()">
-                                    <i class="bi bi-file-earmark-html me-2"></i>Reporte Maigret
-                                </button>
+                            </div>
+
+                            <!-- Búsquedas anteriores en este caso -->
+                            <div id="osint-history-container" style="display:none; margin-top: 18px;">
+                                <div style="font-size:0.78rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">
+                                    <i class="bi bi-clock-history me-1"></i>Búsquedas en este caso
+                                </div>
+                                <div id="osint-history-list" style="display:flex; flex-direction:column; gap:6px;"></div>
                             </div>
 
                             <!-- Progress Bar -->
@@ -2564,86 +2566,134 @@ document.querySelectorAll('.osint-mode-btn').forEach(btn => {
     });
 });
 
-// ── OSINT Results Modal ────────────────────────────────────────
-function verResultadosOSINT() {
-    const caso = activeCaseNumber;
-    if (!caso) {
-        addLogEntry('[ERROR] No hay un caso activo.', 'log-error');
-        return;
+// ── OSINT: Historial y Modal ──────────────────────────────────────
+
+function _rellenarModalOSINT(d) {
+    document.getElementById('modal-osint').style.display = 'block';
+
+    document.getElementById('osint-modal-subtitle').textContent =
+        `Caso: ${d.caso_id}  •  @${d.alias_buscado}  •  ${d.perito}  •  ${d.timestamp?.split('T')[0] || ''}`;
+
+    // Stats
+    document.getElementById('osint-modal-stats').innerHTML = `
+        <div style="flex:1; min-width:90px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px; text-align:center;">
+            <div style="font-size:1.3rem; font-weight:700; color:#94a3b8;">${d.total_perfiles_encontrados}</div>
+            <div style="font-size:0.72rem; color:var(--text-muted);">Perfiles hallados</div>
+        </div>
+        <div style="flex:1; min-width:90px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px; text-align:center;">
+            <div style="font-size:1.3rem; font-weight:700; color:#94a3b8;">${d.total_sitios_analizados}</div>
+            <div style="font-size:0.72rem; color:var(--text-muted);">Sitios analizados</div>
+        </div>
+        <div style="flex:1; min-width:90px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px; text-align:center;">
+            <div style="font-size:1.3rem; font-weight:700; color:#4ade80;">✓</div>
+            <div style="font-size:0.72rem; color:var(--text-muted);">Cadena custodia</div>
+        </div>
+    `;
+
+    // Tabla
+    const tbody = document.getElementById('osint-profiles-tbody');
+    tbody.innerHTML = '';
+    if (d.perfiles && d.perfiles.length > 0) {
+        d.perfiles.forEach((p, i) => {
+            const tr = document.createElement('tr');
+            tr.style.borderBottom = '1px solid var(--border-dim)';
+            tr.innerHTML = `
+                <td style="padding:8px 12px; color:var(--text-muted); font-size:0.8rem;">${i + 1}</td>
+                <td style="padding:8px 12px; color:var(--text-main); font-weight:500;">${p.sitio}</td>
+                <td style="padding:8px 12px;"><span style="font-size:0.72rem; padding:2px 8px; border-radius:20px; background:rgba(148,163,184,0.12); color:#94a3b8;">${p.categoria || '—'}</span></td>
+                <td style="padding:8px 12px;"><a href="${p.url}" target="_blank" style="color:var(--accent-cyan); text-decoration:none; font-size:0.8rem; font-family:var(--font-mono);">${p.url}</a></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    } else {
+        tbody.innerHTML = '<tr><td colspan="4" style="padding:20px; text-align:center; color:var(--text-muted);">No se encontraron perfiles públicos con este alias.</td></tr>';
     }
-    fetch(`/api/osint/results/${caso}`)
+
+    // Hashes SHA-256
+    document.getElementById('osint-hash-pre').textContent  = ' ' + (d.integridad?.hash_pre_busqueda  || '—');
+    document.getElementById('osint-hash-post').textContent = ' ' + (d.integridad?.hash_post_busqueda || '—');
+    document.getElementById('osint-modal-disclaimer').textContent = d.disclaimer || '';
+}
+
+function verResultadosOSINT(alias) {
+    if (!activeCaseNumber) { addLogEntry('[ERROR] No hay caso activo.', 'log-error'); return; }
+    fetch(`/api/osint/results/${activeCaseNumber}?alias=${encodeURIComponent(alias)}`)
         .then(r => r.json())
         .then(resp => {
-            if (resp.status !== 'success') {
-                addLogEntry('[ERROR] ' + resp.message, 'log-error');
-                return;
-            }
-            const d = resp.data;
-            document.getElementById('modal-osint').style.display = 'block';
-
-            // Subtítulo
-            document.getElementById('osint-modal-subtitle').textContent =
-                `Caso: ${d.caso_id}  •  Alias: @${d.alias_buscado}  •  Perito: ${d.perito}  •  ${d.timestamp?.split('T')[0] || ''}`;
-
-            // Stats
-            const statsEl = document.getElementById('osint-modal-stats');
-            statsEl.innerHTML = `
-                <div style="flex:1; min-width:100px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px; text-align:center;">
-                    <div style="font-size:1.3rem; font-weight:700; color:#94a3b8;">${d.total_perfiles_encontrados}</div>
-                    <div style="font-size:0.72rem; color:var(--text-muted);">Perfiles hallados</div>
-                </div>
-                <div style="flex:1; min-width:100px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px; text-align:center;">
-                    <div style="font-size:1.3rem; font-weight:700; color:#94a3b8;">${d.total_sitios_analizados}</div>
-                    <div style="font-size:0.72rem; color:var(--text-muted);">Sitios analizados</div>
-                </div>
-                <div style="flex:1; min-width:100px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px; text-align:center;">
-                    <div style="font-size:1.3rem; font-weight:700; color:#4ade80;">✓</div>
-                    <div style="font-size:0.72rem; color:var(--text-muted);">Cadena de custodia</div>
-                </div>
-            `;
-
-            // Tabla de perfiles
-            const tbody = document.getElementById('osint-profiles-tbody');
-            tbody.innerHTML = '';
-            if (d.perfiles && d.perfiles.length > 0) {
-                d.perfiles.forEach((p, i) => {
-                    const tr = document.createElement('tr');
-                    tr.style.borderBottom = '1px solid var(--border-dim)';
-                    tr.innerHTML = `
-                        <td style="padding:8px 12px; color:var(--text-muted); font-size:0.8rem;">${i + 1}</td>
-                        <td style="padding:8px 12px; color:var(--text-main); font-weight:500;">${p.sitio}</td>
-                        <td style="padding:8px 12px;"><span style="font-size:0.72rem; padding:2px 8px; border-radius:20px; background:rgba(148,163,184,0.12); color:#94a3b8;">${p.categoria || '—'}</span></td>
-                        <td style="padding:8px 12px;"><a href="${p.url}" target="_blank" style="color:var(--accent-cyan); text-decoration:none; font-size:0.8rem; font-family:var(--font-mono);">${p.url}</a></td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-            } else {
-                tbody.innerHTML = '<tr><td colspan="4" style="padding:20px; text-align:center; color:var(--text-muted);">No se encontraron perfiles públicos con este alias.</td></tr>';
-            }
-
-            // Hashes
-            document.getElementById('osint-hash-pre').textContent  = ' ' + (d.integridad?.hash_pre_busqueda || '—');
-            document.getElementById('osint-hash-post').textContent = ' ' + (d.integridad?.hash_post_busqueda || '—');
-
-            // Disclaimer
-            document.getElementById('osint-modal-disclaimer').textContent = d.disclaimer || '';
+            if (resp.status !== 'success') { addLogEntry('[ERROR] ' + resp.message, 'log-error'); return; }
+            _rellenarModalOSINT(resp.data);
         })
         .catch(err => addLogEntry('[ERROR] No se pudo cargar resultados OSINT: ' + err, 'log-error'));
 }
 
-function verReporteOSINT() {
-    if (!activeCaseNumber) return;
-    window.open(`/api/osint/report/${activeCaseNumber}`, '_blank');
+function verReporteOSINT(alias) {
+    if (!activeCaseNumber || !alias) return;
+    window.open(`/api/osint/report/${activeCaseNumber}?alias=${encodeURIComponent(alias)}`, '_blank');
 }
 
-// Mostrar botones "Ver Resultados" cuando OSINT llega al 100%
-const _origSSE = window.__osintWatcherInstalled;
-if (!_origSSE) {
+function cargarHistorialOSINT() {
+    if (!activeCaseNumber) return;
+    fetch(`/api/osint/list/${activeCaseNumber}`)
+        .then(r => r.json())
+        .then(resp => {
+            const busquedas = resp.busquedas || [];
+            const container = document.getElementById('osint-history-container');
+            const list      = document.getElementById('osint-history-list');
+            if (!container || !list) return;
+
+            list.innerHTML = '';
+
+            if (busquedas.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+
+            container.style.display = 'block';
+
+            // Ordenar más reciente primero
+            busquedas.slice().reverse().forEach(b => {
+                const fecha = b.timestamp ? b.timestamp.split('T')[0] : '—';
+                const hora  = b.timestamp ? b.timestamp.split('T')[1]?.substring(0, 5) : '';
+                const row = document.createElement('div');
+                row.style.cssText = 'display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; flex-wrap:wrap;';
+                row.innerHTML = `
+                    <div style="flex:1; min-width:120px;">
+                        <span style="color:var(--text-main); font-family:var(--font-mono); font-weight:600;">@${b.alias}</span>
+                        <span style="color:var(--text-muted); font-size:0.75rem; margin-left:8px;">${fecha} ${hora}</span>
+                    </div>
+                    <div style="display:flex; gap:6px; align-items:center; flex-shrink:0;">
+                        <span style="font-size:0.72rem; padding:2px 8px; border-radius:20px; background:rgba(74,222,128,0.1); color:#4ade80; border:1px solid rgba(74,222,128,0.2);">
+                            ${b.total_encontrados} hallados / ${b.total_analizados} analizados
+                        </span>
+                        <button onclick="verResultadosOSINT('${b.alias}')" style="padding:4px 10px; border:1px solid #94a3b8; background:rgba(148,163,184,0.1); color:#94a3b8; border-radius:4px; cursor:pointer; font-size:0.78rem; white-space:nowrap;">
+                            <i class="bi bi-table me-1"></i>Resultados
+                        </button>
+                        <button onclick="verReporteOSINT('${b.alias}')" style="padding:4px 10px; border:1px solid var(--border-dim); background:transparent; color:var(--text-muted); border-radius:4px; cursor:pointer; font-size:0.78rem; white-space:nowrap;">
+                            <i class="bi bi-file-earmark-html me-1"></i>Reporte
+                        </button>
+                    </div>
+                `;
+                list.appendChild(row);
+            });
+        })
+        .catch(() => {}); // Silencioso si no hay historial aún
+}
+
+// Cargar historial cuando se activa el panel OSINT
+document.addEventListener('DOMContentLoaded', () => {
+    const panelNube = document.getElementById('panel-NUBE');
+    if (panelNube) {
+        const observer = new MutationObserver(() => {
+            if (panelNube.style.display !== 'none') cargarHistorialOSINT();
+        });
+        observer.observe(panelNube, { attributes: true, attributeFilter: ['style'] });
+    }
+});
+
+// Refrescar historial cuando OSINT completa al 100%
+if (!window.__osintWatcherInstalled) {
     window.__osintWatcherInstalled = true;
-    document.addEventListener('osint-complete', () => {
-        document.getElementById('btn-osint-results').style.display = 'inline-flex';
-        document.getElementById('btn-osint-html').style.display    = 'inline-flex';
-    });
+    document.addEventListener('osint-complete', () => cargarHistorialOSINT());
 }
 
 // ── Manual Command Mode ───────────────────────────────────────────
