@@ -1665,11 +1665,71 @@
 
                         <!-- 5. CELULAR -->
                         <div class="module-panel" id="panel-CELULAR" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(245,158,11,0.03);">
-                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-phone-fill me-2" style="color: var(--accent-yellow);"></i>5. Extracción Móvil (ADB)</h5>
-                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Adquisición lógica de dispositivo Android vía ADB. Extrae info básica, contactos y dumps del sistema.</p>
-                            <p style="color: var(--text-main); font-size: 0.85rem; padding: 10px; background: rgba(245,158,11,0.1); border-left: 3px solid var(--accent-yellow);">Conecte el dispositivo desbloqueado con 'Depuración USB' activa. Autorice la conexión en la pantalla del celular.</p>
-                            <div style="margin-top: 20px;">
-                                <button class="btn-primary" id="btn-run-mobile" style="background: var(--accent-yellow); border-color: var(--accent-yellow); color: #000;"><i class="bi bi-play-fill me-2"></i>Iniciar Extracción ADB</button>
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 6px;"><i class="bi bi-phone-fill me-2" style="color: var(--accent-yellow);"></i>5. Extracción Móvil Lógica</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">Adquisición lógica forense de dispositivos móviles via ADB (Android) o libimobiledevice (iOS). Cumplimiento ISO/IEC 27037 y NIST SP 800-101.</p>
+
+                            <!-- Plataforma badges -->
+                            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom: 14px;">
+                                <span style="font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid #4ade80; color:#4ade80;"><i class="bi bi-android2 me-1"></i>Android (ADB)</span>
+                                <span style="font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid #a78bfa; color:#a78bfa;"><i class="bi bi-apple me-1"></i>iOS (libimobiledevice)</span>
+                                <span style="font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid var(--text-muted); color:var(--text-muted);">ISO/IEC 27037 · NIST SP 800-101</span>
+                            </div>
+
+                            <!-- Disclaimer forense -->
+                            <div style="background: rgba(245,158,11,0.08); border-left: 3px solid var(--accent-yellow); border-radius: 0 6px 6px 0; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: var(--text-main);">
+                                <i class="bi bi-exclamation-triangle-fill me-2" style="color: var(--accent-yellow);"></i>
+                                <strong>Requisito forense:</strong> El dispositivo debe estar <strong>desbloqueado</strong> con <strong>Depuración USB</strong> activa (Android) o <strong>"Confiar en este equipo"</strong> aceptado (iOS). Esta extracción es de tipo <strong>Lógica (Nivel 2 - NIST)</strong>.
+                            </div>
+
+                            <!-- Selector de plataforma -->
+                            <label class="form-label-custom">Plataforma del Dispositivo</label>
+                            <div style="display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap;">
+                                <button class="platform-btn active" id="plat-android" data-plat="android" style="flex:1; padding: 10px; border: 1px solid #4ade80; background: rgba(74,222,128,0.1); color: #4ade80; border-radius: 6px; cursor:pointer; font-size: 0.85rem; transition: all 0.2s;">
+                                    <i class="bi bi-android2 me-2"></i>Android
+                                </button>
+                                <button class="platform-btn" id="plat-ios" data-plat="ios" style="flex:1; padding: 10px; border: 1px solid var(--border-dim); background: transparent; color: var(--text-muted); border-radius: 6px; cursor:pointer; font-size: 0.85rem; transition: all 0.2s;">
+                                    <i class="bi bi-apple me-2"></i>iOS
+                                </button>
+                                <button class="platform-btn" id="plat-auto" data-plat="auto" style="flex:1; padding: 10px; border: 1px solid var(--border-dim); background: transparent; color: var(--text-muted); border-radius: 6px; cursor:pointer; font-size: 0.85rem; transition: all 0.2s;">
+                                    <i class="bi bi-cpu me-2"></i>Auto-detect
+                                </button>
+                            </div>
+
+                            <!-- Artefactos que se extraerán -->
+                            <div style="background: var(--bg-surface); border: 1px dashed var(--border-dim); border-radius: 6px; padding: 12px 15px; margin-bottom: 16px;">
+                                <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Artefactos que se extraerán:</div>
+                                <div id="mobile-artifacts-android" style="display:flex; gap:6px; flex-wrap:wrap;">
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">📱 Info dispositivo (IMEI)</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">💬 SMS / MMS</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">📞 Historial llamadas</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">👤 Contactos</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">📦 Apps instaladas</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">🖼️ DCIM / Fotos</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">⬇️ Downloads</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">💚 WhatsApp Media</span>
+                                </div>
+                                <div id="mobile-artifacts-ios" style="display:none; gap:6px; flex-wrap:wrap;">
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">📱 Info dispositivo (UDID/IMEI)</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">💾 Backup lógico completo</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">📦 Apps instaladas</span>
+                                </div>
+                            </div>
+
+                            <div style="margin-top: 4px;">
+                                <button class="btn-primary" id="btn-run-mobile" style="background: var(--accent-yellow); border-color: var(--accent-yellow); color: #000;">
+                                    <i class="bi bi-phone-vibrate-fill me-2"></i>Iniciar Extracción Forense
+                                </button>
+                            </div>
+
+                            <!-- Progress Bar -->
+                            <div id="mobile-progress-container" style="display: none; margin-top: 20px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
+                                    <span id="mobile-progress-text">Progreso: 0%</span>
+                                    <span id="mobile-progress-detail">Iniciando extracción...</span>
+                                </div>
+                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
+                                    <div id="mobile-progress-bar" style="width: 0%; height: 100%; background: var(--accent-yellow); transition: width 0.4s ease;"></div>
+                                </div>
                             </div>
                         </div>
 
@@ -2291,7 +2351,7 @@ function initSSE() {
                 const pct = parseInt(wipeMatch[1]);
                 const detailStr = data.msg.replace(/^\[PROGRESO:\d+\]\s*/, '').trim() || 'Operación en progreso...';
                 
-                ['wiping', 'usb', 'ram'].forEach(prefix => {
+                ['wiping', 'usb', 'ram', 'mobile'].forEach(prefix => {
                     const pContainer = document.getElementById(`${prefix}-progress-container`);
                     // Solo actualizamos si el contenedor de esta fase está visible
                     if (pContainer && pContainer.style.display !== 'none') {
@@ -2322,6 +2382,42 @@ function initSSE() {
 
 // Start SSE after page loads
 initSSE();
+
+// ── Mobile Platform Selector ─────────────────────────────────────
+let selectedMobilePlatform = 'android';
+
+document.querySelectorAll('.platform-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        selectedMobilePlatform = btn.dataset.plat;
+
+        // Reset all buttons to inactive style
+        document.querySelectorAll('.platform-btn').forEach(b => {
+            b.style.border = '1px solid var(--border-dim)';
+            b.style.background = 'transparent';
+            b.style.color = 'var(--text-muted)';
+        });
+
+        // Activate selected
+        const colors = { android: '#4ade80', ios: '#a78bfa', auto: 'var(--accent-cyan)' };
+        const clr = colors[selectedMobilePlatform] || 'var(--accent-yellow)';
+        btn.style.border = `1px solid ${clr}`;
+        btn.style.background = `rgba(${selectedMobilePlatform === 'android' ? '74,222,128' : selectedMobilePlatform === 'ios' ? '167,139,250' : '6,182,212'},0.1)`;
+        btn.style.color = clr;
+
+        // Toggle artifact display
+        const androidArts = document.getElementById('mobile-artifacts-android');
+        const iosArts = document.getElementById('mobile-artifacts-ios');
+        if (androidArts && iosArts) {
+            if (selectedMobilePlatform === 'ios') {
+                androidArts.style.display = 'none';
+                iosArts.style.display = 'flex';
+            } else {
+                androidArts.style.display = 'flex';
+                iosArts.style.display = 'none';
+            }
+        }
+    });
+});
 
 // ── Manual Command Mode ───────────────────────────────────────────
 let cmdMode = false;
@@ -3164,6 +3260,18 @@ function runOperation(btnId) {
             document.getElementById('ram-progress-bar').style.background = 'var(--accent-cyan)';
             document.getElementById('ram-progress-text').textContent = 'Progreso: 0%';
             document.getElementById('ram-progress-detail').textContent = 'Iniciando análisis...';
+        }
+    } else if (btnId === 'btn-mobile') {
+        const plataforma = selectedMobilePlatform || 'android';
+        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/04_mobile.py --caso ${activeCaseNumber} --perito "${activeCasePerito}" --plataforma ${plataforma}`;
+
+        const pMobileContainer = document.getElementById('mobile-progress-container');
+        if (pMobileContainer) {
+            pMobileContainer.style.display = 'block';
+            document.getElementById('mobile-progress-bar').style.width = '0%';
+            document.getElementById('mobile-progress-bar').style.background = 'var(--accent-yellow)';
+            document.getElementById('mobile-progress-text').textContent = 'Progreso: 0%';
+            document.getElementById('mobile-progress-detail').textContent = `Iniciando extracción ${plataforma.toUpperCase()}...`;
         }
     } else {
         // Fallback for not-yet-implemented modules
