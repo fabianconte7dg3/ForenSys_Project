@@ -1,67 +1,69 @@
+#!/usr/bin/env python3
+"""
+creador_de_extraccion_de_ram.py — Prepara un USB con herramientas de live response.
+Ejecutar con: sudo python3 creador_de_extraccion_de_ram.py --target /dev/sdX --force
+"""
 import subprocess
 import sys
 import time
 import os
 import shutil
+import argparse
 
-def listar_discos():
-    print("\n--- UNIDADES DETECTADAS ---")
-    subprocess.run(['lsblk', '-o', 'NAME,SIZE,MODEL,MOUNTPOINT,RO'], check=True)
-    print("---------------------------\n")
-
-def preparar_live_usb():
+def preparar_live_usb(disco_usb, force=False):
     print("==================================================")
     print("   FOREN-SYS: CREADOR DE EXTRACCIÓN DE RAM        ")
     print("   (Generador de Live Response USB)               ")
     print("==================================================")
     
-    listar_discos()
-    
-    print("[!] Conecta un USB VACÍO (Recomendado: 8GB - 16GB).")
-    print("    Este USB se usará para ir a la PC víctima y extraer su RAM.")
-    disco_usb = input("[?] Ingrese la ruta del USB (Ej. /dev/sdd): ").strip()
-    
-    if not disco_usb.startswith("/dev/sd"):
+    if not disco_usb.startswith("/dev/"):
         print("[X] Ruta inválida. Abortando.")
         sys.exit(1)
 
     print(f"\n[PELIGRO] Se borrará TODO en {disco_usb} para crear el kit forense.")
-    if input('Escriba "PREPARAR" en mayúsculas para continuar: ') != "PREPARAR":
-        print("[!] Operación cancelada.")
-        sys.exit(0)
+    if not force:
+        if input('Escriba "PREPARAR" en mayúsculas para continuar: ') != "PREPARAR":
+            print("[!] Operación cancelada.")
+            sys.exit(0)
+    else:
+        print("[!] Modo --force activo. Omitiendo confirmación.")
 
     try:
         # 0. Desactivar el Bloqueador Forense (udev)
         print("\n[*] 0/4: Desactivando bloqueador de escritura forense para este disco...")
-        subprocess.run(['sudo', 'blockdev', '--setrw', disco_usb], check=True)
+        print("[PROGRESO:10] Desactivando bloqueador de escritura...", flush=True)
+        subprocess.run(['blockdev', '--setrw', disco_usb], check=True)
 
-        # 1. Limpieza y Destrucción de Cabeceras (Solución al error 2048 vs 512 bytes)
+        # 1. Limpieza y Destrucción de Cabeceras
         print("[*] 1/4: Aplicando borrado profundo de cabeceras MBR/GPT e ISO...")
+        print("[PROGRESO:25] Limpiando particiones y borrando primeros sectores...", flush=True)
         for i in range(1, 6):
-            subprocess.run(['sudo', 'umount', f'{disco_usb}{i}'], stderr=subprocess.DEVNULL)
+            subprocess.run(['umount', f'{disco_usb}{i}'], stderr=subprocess.DEVNULL)
             
-        # Nukeamos los primeros 10MB para destruir cualquier rastro de instalaciones previas
-        subprocess.run(['sudo', 'dd', 'if=/dev/zero', f'of={disco_usb}', 'bs=1M', 'count=10', 'status=none'], check=True)
+        subprocess.run(['dd', 'if=/dev/zero', f'of={disco_usb}', 'bs=1M', 'count=10', 'status=none'], check=True)
         subprocess.run(['sync'], check=True)
-        time.sleep(2) # Pausa vital para que el Kernel asimile que el disco ahora está en blanco
+        time.sleep(2)
         
         # 2. Crear tabla de particiones y partición primaria
         print("[*] 2/4: Reconstruyendo tabla de particiones limpia...")
-        subprocess.run(['sudo', 'parted', '-s', disco_usb, 'mklabel', 'msdos'], check=True)
-        subprocess.run(['sudo', 'parted', '-s', disco_usb, 'mkpart', 'primary', 'fat32', '1MiB', '100%'], check=True)
-        subprocess.run(['sudo', 'partprobe', disco_usb])
+        print("[PROGRESO:50] Reconstruyendo tabla de particiones (FAT32)...", flush=True)
+        subprocess.run(['parted', '-s', disco_usb, 'mklabel', 'msdos'], check=True)
+        subprocess.run(['parted', '-s', disco_usb, 'mkpart', 'primary', 'fat32', '1MiB', '100%'], check=True)
+        subprocess.run(['partprobe', disco_usb])
         time.sleep(2)
         
         # 3. Formatear como exFAT
         print("[*] 3/4: Formateando en exFAT (Formato Universal)...")
+        print("[PROGRESO:75] Aplicando formato universal exFAT...", flush=True)
         particion = f"{disco_usb}1"
-        subprocess.run(['sudo', 'mkfs.exfat', '-n', 'RAM_KIT', particion], check=True)
+        subprocess.run(['mkfs.exfat', '-n', 'RAM_KIT', particion], check=True)
 
         # 4. Montar y copiar herramientas
         print("[*] 4/4: Inyectando herramientas forenses (Extractor de RAM)...")
+        print("[PROGRESO:90] Copiando binarios forenses (DumpIt_ForenSys.exe)...", flush=True)
         punto_montaje = "/mnt/temp_usb_kit"
-        subprocess.run(['sudo', 'mkdir', '-p', punto_montaje], check=True)
-        subprocess.run(['sudo', 'mount', particion, punto_montaje], check=True)
+        os.makedirs(punto_montaje, exist_ok=True)
+        subprocess.run(['mount', particion, punto_montaje], check=True)
 
         ruta_herramientas = "/home/ciber-admin/ForenSys_Project/tools_bin/"
         
@@ -74,12 +76,13 @@ def preparar_live_usb():
             print("[+] Herramienta inyectada con éxito.")
         else:
             print("\n[!] ALERTA: La carpeta 'tools_bin' está vacía o no existe.")
-            print("    El USB se formateó, pero no tiene el .exe adentro.")
+            print("    El USB se formateó, pero no tiene herramientas adentro.")
 
         # 5. Sincronizar y desmontar
         print("[*] Finalizando y sellando el USB...")
+        print("[PROGRESO:100] Sincronizando datos y expulsando dispositivo...", flush=True)
         subprocess.run(['sync'], check=True)
-        subprocess.run(['sudo', 'umount', punto_montaje], check=True)
+        subprocess.run(['umount', punto_montaje], check=True)
         
         print("\n==================================================")
         print("   [SUCCESS] LIVE RESPONSE USB ESTÁ LISTO         ")
@@ -92,12 +95,20 @@ def preparar_live_usb():
 
     except subprocess.CalledProcessError as e:
         print(f"\n[X] Error fatal ejecutando comandos de disco: {e}")
+        sys.exit(1)
     except Exception as e:
         print(f"\n[X] Error inesperado: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
     if os.geteuid() != 0:
         print("\n[X] Error: Este script requiere acceso a hardware.")
         print("Ejecuta: sudo python3 creador_de_extraccion_de_ram.py\n")
         sys.exit(1)
-    preparar_live_usb()
+        
+    parser = argparse.ArgumentParser()
+    parser.add_argument("-t", "--target", required=True, help="Ruta del disco destino (ej. /dev/sdd)")
+    parser.add_argument("-f", "--force", action="store_true", help="Omitir confirmación manual")
+    args = parser.parse_args()
+    
+    preparar_live_usb(args.target, force=args.force)

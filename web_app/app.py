@@ -418,24 +418,44 @@ def verify_disk():
         "cadena_ok": True  # Listo para generarse en el script
     }
     
-    # 1. Aplicar Bloqueador de Escritura por Software (Logical Write Blocker)
+    # 1. Verificar Bloqueador de Escritura por Software (Logical Write Blocker)
     try:
-        subprocess.run(['sudo', '-n', 'blockdev', '--setro', target_disk], check=True, capture_output=True, timeout=3)
-        # Verificar estado
+        # Verificar estado de solo lectura (RO=1)
         check = subprocess.run(['lsblk', '-o', 'RO', '-n', '-d', target_disk], capture_output=True, text=True, timeout=3)
         if "1" in check.stdout:
             resultados['readonly'] = True
     except subprocess.TimeoutExpired:
         pass # Ignorar timeout
     except subprocess.CalledProcessError as e:
-        pass  # Falló la aplicación del write blocker
+        push_log(f'[WARN] No se pudo verificar modo de solo lectura: {e}', 'warn')
         
-    # 2. Verificar Destino
-    destino_base = "/mnt/Destino_ForenSys"
-    if os.path.ismount(destino_base):
+    # 2. Verificar Destino Montado
+    if os.path.ismount('/mnt/Destino_ForenSys'):
         resultados['destino_ok'] = True
         
-    return jsonify({"status": "success", "checks": resultados})
+    status = "success" if (resultados['readonly'] and resultados['destino_ok']) else "warning"
+    msg = "Verificación completada." if status == "success" else "Revisar pre-requisitos."
+    
+    return jsonify({
+        "status": status,
+        "message": msg,
+        "checks": resultados
+    })
+
+@app.route('/api/set_readonly', methods=['POST'])
+def set_readonly():
+    data = request.json or {}
+    target_disk = data.get('target_disk', '').strip()
+    if not target_disk or not target_disk.startswith('/dev/'):
+        return jsonify({"status": "error", "message": "Disco inválido."}), 400
+        
+    try:
+        # Ejecuta el script de python con sudo que ya está autorizado en sudoers sin contraseña
+        subprocess.run(['sudo', 'python3', '/home/ciber-admin/ForenSys_Project/scripts/02_deadbox_v2.py', '-t', target_disk, '--set-readonly-only'], check=True, capture_output=True, text=True)
+        return jsonify({"status": "success", "message": "Bloqueador activado."})
+    except subprocess.CalledProcessError as e:
+        push_log(f'[ERROR] Falló activación readonly: {e.stderr}', 'error')
+        return jsonify({"status": "error", "message": "Fallo al activar bloqueador lógico."}), 500
 
 @app.route('/api/run/timeline', methods=['POST'])
 def run_timeline():
@@ -597,12 +617,15 @@ def run_command_api():
         global running_proc
         push_log(f'[OPERADOR] Ejecutando: {command}', 'warn')
         try:
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
             proc = subprocess.Popen(
                 command, shell=True,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
-                bufsize=1
+                bufsize=1,
+                env=env
             )
             with running_proc_lock:
                 running_proc = proc

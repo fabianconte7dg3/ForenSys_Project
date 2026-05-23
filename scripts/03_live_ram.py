@@ -1,150 +1,337 @@
+#!/usr/bin/env python3
+"""
+03_live_ram.py — Análisis forense de memoria volátil (Volatility3)
+Multi-OS: Windows, Linux, macOS
+Cumplimiento ISO/IEC 27037:2012 — NIST SP 800-86
+
+Uso:
+    sudo python3 03_live_ram.py --archivo /ruta/memoria.raw --caso CASO-001 --perito "Juan Perez"
+"""
 import os
 import sys
+import json
+import shutil
+import hashlib
+import argparse
 import subprocess
+from datetime import datetime
 
-def imprimir_banner():
-    print("==================================================")
-    print("   FOREN-SYS: ANÁLISIS DINÁMICO DE RAM            ")
-    print("==================================================")
+# ── Configuración de rutas ─────────────────────────────────────────
+CASES_BASE_DIR = '/home/ciber-admin/ForenSys_Project/Casos_ForenSys'
+VOLATILITY_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    'volatility3', 'vol.py'
+)
 
-def buscar_archivos_ram():
-    """Busca archivos de volcado de memoria ignorando la bóveda para no duplicar"""
-    rutas_busqueda = ['/media', '/mnt', '/home/ciber-admin']
-    archivos_encontrados = []
+# ── Plugins por SO ─────────────────────────────────────────────────
+PLUGIN_SETS = {
+    'windows': [
+        ('windows.info.Info',         'info',         'Informacion del sistema Windows'),
+        ('windows.pslist.PsList',     'pslist',       'Lista de procesos activos'),
+        ('windows.pstree.PsTree',     'pstree',       'Arbol jerarquico de procesos'),
+        ('windows.cmdline.CmdLine',   'cmdline',      'Lineas de comando ejecutadas'),
+        ('windows.netscan.NetScan',   'netscan',      'Conexiones de red activas'),
+        ('windows.malfind.Malfind',   'malfind',      'Inyecciones de codigo (shellcode)'),
+        ('windows.dlllist.DllList',   'dlllist',      'DLLs cargadas por proceso'),
+        ('windows.hashdump.Hashdump', 'hashdump',     'Hashes NTLM de contrasenas'),
+    ],
+    'linux': [
+        ('linux.pslist.PsList',       'pslist',       'Lista de procesos activos'),
+        ('linux.pstree.PsTree',       'pstree',       'Arbol jerarquico de procesos'),
+        ('linux.bash.Bash',           'bash_history', 'Historial de comandos bash'),
+        ('linux.netfilter.NetFilter', 'netfilter',    'Reglas de firewall en memoria'),
+        ('linux.malfind.Malfind',     'malfind',      'Inyecciones de codigo'),
+        ('linux.lsof.Lsof',          'lsof',         'Archivos abiertos por proceso'),
+        ('linux.sockstat.Sockstat',   'sockstat',     'Estado de sockets de red'),
+    ],
+    'macos': [
+        ('mac.pslist.PsList',         'pslist',       'Lista de procesos activos'),
+        ('mac.pstree.PsTree',         'pstree',       'Arbol jerarquico de procesos'),
+        ('mac.netstat.Netstat',       'netstat',      'Conexiones de red activas'),
+        ('mac.bash.Bash',             'bash_history', 'Historial de comandos bash'),
+        ('mac.malfind.Malfind',       'malfind',      'Inyecciones de codigo'),
+        ('mac.lsof.Lsof',            'lsof',         'Archivos abiertos por proceso'),
+    ],
+}
 
-    print("\n[*] Escaneando USBs y carpetas en busca de evidencias de RAM...")
-    for ruta_base in rutas_busqueda:
-        if os.path.exists(ruta_base):
-            for root, dirs, files in os.walk(ruta_base):
-                # Evitamos buscar dentro de la bóveda (SDA) para no confundir al script
-                if "/mnt/Destino_ForenSys" in root:
-                    continue
-                # Limitar a 3 niveles de profundidad
-                if root.count(os.sep) - ruta_base.count(os.sep) > 3:
-                    del dirs[:]
-                for file in files:
-                    if file.lower().endswith(('.raw', '.mem', '.dmp')):
-                        archivos_encontrados.append(os.path.join(root, file))
-    return archivos_encontrados
 
-def seleccionar_archivo():
-    """Muestra un menú interactivo para seleccionar el archivo"""
-    archivos = buscar_archivos_ram()
+def log(msg):
+    print(msg, flush=True)
 
-    if not archivos:
-        print("[!] No se encontraron archivos .raw, .mem o .dmp automáticamente.")
-        return input("[?] Ingrese la ruta manual del archivo de RAM: ").strip()
 
-    print("\n--- ARCHIVOS DE MEMORIA ENCONTRADOS ---")
-    for i, archivo in enumerate(archivos, 1):
-        peso_mb = os.path.getsize(archivo) / (1024 * 1024)
-        print(f"[{i}] {archivo} ({peso_mb:.1f} MB)")
-    print("[0] Ingresar ruta manualmente")
-    print("---------------------------------------")
+def progress(pct, detail):
+    print(f"[PROGRESO:{pct}] {detail}", flush=True)
 
-    while True:
-        try:
-            opcion = int(input("\n[?] Seleccione el número del archivo a analizar: "))
-            if opcion == 0:
-                return input("[?] Ingrese la ruta manual del archivo de RAM: ").strip()
-            elif 1 <= opcion <= len(archivos):
-                return archivos[opcion - 1]
-            else:
-                print("[X] Opción fuera de rango.")
-        except ValueError:
-            print("[X] Por favor, ingrese un número.")
 
-def auto_desbloquear_destino(destino_base):
-    """Detecta el disco de la bóveda (SDA) y lo desbloquea temporalmente"""
-    print("[*] Aplicando Llave Maestra: Asegurando permisos de escritura en la bóveda SDA...")
+def sha256_file(path):
+    """Calcula SHA-256 leyendo por bloques para archivos grandes."""
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(65536), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def custodia_append(ruta_log, msg):
+    """Agrega una linea con timestamp al log de cadena de custodia."""
+    ts = datetime.now().isoformat()
+    with open(ruta_log, 'a', encoding='utf-8') as f:
+        f.write(f"[{ts}] [RAM-ANALISIS] {msg}\n")
+
+
+def run_plugin(vol_path, mem_file, plugin, output_base, timeout=300):
+    """
+    Ejecuta un plugin de Volatility3.
+    Guarda salida en JSON (.json) y texto legible (.txt).
+    Retorna (exito, mensaje_error).
+    """
+    # 1. Formato JSON
     try:
-        comando_dev = ['findmnt', '-n', '-o', 'SOURCE', destino_base]
-        resultado = subprocess.run(comando_dev, capture_output=True, text=True)
-        particion_destino = resultado.stdout.strip()
-        
-        if particion_destino:
-            disco_base = particion_destino.rstrip('0123456789')
-            # Quitar candado físico
-            subprocess.run(['sudo', 'blockdev', '--setrw', disco_base], check=False, stderr=subprocess.DEVNULL)
-            subprocess.run(['sudo', 'blockdev', '--setrw', particion_destino], check=False, stderr=subprocess.DEVNULL)
-            # Quitar candado de montaje
-            subprocess.run(['sudo', 'mount', '-o', 'remount,rw', destino_base], check=False, stderr=subprocess.DEVNULL)
+        result = subprocess.run(
+            ['python3', vol_path, '-f', mem_file, '--output-format', 'json', plugin],
+            capture_output=True, text=True, timeout=timeout
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            with open(output_base + '.json', 'w', encoding='utf-8') as f:
+                f.write(result.stdout)
+        elif result.returncode != 0:
+            error_msg = (result.stderr or result.stdout or 'Sin detalles')[:500]
+            return False, error_msg
+    except subprocess.TimeoutExpired:
+        return False, f"Timeout tras {timeout}s"
     except Exception as e:
-        print(f"[!] Aviso: No se pudo auto-desbloquear el destino. Error: {e}")
+        return False, str(e)
 
-def analizar_ram(ruta_archivo_memoria, destino_base, caso_id):
-    print(f"\n[*] Iniciando análisis de memoria volátil para: {caso_id}")
-    print(f"[*] Archivo origen: {ruta_archivo_memoria}")
+    # 2. Formato texto legible
+    try:
+        result_txt = subprocess.run(
+            ['python3', vol_path, '-f', mem_file, plugin],
+            capture_output=True, text=True, timeout=timeout
+        )
+        with open(output_base + '.txt', 'w', encoding='utf-8') as f:
+            f.write(result_txt.stdout)
+    except Exception:
+        pass  # El JSON ya fue guardado, el txt es secundario
 
-    # 1. Definir la ruta de Volatility 3
-    ruta_base_proyecto = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    ruta_volatility = os.path.join(ruta_base_proyecto, "volatility3", "vol.py")
+    return True, None
 
-    if not os.path.exists(ruta_volatility):
-        print(f"\n[X] ALERTA CRÍTICA: No se encontró Volatility 3 en: {ruta_volatility}")
+
+def detect_os(vol_path, mem_file):
+    """
+    Detecta el SO del volcado usando Volatility3.
+    Orden: Windows -> Linux -> macOS -> desconocido.
+    """
+    log("[*] Detectando sistema operativo del volcado de memoria...")
+
+    # Intento 1: Windows
+    try:
+        result = subprocess.run(
+            ['python3', vol_path, '-f', mem_file, 'windows.info.Info'],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0 and ('NtBuildLab' in result.stdout or 'KdDebuggerData' in result.stdout):
+            log("[+] Sistema operativo detectado: WINDOWS")
+            return 'windows'
+    except Exception:
+        pass
+
+    # Intento 2: Banners (Linux/macOS)
+    try:
+        result = subprocess.run(
+            ['python3', vol_path, '-f', mem_file, 'banners.Banners'],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0:
+            out = result.stdout.lower()
+            if 'linux' in out:
+                log("[+] Sistema operativo detectado: LINUX")
+                return 'linux'
+            if 'darwin' in out or 'macos' in out:
+                log("[+] Sistema operativo detectado: macOS")
+                return 'macos'
+    except Exception:
+        pass
+
+    # Intento 3: Linux pslist directo
+    try:
+        result = subprocess.run(
+            ['python3', vol_path, '-f', mem_file, 'linux.pslist.PsList'],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            log("[+] Sistema operativo detectado: LINUX (por pslist)")
+            return 'linux'
+    except Exception:
+        pass
+
+    log("[!] OS no determinado. Se ejecutaran todos los plugins disponibles.")
+    return 'unknown'
+
+
+def analizar_ram(mem_file, caso_id, perito):
+    """Flujo principal de analisis forense de RAM."""
+    log("=" * 50)
+    log("   FOREN-SYS: ANALISIS DINAMICO DE RAM            ")
+    log("      ISO/IEC 27037:2012  -  NIST SP 800-86       ")
+    log("=" * 50)
+
+    # Verificar Volatility3
+    if not os.path.exists(VOLATILITY_PATH):
+        log(f"[X] Volatility3 no encontrado en: {VOLATILITY_PATH}")
         sys.exit(1)
 
-    # 2. Desbloquear la bóveda SDA antes de intentar crear la carpeta
-    auto_desbloquear_destino(destino_base)
+    # Preparar carpetas del caso
+    carpeta_caso    = os.path.join(CASES_BASE_DIR, caso_id)
+    carpeta_images  = os.path.join(carpeta_caso, '01_Images_(Fuentes_de_datos)', 'RAM')
+    carpeta_views   = os.path.join(carpeta_caso, '02_Views_(Vistas)', 'RAM')
+    carpeta_results = os.path.join(carpeta_caso, '03_Results_(Resultados_Extraidos)', 'RAM')
+    ruta_custodia   = os.path.join(carpeta_caso, 'cadena_custodia.log')
 
-    # 3. Preparar el entorno de resultados (Ahora no dará el error "Errno 30")
-    carpeta_resultados = os.path.join(destino_base, f"{caso_id}_RAM")
-    try:
-        os.makedirs(carpeta_resultados, exist_ok=True)
-    except OSError as e:
-        print(f"\n[X] ERROR FATAL: El disco sigue bloqueado contra escritura ({e}).")
-        sys.exit(1)
+    for carpeta in [carpeta_images, carpeta_views, carpeta_results]:
+        os.makedirs(carpeta, exist_ok=True)
 
-    ruta_procesos = os.path.join(carpeta_resultados, "ram_procesos.txt")
-    ruta_malware = os.path.join(carpeta_resultados, "ram_malware.txt")
+    log(f"\n[*] Caso:   {caso_id}")
+    log(f"[*] Perito: {perito}")
+    log(f"[*] Imagen: {mem_file}")
 
-    # [X] COMANDO 1: LISTA DE PROCESOS (PsList)
-    print("\n[*] 1/2: Extrayendo árbol de procesos activos (windows.pslist.PsList)...")
-    try:
-        with open(ruta_procesos, "w") as archivo_salida:
-            comando_pslist = ['python3', ruta_volatility, '-f', ruta_archivo_memoria, 'windows.pslist.PsList']
-            subprocess.run(comando_pslist, stdout=archivo_salida, stderr=subprocess.PIPE, check=True)
-        print(f"[+] Lista de procesos guardada en: {ruta_procesos}")
-    except subprocess.CalledProcessError as e:
-        print(f"\n[X] Fallo al ejecutar PsList: {e.stderr.decode('utf-8', errors='ignore')}")
+    # FASE 1: Hash pre-analisis (ISO 27037 — integridad)
+    progress(5, "Calculando hash SHA-256 pre-analisis...")
+    log("\n[*] 1/6: Calculando hash SHA-256 del volcado (pre-analisis)...")
+    hash_pre = sha256_file(mem_file)
+    log(f"[+] Hash Pre-Analisis SHA-256: {hash_pre}")
+    custodia_append(ruta_custodia, f"INICIO analisis RAM por '{perito}'")
+    custodia_append(ruta_custodia, f"Archivo fuente: {mem_file}")
+    custodia_append(ruta_custodia, f"Hash Pre-Analisis SHA-256: {hash_pre}")
 
-    # [X] COMANDO 2: BÚSQUEDA DE MALWARE INYECTADO (Malfind) -> Reemplaza a NetScan
-    print("\n[*] 2/2: Buscando inyecciones de código malicioso (windows.malfind.Malfind)...")
-    try:
-        with open(ruta_malware, "w") as archivo_salida:
-            comando_malfind = ['python3', ruta_volatility, '-f', ruta_archivo_memoria, 'windows.malfind.Malfind']
-            subprocess.run(comando_malfind, stdout=archivo_salida, stderr=subprocess.PIPE, check=True)
-        print(f"[+] Reporte de malware generado en: {ruta_malware}")
-    except subprocess.CalledProcessError as e:
-        print(f"\n[X] Fallo al ejecutar Malfind: {e.stderr.decode('utf-8', errors='ignore')}")
+    # FASE 2: Copia sellada a 01_Images/RAM/
+    progress(10, "Copiando volcado a boveda del caso (01_Images/RAM/)...")
+    log("\n[*] 2/6: Copiando imagen forense al directorio de fuentes del caso...")
+    nombre_imagen  = os.path.basename(mem_file)
+    destino_imagen = os.path.join(carpeta_images, nombre_imagen)
+    if not os.path.exists(destino_imagen):
+        shutil.copy2(mem_file, destino_imagen)
+        hash_copia = sha256_file(destino_imagen)
+        if hash_copia == hash_pre:
+            log(f"[+] Copia verificada: {destino_imagen}")
+            custodia_append(ruta_custodia, f"Copia sellada en: {destino_imagen} — Hash OK")
+        else:
+            log("[X] ALERTA: Hash de copia no coincide. Integridad comprometida.")
+            custodia_append(ruta_custodia, "ALERTA: Discrepancia de hash en copia sellada.")
+    else:
+        log(f"[*] Copia ya existia: {destino_imagen}")
 
-    print("\n==================================================")
-    print("   [✔] ANÁLISIS DE RAM COMPLETADO                 ")
-    print("==================================================")
-    print(f"[*] Los archivos .txt están listos en {carpeta_resultados}")
-    print("[*] Quedan a la espera para ser inyectados en la IA (Fase 4).")
+    # FASE 3: Deteccion de SO
+    progress(15, "Detectando sistema operativo del volcado...")
+    os_detected = detect_os(VOLATILITY_PATH, mem_file)
+    custodia_append(ruta_custodia, f"OS detectado: {os_detected.upper()}")
+
+    if os_detected == 'unknown':
+        plugins_a_ejecutar = []
+        for so, plugins in PLUGIN_SETS.items():
+            plugins_a_ejecutar.extend(plugins)
+    else:
+        plugins_a_ejecutar = PLUGIN_SETS.get(os_detected, [])
+
+    # FASE 4: Ejecucion de plugins Volatility3
+    log(f"\n[*] 3/6: Ejecutando {len(plugins_a_ejecutar)} plugins de Volatility3...")
+    total_plugins = len(plugins_a_ejecutar)
+    exitosos = 0
+    fallidos = []
+
+    for i, (plugin, nombre_archivo, descripcion) in enumerate(plugins_a_ejecutar):
+        pct = 20 + int((i / total_plugins) * 70)
+        progress(pct, f"{descripcion}...")
+        log(f"\n[*] Plugin {i+1}/{total_plugins}: {descripcion}")
+
+        output_base_result = os.path.join(carpeta_results, nombre_archivo)
+        output_base_view   = os.path.join(carpeta_views,   nombre_archivo)
+
+        exito, error = run_plugin(VOLATILITY_PATH, mem_file, plugin, output_base_result)
+
+        if exito:
+            if os.path.exists(output_base_result + '.txt'):
+                shutil.copy2(output_base_result + '.txt', output_base_view + '.txt')
+            log(f"[+] {plugin}: OK")
+            custodia_append(ruta_custodia, f"Plugin {plugin}: EXITO")
+            exitosos += 1
+        else:
+            log(f"[!] {plugin}: {error}")
+            custodia_append(ruta_custodia, f"Plugin {plugin}: FALLIDO — {error}")
+            fallidos.append((plugin, error))
+
+    # FASE 5: Resumen JSON
+    progress(92, "Generando resumen del analisis...")
+    log("\n[*] 4/6: Generando resumen del analisis...")
+    resumen = {
+        "caso_id": caso_id,
+        "perito": perito,
+        "timestamp": datetime.now().isoformat(),
+        "archivo_fuente": mem_file,
+        "hash_pre": hash_pre,
+        "os_detectado": os_detected,
+        "plugins_exitosos": exitosos,
+        "plugins_fallidos": len(fallidos),
+        "detalle_fallidos": [{"plugin": p, "error": e} for p, e in fallidos]
+    }
+    ruta_resumen = os.path.join(carpeta_results, 'resumen_analisis_ram.json')
+    with open(ruta_resumen, 'w', encoding='utf-8') as f:
+        json.dump(resumen, f, ensure_ascii=False, indent=2)
+    log(f"[+] Resumen guardado: {ruta_resumen}")
+
+    # FASE 6: Sellado final
+    progress(97, "Sellando cadena de custodia...")
+    log("\n[*] 5/6: Verificando integridad post-analisis...")
+    hash_post = sha256_file(mem_file)
+    integridad_ok = (hash_post == hash_pre)
+    custodia_append(ruta_custodia, f"Hash Post-Analisis SHA-256: {hash_post}")
+    custodia_append(ruta_custodia, f"Integridad archivo fuente: {'VERIFICADA' if integridad_ok else 'COMPROMETIDA'}")
+    custodia_append(ruta_custodia, f"Plugins exitosos: {exitosos}/{total_plugins}")
+    custodia_append(ruta_custodia, f"FIN analisis RAM — resultados en: {carpeta_results}")
+
+    if not integridad_ok:
+        log("[X] ALERTA: Hash post-analisis no coincide. El archivo fuente pudo haberse modificado.")
+
+    progress(100, "Analisis de memoria volatil completado.")
+    log("\n" + "=" * 50)
+    log("   [SUCCESS] ANALISIS DE RAM COMPLETADO           ")
+    log("=" * 50)
+    log(f"[*] OS detectado:     {os_detected.upper()}")
+    log(f"[*] Plugins OK:       {exitosos}/{total_plugins}")
+    if fallidos:
+        log(f"[*] Plugins fallidos: {len(fallidos)} (ver cadena de custodia)")
+    log(f"[*] Resultados en:    {carpeta_results}")
+    log(f"[*] Vistas en:        {carpeta_views}")
+    log(f"[*] Cadena custodia:  {ruta_custodia}")
+    log("[*] Resultados listos para Analista IA (Modulo 8).")
+
 
 def main():
-    imprimir_banner()
+    parser = argparse.ArgumentParser(
+        description="Analisis forense RAM — Multi-OS (Volatility3)"
+    )
+    parser.add_argument('-a', '--archivo', required=True,
+                        help='Ruta al volcado de memoria (.raw/.dmp/.mem/.vmem)')
+    parser.add_argument('-c', '--caso',    required=True,
+                        help='ID del caso forense (ej: CASO-001)')
+    parser.add_argument('-p', '--perito',  required=True,
+                        help='Nombre del perito a cargo')
+    args = parser.parse_args()
 
-    destino_base = "/mnt/Destino_ForenSys"
-    if not os.path.ismount(destino_base):
-        print(f"\n[X] ALERTA: El disco seguro ({destino_base}) no está montado.")
-        print("    Ejecute primero la esterilización (01_wiping.py) o el montador (01_b_montar_destino.py).")
+    if not os.path.exists(args.archivo):
+        print(f"[X] Archivo no encontrado: {args.archivo}")
         sys.exit(1)
 
-    ruta_ram = seleccionar_archivo()
-
-    if not os.path.exists(ruta_ram):
-        print(f"\n[X] ERROR: El archivo {ruta_ram} no existe.")
+    carpeta_caso = os.path.join(CASES_BASE_DIR, args.caso)
+    if not os.path.exists(carpeta_caso):
+        print(f"[X] Caso '{args.caso}' no existe en {CASES_BASE_DIR}.")
+        print("    Abra primero el caso desde la interfaz web.")
         sys.exit(1)
 
-    caso_id = input("\n[?] Ingrese el ID del Caso (Ej. CASO_001): ").strip()
+    analizar_ram(args.archivo, args.caso, args.perito)
 
-    analizar_ram(ruta_ram, destino_base, caso_id)
 
 if __name__ == "__main__":
     if os.geteuid() != 0:
-        print("\n[X] Error: Ejecuta como root (sudo python3 03_live_ram.py)")
+        print("\n[X] Ejecuta como root: sudo python3 03_live_ram.py ...")
         sys.exit(1)
     main()

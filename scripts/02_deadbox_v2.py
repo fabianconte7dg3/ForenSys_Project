@@ -148,8 +148,9 @@ def main():
     
     parser = argparse.ArgumentParser(description="Extracción Forense Dead-Box")
     parser.add_argument("-t", "--target", required=True, help="Ruta del disco sospechoso (Ej: /dev/sdb)")
-    parser.add_argument("-c", "--case", required=True, help="ID del Caso")
-    parser.add_argument("-p", "--perito", required=True, help="Nombre del perito a cargo")
+    parser.add_argument("-c", "--case", required=False, help="ID del Caso")
+    parser.add_argument("-p", "--perito", required=False, help="Nombre del perito a cargo")
+    parser.add_argument("--set-readonly-only", action="store_true", help="Solo aplicar bloqueador y salir")
     args = parser.parse_args()
     
     origen = args.target
@@ -159,6 +160,12 @@ def main():
     if not os.path.exists(origen):
         print(f"[X] El dispositivo {origen} no existe.")
         sys.exit(1)
+        
+    if args.set_readonly_only:
+        print(f"\n[*] Aplicando Bloqueador de Escritura Lógico (blockdev --setro) en {origen}...")
+        subprocess.run(['blockdev', '--setro', origen], check=True)
+        print(f"[SUCCESS] Dispositivo {origen} puesto en modo solo-lectura.")
+        sys.exit(0)
         
     destino_base = "/mnt/Destino_ForenSys"
     if not os.path.ismount(destino_base):

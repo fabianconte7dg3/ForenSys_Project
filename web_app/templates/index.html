@@ -1569,31 +1569,97 @@
                         </div>
 
                         <!-- 3. CREADOR USB -->
-                        <div class="module-panel" id="panel-CREADOR-USB" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(148,163,184,0.03);">
-                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-usb-drive-fill me-2" style="color: var(--text-muted);"></i>3. Creador USB RAM</h5>
-                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Prepara una memoria USB con herramientas estáticas (LiME) para volcado de RAM en el equipo sospechoso.</p>
+                        <div class="module-panel" id="panel-CREADOR-USB" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(168,85,247,0.03);">
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-usb-drive-fill me-2" style="color: #a855f7;"></i>3. Creador USB RAM</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Prepara una memoria USB con herramientas estáticas para volcado de RAM en el equipo sospechoso.</p>
+                            
+                            <!-- Advertencia -->
+                            <div style="background: rgba(239,68,68,0.1); border-left: 3px solid var(--accent-red); padding: 10px 15px; border-radius: 4px; margin-bottom: 15px; font-size: 0.85rem;">
+                                <i class="bi bi-exclamation-triangle-fill text-danger me-2"></i>
+                                <span class="text-danger fw-bold">PELIGRO DE PÉRDIDA DE DATOS:</span> 
+                                <span style="color: var(--text-muted);">El USB seleccionado será <strong class="text-white">FORMATEADO</strong> permanentemente (exFAT). Todos sus datos actuales se destruirán. Asegúrese de seleccionar el dispositivo correcto.</span>
+                            </div>
+
                             <label class="form-label-custom">USB a Formatear</label>
                             <div style="display:flex; gap:8px; align-items:center;">
                                 <div id="usb-device-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin dispositivo seleccionado</div>
                                 <button class="btn-primary" id="btn-scan-usb" style="white-space:nowrap;"><i class="bi bi-hdd-fill me-2"></i>Escanear Discos</button>
                             </div>
                             <div id="usb-device-list" style="display:none; margin-top:10px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
+                            
+                            <!-- Herramientas a Inyectar -->
+                            <div style="margin-top: 15px; background: var(--bg-surface); border: 1px dashed var(--border-dim); border-radius: 6px; padding: 12px 15px;">
+                                <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Herramientas a Inyectar (tools_bin/):</div>
+                                <div style="display: flex; gap: 10px; align-items: center;">
+                                    <span class="badge bg-dark border border-secondary"><i class="bi bi-file-earmark-binary-fill me-1"></i>DumpIt_ForenSys.exe</span>
+                                    <span style="font-size: 0.75rem; color: var(--text-muted);">Extractor físico de memoria para sistemas Windows</span>
+                                </div>
+                            </div>
+
                             <div style="margin-top: 20px;">
-                                <button class="btn-primary" id="btn-run-creator" style="background: var(--text-muted); border-color: var(--text-muted);"><i class="bi bi-play-fill me-2"></i>Preparar USB</button>
+                                <button class="btn-primary" id="btn-run-creator" style="background: #a855f7; border-color: #a855f7;"><i class="bi bi-lightning-charge-fill me-2"></i>Preparar USB Forense</button>
+                            </div>
+                            
+                            <!-- Progress Bar -->
+                            <div id="usb-progress-container" style="display: none; margin-top: 20px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
+                                    <span id="usb-progress-text">Progreso: 0%</span>
+                                    <span id="usb-progress-detail">Iniciando preparación...</span>
+                                </div>
+                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
+                                    <div id="usb-progress-bar" style="width: 0%; height: 100%; background: #a855f7; transition: width 0.4s ease;"></div>
+                                </div>
                             </div>
                         </div>
 
                         <!-- 4. RAM -->
                         <div class="module-panel" id="panel-RAM" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(6,182,212,0.03);">
-                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-memory me-2" style="color: var(--accent-cyan);"></i>4. Análisis RAM Volátil</h5>
-                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Análisis con Volatility3 para extraer procesos activos e inyecciones de código (malfind).</p>
-                            <label class="form-label-custom">Archivo de Memoria (.raw / .dmp / .mem)</label>
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 6px;"><i class="bi bi-memory me-2" style="color: var(--accent-cyan);"></i>4. Análisis RAM Volátil</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">Análisis forense de memoria con Volatility3. Detecta el SO automáticamente y ejecuta todos los plugins correspondientes.</p>
+                            
+                            <!-- OS Badges -->
+                            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom: 16px;">
+                                <span style="font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid #3b82f6; color:#3b82f6;"><i class="bi bi-windows me-1"></i>Windows</span>
+                                <span style="font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid #f97316; color:#f97316;"><i class="bi bi-ubuntu me-1"></i>Linux</span>
+                                <span style="font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid #a855f7; color:#a855f7;"><i class="bi bi-apple me-1"></i>macOS</span>
+                                <span style="font-size:0.75rem; padding:3px 10px; border-radius:20px; border:1px solid var(--text-muted); color:var(--text-muted);">ISO/IEC 27037 · NIST SP 800-86</span>
+                            </div>
+                            
+                            <label class="form-label-custom">Volcado de Memoria (.raw / .dmp / .mem / .vmem)</label>
                             <div style="display:flex; gap:8px; align-items:center;">
-                                <div id="ram-file-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Auto-detectar archivos .raw/.dmp en /media y /mnt</div>
+                                <div id="ram-file-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin archivo seleccionado — Explorar USB, /media o /mnt</div>
                                 <button class="btn-primary" id="btn-browse-ram" style="white-space:nowrap;"><i class="bi bi-folder2-open me-2"></i>Explorar...</button>
                             </div>
-                            <div style="margin-top: 20px;">
-                                <button class="btn-primary" id="btn-run-ram" style="background: var(--accent-cyan); border-color: var(--accent-cyan); color: #000;"><i class="bi bi-play-fill me-2"></i>Analizar RAM</button>
+                            
+                            <!-- Plugins que se ejecutarán -->
+                            <div style="margin-top:14px; background: var(--bg-surface); border: 1px dashed var(--border-dim); border-radius: 6px; padding: 12px 15px;">
+                                <div style="font-size: 0.78rem; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">Plugins Volatility3 (por OS detectado):</div>
+                                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">pslist</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">pstree</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">cmdline</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">netscan</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">malfind</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">dlllist</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">hashdump</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">bash_history</span>
+                                    <span class="badge bg-dark border border-secondary" style="font-size:0.72rem;">lsof</span>
+                                </div>
+                            </div>
+                            
+                            <div style="margin-top: 18px;">
+                                <button class="btn-primary" id="btn-run-ram" style="background: var(--accent-cyan); border-color: var(--accent-cyan); color: #000;"><i class="bi bi-cpu-fill me-2"></i>Iniciar Análisis RAM</button>
+                            </div>
+                            
+                            <!-- Progress Bar -->
+                            <div id="ram-progress-container" style="display: none; margin-top: 20px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
+                                    <span id="ram-progress-text">Progreso: 0%</span>
+                                    <span id="ram-progress-detail">Iniciando análisis...</span>
+                                </div>
+                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
+                                    <div id="ram-progress-bar" style="width: 0%; height: 100%; background: var(--accent-cyan); transition: width 0.4s ease;"></div>
+                                </div>
                             </div>
                         </div>
 
@@ -2196,7 +2262,7 @@ function initSSE() {
             entry.className = `log-entry ${cls}`;
             const ts  = document.createElement('span');
             ts.className   = 'log-ts';
-            ts.textContent = data.ts || getTimestamp();
+        ts.textContent = data.ts || getTimestamp();
             const msg = document.createElement('span');
             msg.className  = 'log-msg';
             msg.textContent = data.msg;
@@ -2219,21 +2285,29 @@ function initSSE() {
                 document.getElementById('btn-kill-proc').style.display = 'none';
             }
 
-            // WIPING PROGRESS PARSER — formato nuevo: [PROGRESO:X] donde X es el porcentaje
-            const wipeMatch = data.msg.match(/^\[PROGRESO:(\d+)\]/);
+            // PROGRESS PARSER — formato: [PROGRESO:X] o [PROGRESO:X] Mensaje...
+            const wipeMatch = data.msg.match(/^\[PROGRESO:(\d+)\]\s*(.*)?/);
             if (wipeMatch) {
                 const pct = parseInt(wipeMatch[1]);
-                const pContainer = document.getElementById('wiping-progress-container');
-                const pBar = document.getElementById('wiping-progress-bar');
-                const pText = document.getElementById('wiping-progress-text');
-                const pDetail = document.getElementById('wiping-progress-detail');
-                if (pContainer && pBar) {
-                    pContainer.style.display = 'block';
-                    pBar.style.width = pct + '%';
-                    pText.textContent = `Progreso: ${pct}%`;
-                    pDetail.textContent = data.msg.replace(/^\[PROGRESO:\d+\]\s*/, '').trim();
-                    pBar.style.background = pct >= 100 ? 'var(--accent-green)' : 'var(--accent-red)';
-                }
+                const detailStr = data.msg.replace(/^\[PROGRESO:\d+\]\s*/, '').trim() || 'Operación en progreso...';
+                
+                ['wiping', 'usb', 'ram'].forEach(prefix => {
+                    const pContainer = document.getElementById(`${prefix}-progress-container`);
+                    // Solo actualizamos si el contenedor de esta fase está visible
+                    if (pContainer && pContainer.style.display !== 'none') {
+                        const pBar = document.getElementById(`${prefix}-progress-bar`);
+                        const pText = document.getElementById(`${prefix}-progress-text`);
+                        const pDetail = document.getElementById(`${prefix}-progress-detail`);
+                        
+                        if (pBar) pBar.style.width = pct + '%';
+                        if (pText) pText.textContent = 'Progreso: ' + pct + '%';
+                        if (pDetail) pDetail.textContent = detailStr;
+                        if (pct >= 100) {
+                            if (pBar) pBar.style.background = 'var(--accent-green)';
+                            if (pDetail) pDetail.textContent = 'Finalizando...';
+                        }
+                    }
+                });
             }
         } catch { /* malformed entry, ignore */ }
     };
@@ -3059,6 +3133,38 @@ function runOperation(btnId) {
             return;
         }
         command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/02_deadbox_v2.py --target ${targetDev} --case ${activeCaseNumber} --perito "${activeCasePerito}"`;
+    } else if (btnId === 'btn-usb-ram') {
+        const targetDev = selectedDevices.usb;
+        if (!targetDev) {
+            addLogEntry('[ERROR] Seleccione un USB destino para formatear e inyectar.', 'log-error');
+            return;
+        }
+        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/creador_de_extraccion_de_ram.py --target ${targetDev} --force`;
+        
+        // Reset progress bar
+        const pContainer = document.getElementById('usb-progress-container');
+        if (pContainer) {
+            pContainer.style.display = 'block';
+            document.getElementById('usb-progress-bar').style.width = '0%';
+            document.getElementById('usb-progress-text').textContent = 'Progreso: 0%';
+            document.getElementById('usb-progress-detail').textContent = 'Iniciando preparación...';
+        }
+    } else if (btnId === 'btn-ram') {
+        const archivRAM = selectedFiles.ram;
+        if (!archivRAM) {
+            addLogEntry('[ERROR] Seleccione un volcado de memoria (.raw/.dmp/.mem) primero.', 'log-error');
+            return;
+        }
+        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/03_live_ram.py --archivo ${archivRAM} --caso ${activeCaseNumber} --perito "${activeCasePerito}"`;
+        
+        const pRamContainer = document.getElementById('ram-progress-container');
+        if (pRamContainer) {
+            pRamContainer.style.display = 'block';
+            document.getElementById('ram-progress-bar').style.width = '0%';
+            document.getElementById('ram-progress-bar').style.background = 'var(--accent-cyan)';
+            document.getElementById('ram-progress-text').textContent = 'Progreso: 0%';
+            document.getElementById('ram-progress-detail').textContent = 'Iniciando análisis...';
+        }
     } else {
         // Fallback for not-yet-implemented modules
         addLogEntry(`[INFO] El módulo ${btnId} aún no está conectado al backend real.`, 'log-warn');
@@ -3272,7 +3378,7 @@ if (btnVerifyDisk) {
             btnVerifyDisk.innerHTML = '<i class="bi bi-check2-all me-1"></i>Re-Verificar';
             btnVerifyDisk.disabled = false;
 
-            if (data.status !== 'success') {
+            if (data.status === 'error') {
                 alert('[ERROR] ' + data.message);
                 return;
             }
@@ -3280,14 +3386,42 @@ if (btnVerifyDisk) {
             const c = data.checks;
             
             // UI Update Helpers
-            const setCheck = (id, pass) => {
+            const setCheck = (id, pass, fixAction = null) => {
                 const el = document.getElementById(id);
                 if (!el) return;
+                
+                // Clear any existing fix buttons
+                const parent = el.parentElement;
+                const existingBtn = parent.querySelector('.btn-fix-check');
+                if (existingBtn) existingBtn.remove();
+
                 el.className = pass ? 'bi bi-check-circle-fill me-2 text-success' : 'bi bi-x-circle-fill me-2 text-danger';
                 el.style.color = ''; // remove inline gray color
+                
+                if (!pass && fixAction) {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn btn-sm btn-outline-warning ms-2 btn-fix-check';
+                    btn.innerHTML = '<i class="bi bi-shield-lock-fill me-1"></i>Activar';
+                    btn.onclick = fixAction;
+                    parent.appendChild(btn);
+                }
             };
 
-            setCheck('chk-readonly', c.readonly);
+            setCheck('chk-readonly', c.readonly, () => {
+                fetch('/api/set_readonly', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_disk: targetDev })
+                }).then(r => r.json()).then(res => {
+                    if (res.status === 'success') {
+                        addLogEntry('[SISTEMA] Bloqueador de escritura lógico activado.', 'log-success');
+                        btnVerifyDisk.click(); // re-verify automatically
+                    } else {
+                        addLogEntry('[ERROR] No se pudo activar el bloqueador: ' + res.message, 'log-error');
+                    }
+                }).catch(e => alert("Error: " + e));
+            });
+            
             setCheck('chk-dest', c.destino_ok);
             setCheck('chk-chain', c.cadena_ok);
 
