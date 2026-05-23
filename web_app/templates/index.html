@@ -1,0 +1,3722 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Foren-Sys – Panel de Control Headless para Triaje Forense y Respuesta a Incidentes">
+    <title>Foren-Sys | Panel Forense</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ================================================================
+           CSS CUSTOM PROPERTIES & DESIGN TOKENS
+           ================================================================ */
+        :root {
+            --bg-root:       #060810;
+            --bg-sidebar:    #0b0e18;
+            --bg-card:       #0f1220;
+            --bg-card-alt:   #131727;
+            --border-dim:    #1e2338;
+            --border-mid:    #2a3050;
+            --text-primary:  #d8dff5;
+            --text-muted:    #64718f;
+            --accent-blue:   #3b82f6;
+            --accent-cyan:   #06b6d4;
+            --accent-green:  #10b981;
+            --accent-yellow: #f59e0b;
+            --accent-red:    #ef4444;
+            --accent-purple: #a855f7;
+            --terminal-bg:   #000408;
+            --terminal-green:#22c55e;
+            --font-ui:       'Inter', sans-serif;
+            --font-mono:     'JetBrains Mono', monospace;
+            --sidebar-w:     270px;
+            --navbar-h:      64px;
+            --radius-sm:     6px;
+            --radius-md:     10px;
+            --radius-lg:     14px;
+            --shadow-sm:     0 2px 8px rgba(0,0,0,.4);
+            --shadow-md:     0 8px 24px rgba(0,0,0,.5);
+            --transition:    0.22s cubic-bezier(0.4,0,0.2,1);
+        }
+
+        /* ================================================================
+           RESET & BASE
+           ================================================================ */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html, body {
+            height: 100%;
+            font-family: var(--font-ui);
+            background-color: var(--bg-root);
+            color: var(--text-primary);
+            overflow: hidden;
+        }
+
+        /* ================================================================
+           LAYOUT SHELL
+           ================================================================ */
+        #app-shell {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* ================================================================
+           SIDEBAR
+           ================================================================ */
+        #sidebar {
+            width: var(--sidebar-w);
+            min-width: var(--sidebar-w);
+            background: var(--bg-sidebar);
+            border-right: 1px solid var(--border-dim);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+            z-index: 100;
+            box-shadow: 4px 0 20px rgba(0,0,0,.6);
+        }
+
+        /* Ambient glow on sidebar */
+        #sidebar::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 220px;
+            background: radial-gradient(ellipse at 50% -20%, rgba(59,130,246,.18) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .sidebar-brand {
+            padding: 22px 20px;
+            border-bottom: 1px solid var(--border-dim);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            position: relative;
+        }
+
+        .sidebar-brand-icon {
+            width: 40px; height: 40px;
+            background: linear-gradient(135deg, rgba(59,130,246,.3), rgba(6,182,212,.2));
+            border: 1px solid rgba(59,130,246,.4);
+            border-radius: var(--radius-md);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.1rem;
+            color: var(--accent-cyan);
+            box-shadow: 0 0 15px rgba(59,130,246,.2);
+        }
+
+        .sidebar-brand-text {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-brand-name {
+            font-size: 1.05rem;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            color: #fff;
+            text-transform: uppercase;
+        }
+
+        .sidebar-brand-sub {
+            font-size: 0.6rem;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--text-muted);
+        }
+
+        /* Online badge */
+        .system-status {
+            margin: 16px 20px 8px;
+        }
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(16,185,129,.08);
+            border: 1px solid rgba(16,185,129,.2);
+            border-radius: var(--radius-sm);
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--accent-green);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .status-dot {
+            width: 7px; height: 7px;
+            background: var(--accent-green);
+            border-radius: 50%;
+            animation: pulse-dot 2s infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,.6); }
+            50% { opacity: 0.8; box-shadow: 0 0 0 4px rgba(16,185,129,0); }
+        }
+
+        /* Case open indicator (hidden until case opened) */
+        #case-indicator {
+            margin: 0 20px 12px;
+            padding: 8px 12px;
+            background: rgba(59,130,246,.08);
+            border: 1px solid rgba(59,130,246,.2);
+            border-radius: var(--radius-sm);
+            font-size: 0.68rem;
+            color: var(--accent-blue);
+            display: none;
+        }
+        #case-indicator.visible { display: block; }
+        .case-indicator-label { font-weight: 600; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
+        .case-indicator-value { font-family: var(--font-mono); font-size: 0.78rem; color: #fff; font-weight: 700; }
+
+        /* Nav section label */
+        .nav-section-label {
+            padding: 16px 20px 6px;
+            font-size: 0.58rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--text-muted);
+        }
+
+        /* Nav items */
+        .nav-item-custom {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 11px 16px;
+            margin: 2px 12px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            color: var(--text-muted);
+            font-size: 0.88rem;
+            font-weight: 500;
+            transition: background var(--transition), color var(--transition), border var(--transition);
+            border: 1px solid transparent;
+            text-decoration: none;
+            position: relative;
+            user-select: none;
+        }
+
+        .nav-item-custom:not(.disabled-nav):hover {
+            background: rgba(255,255,255,.05);
+            color: var(--text-primary);
+        }
+
+        .nav-item-custom.active {
+            background: rgba(59,130,246,.12);
+            color: #fff;
+            border-color: rgba(59,130,246,.3);
+        }
+
+        .nav-item-custom.active::before {
+            content: '';
+            position: absolute;
+            left: -12px;
+            top: 50%; transform: translateY(-50%);
+            width: 3px; height: 60%;
+            background: var(--accent-blue);
+            border-radius: 0 2px 2px 0;
+        }
+
+        .nav-item-custom.disabled-nav {
+            opacity: 0.35;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .nav-item-icon {
+            width: 32px; height: 32px;
+            display: flex; align-items: center; justify-content: center;
+            border-radius: var(--radius-sm);
+            font-size: 0.9rem;
+            background: rgba(255,255,255,.04);
+            flex-shrink: 0;
+        }
+
+        .nav-item-custom.active .nav-item-icon {
+            background: rgba(59,130,246,.2);
+            color: var(--accent-blue);
+        }
+
+        .nav-lock-badge {
+            margin-left: auto;
+            font-size: 0.62rem;
+            padding: 2px 7px;
+            background: rgba(245,158,11,.15);
+            border: 1px solid rgba(245,158,11,.3);
+            border-radius: 20px;
+            color: var(--accent-yellow);
+        }
+
+        /* Sidebar footer */
+        .sidebar-footer {
+            margin-top: auto;
+            padding: 14px 20px;
+            border-top: 1px solid var(--border-dim);
+            font-size: 0.68rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ================================================================
+           MAIN CONTENT AREA
+           ================================================================ */
+        #main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Top navbar */
+        #topbar {
+            height: var(--navbar-h);
+            min-height: var(--navbar-h);
+            background: rgba(11,14,24,.9);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid var(--border-dim);
+            display: flex;
+            align-items: center;
+            padding: 0 28px;
+            gap: 14px;
+            position: relative;
+            z-index: 50;
+        }
+
+        .topbar-breadcrumb {
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .topbar-breadcrumb .separator { opacity: .4; }
+        .topbar-page-name {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .topbar-actions {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .topbar-chip {
+            display: flex; align-items: center; gap: 6px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .chip-online {
+            background: rgba(16,185,129,.1);
+            border: 1px solid rgba(16,185,129,.25);
+            color: var(--accent-green);
+        }
+
+        .chip-time {
+            background: rgba(255,255,255,.05);
+            border: 1px solid var(--border-dim);
+            color: var(--text-muted);
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+        }
+
+        #active-case-topbar {
+            display: none;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 12px;
+            background: rgba(59,130,246,.1);
+            border: 1px solid rgba(59,130,246,.25);
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: var(--accent-blue);
+        }
+        #active-case-topbar.visible { display: flex; }
+        #active-case-topbar .case-id-text { font-family: var(--font-mono); }
+
+        /* ================================================================
+           CONTENT AREA
+           ================================================================ */
+        #content-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 28px 32px;
+        }
+
+        #content-area::-webkit-scrollbar { width: 6px; }
+        #content-area::-webkit-scrollbar-track { background: transparent; }
+        #content-area::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 3px; }
+
+        /* Page sections */
+        .page-section { display: none; animation: fadeSlideUp .3s ease forwards; }
+        .page-section.active { display: block; }
+
+        @keyframes fadeSlideUp {
+            from { opacity: 0; transform: translateY(12px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Section header */
+        .section-header {
+            margin-bottom: 24px;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+        .section-subtitle {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+        }
+
+        /* ================================================================
+           CARDS
+           ================================================================ */
+        .fs-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            transition: border-color var(--transition), box-shadow var(--transition);
+        }
+        .fs-card:hover { border-color: var(--border-mid); box-shadow: var(--shadow-sm); }
+
+        .fs-card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-dim);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .fs-card-header-icon {
+            font-size: 0.9rem;
+            color: var(--accent-blue);
+        }
+
+        /* ================================================================
+           CASE MANAGEMENT FORM
+           ================================================================ */
+        .form-label-custom {
+            display: block;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .form-input-custom {
+            width: 100%;
+            background: rgba(255,255,255,.04);
+            border: 1px solid var(--border-mid);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            color: var(--text-primary);
+            font-family: var(--font-ui);
+            font-size: 0.88rem;
+            outline: none;
+            transition: border-color var(--transition), box-shadow var(--transition);
+        }
+        .form-input-custom:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 0 3px rgba(59,130,246,.15);
+        }
+        .form-input-custom::placeholder { color: var(--text-muted); opacity: .6; }
+        .form-input-custom[readonly] {
+            color: var(--text-muted);
+            cursor: not-allowed;
+            background: rgba(255,255,255,.02);
+            border-color: var(--border-dim);
+        }
+        textarea.form-input-custom { resize: vertical; min-height: 90px; }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+        .form-grid-full {
+            grid-column: 1 / -1;
+        }
+
+        .btn-open-case {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 28px;
+            background: linear-gradient(135deg, rgba(16,185,129,.2), rgba(6,182,212,.1));
+            border: 1px solid rgba(16,185,129,.4);
+            border-radius: var(--radius-sm);
+            color: var(--accent-green);
+            font-size: 0.88rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+        .btn-open-case:hover:not(:disabled) {
+            background: linear-gradient(135deg, rgba(16,185,129,.3), rgba(6,182,212,.2));
+            box-shadow: 0 0 20px rgba(16,185,129,.2);
+        }
+        .btn-open-case:disabled {
+            opacity: .5; cursor: not-allowed;
+        }
+
+        /* Chain of custody banner (shown post-open) */
+        #custody-banner {
+            display: none;
+            margin-top: 20px;
+            padding: 14px 18px;
+            background: rgba(16,185,129,.06);
+            border: 1px solid rgba(16,185,129,.2);
+            border-radius: var(--radius-md);
+            font-size: 0.82rem;
+        }
+        #custody-banner.visible { display: flex; align-items: flex-start; gap: 12px; }
+        .custody-icon { font-size: 1.1rem; color: var(--accent-green); margin-top: 1px; }
+        .custody-title { font-weight: 700; color: var(--accent-green); margin-bottom: 4px; }
+        .custody-detail { color: var(--text-muted); font-family: var(--font-mono); font-size: 0.75rem; line-height: 1.6; }
+
+        /* ================================================================
+           OVERVIEW CARDS
+           ================================================================ */
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            transition: border-color var(--transition), transform var(--transition);
+        }
+        .stat-card:hover { border-color: var(--border-mid); transform: translateY(-2px); }
+
+        .stat-card-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .stat-label {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+
+        .stat-icon-box {
+            width: 38px; height: 38px;
+            border-radius: var(--radius-sm);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1rem;
+        }
+
+        .stat-value {
+            font-size: 2.6rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .stat-unit {
+            font-size: 1rem;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-left: 4px;
+        }
+
+        .stat-bar-track {
+            height: 6px;
+            background: rgba(255,255,255,.07);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .stat-bar-fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 1.5s ease;
+        }
+
+        .stat-sub { font-size: 0.75rem; color: var(--text-muted); }
+
+        /* ================================================================
+           PIPELINE BUTTONS
+           ================================================================ */
+        .pipeline-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 20px;
+        }
+
+        .pipe-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 18px;
+            border-radius: var(--radius-md);
+            font-size: 0.82rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--transition);
+            border: 1px solid;
+            background: transparent;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .pipe-btn::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: white;
+            opacity: 0;
+            transition: opacity .2s;
+        }
+        .pipe-btn:hover:not(:disabled)::after { opacity: .03; }
+        .pipe-btn:active:not(:disabled)::after { opacity: .06; }
+
+        .pipe-btn:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+        }
+
+        /* Individual colour themes */
+        .pb-red    { color: #fca5a5; border-color: rgba(239,68,68,.4);  background: rgba(239,68,68,.08); }
+        .pb-blue   { color: #93c5fd; border-color: rgba(59,130,246,.4); background: rgba(59,130,246,.08); }
+        .pb-cyan   { color: #67e8f9; border-color: rgba(6,182,212,.4);  background: rgba(6,182,212,.08); }
+        .pb-yellow { color: #fcd34d; border-color: rgba(245,158,11,.4); background: rgba(245,158,11,.07); }
+        .pb-slate  { color: #94a3b8; border-color: rgba(100,116,139,.4);background: rgba(100,116,139,.07); }
+        .pb-green  { color: #6ee7b7; border-color: rgba(16,185,129,.4); background: rgba(16,185,129,.07); }
+        .pb-purple { color: #c4b5fd; border-color: rgba(168,85,247,.4); background: rgba(168,85,247,.08); }
+
+        .pb-red:hover:not(:disabled)    { background: rgba(239,68,68,.15);  box-shadow: 0 0 12px rgba(239,68,68,.15); }
+        .pb-blue:hover:not(:disabled)   { background: rgba(59,130,246,.15); box-shadow: 0 0 12px rgba(59,130,246,.15); }
+        .pb-cyan:hover:not(:disabled)   { background: rgba(6,182,212,.15);  box-shadow: 0 0 12px rgba(6,182,212,.15); }
+        .pb-yellow:hover:not(:disabled) { background: rgba(245,158,11,.14); box-shadow: 0 0 12px rgba(245,158,11,.12); }
+        .pb-slate:hover:not(:disabled)  { background: rgba(100,116,139,.14);box-shadow: 0 0 12px rgba(100,116,139,.1); }
+        .pb-green:hover:not(:disabled)  { background: rgba(16,185,129,.14); box-shadow: 0 0 12px rgba(16,185,129,.12); }
+        .pb-purple:hover:not(:disabled) { background: rgba(168,85,247,.15); box-shadow: 0 0 12px rgba(168,85,247,.15); }
+
+        /* Spinner inside button */
+        .btn-spinner {
+            width: 12px; height: 12px;
+            border: 2px solid currentColor;
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            display: none;
+        }
+        .pipe-btn.running .btn-spinner { display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* ================================================================
+           LIVE CONSOLE
+           ================================================================ */
+        .console-wrapper {
+            margin: 0 20px 20px;
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+        }
+
+        .console-topbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            background: rgba(0,4,8,.8);
+            border-bottom: 1px solid rgba(255,255,255,.05);
+        }
+
+        .console-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .console-dots { display: flex; gap: 5px; }
+        .dot { width: 10px; height: 10px; border-radius: 50%; }
+        .dot-red    { background: #ff5f57; }
+        .dot-yellow { background: #febc2e; }
+        .dot-green  { background: #28c840; }
+
+        #console-status-badge {
+            font-size: 0.65rem;
+            padding: 3px 9px;
+            border-radius: 20px;
+        }
+
+        #live-log {
+            background: var(--terminal-bg);
+            height: 320px;
+            overflow-y: auto;
+            padding: 14px 16px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            line-height: 1.7;
+        }
+
+        #live-log::-webkit-scrollbar { width: 6px; }
+        #live-log::-webkit-scrollbar-track { background: #060a0d; }
+        #live-log::-webkit-scrollbar-thumb { background: #1e2a30; border-radius: 3px; }
+
+        .log-entry { display: flex; gap: 10px; margin-bottom: 2px; }
+        .log-ts   { color: #334155; flex-shrink: 0; }
+        .log-msg  { }
+        .log-info    .log-msg { color: var(--text-primary); }
+        .log-success .log-msg { color: var(--terminal-green); }
+        .log-warn    .log-msg { color: var(--accent-yellow); }
+        .log-error   .log-msg { color: var(--accent-red); }
+        .log-system  .log-msg { color: var(--accent-cyan); }
+        .log-idle    .log-msg { color: #374151; }
+
+        /* ================================================================
+           AI RESULTS TABLE
+           ================================================================ */
+        .ai-results-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .ai-results-table thead tr {
+            background: rgba(255,255,255,.02);
+        }
+
+        .ai-results-table th {
+            padding: 12px 18px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-dim);
+            white-space: nowrap;
+        }
+
+        .ai-results-table td {
+            padding: 14px 18px;
+            font-size: 0.83rem;
+            border-bottom: 1px solid rgba(255,255,255,.04);
+            vertical-align: middle;
+        }
+
+        .ai-results-table tr:last-child td { border-bottom: none; }
+
+        .ai-results-table tr:hover td {
+            background: rgba(255,255,255,.02);
+        }
+
+        .ai-results-table tr.row-critical td { background: rgba(239,68,68,.05); }
+        .ai-results-table tr.row-critical:hover td { background: rgba(239,68,68,.09); }
+        .ai-results-table tr.row-critical td:first-child { border-left: 3px solid var(--accent-red); }
+        .ai-results-table tr.row-medium td:first-child  { border-left: 3px solid var(--accent-yellow); }
+        .ai-results-table tr.row-low td:first-child     { border-left: 3px solid var(--text-muted); }
+
+        .risk-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .8px;
+        }
+
+        .risk-critico  { background: rgba(239,68,68,.15);  border: 1px solid rgba(239,68,68,.35);  color: #fca5a5; }
+        .risk-alto     { background: rgba(245,158,11,.15); border: 1px solid rgba(245,158,11,.35); color: #fcd34d; }
+        .risk-medio    { background: rgba(245,158,11,.1);  border: 1px solid rgba(245,158,11,.25); color: #fbbf24; }
+        .risk-bajo     { background: rgba(100,116,139,.15);border: 1px solid rgba(100,116,139,.3); color: #94a3b8; }
+
+        .type-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
+            font-size: 0.72rem;
+            font-weight: 600;
+        }
+
+        .type-malware   { background: rgba(239,68,68,.12);  border: 1px solid rgba(239,68,68,.3);  color: #fca5a5; }
+        .type-ransomware{ background: rgba(239,68,68,.1);   border: 1px solid rgba(239,68,68,.3);  color: #f87171; }
+        .type-exfil     { background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.3); color: #fcd34d; }
+        .type-anomalia  { background: rgba(59,130,246,.12); border: 1px solid rgba(59,130,246,.3); color: #93c5fd; }
+        .type-escalada  { background: rgba(168,85,247,.12); border: 1px solid rgba(168,85,247,.3); color: #c4b5fd; }
+
+        .detail-mono { font-family: var(--font-mono); font-size: 0.74rem; color: var(--text-muted); }
+
+        /* ================================================================
+           MISC UTILITIES
+           ================================================================ */
+        .divider-h {
+            height: 1px;
+            background: var(--border-dim);
+            margin: 0;
+        }
+
+        /* ================================================================
+           CLOSE CASE BUTTON
+           ================================================================ */
+        #btn-close-case {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 28px;
+            background: linear-gradient(135deg, rgba(239,68,68,.15), rgba(168,85,247,.1));
+            border: 1px solid rgba(239,68,68,.35);
+            border-radius: var(--radius-sm);
+            color: #fca5a5;
+            font-size: 0.88rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all var(--transition);
+        }
+        #btn-close-case.visible { display: inline-flex; }
+        #btn-close-case:hover {
+            background: linear-gradient(135deg, rgba(239,68,68,.25), rgba(168,85,247,.18));
+            box-shadow: 0 0 20px rgba(239,68,68,.15);
+        }
+
+        /* ================================================================
+           SHA-256 MODAL
+           ================================================================ */
+        .fs-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,.75);
+            backdrop-filter: blur(6px);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+        .fs-modal-overlay.open { display: flex; }
+
+        .fs-modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-mid);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            max-width: 560px;
+            width: 90%;
+            box-shadow: 0 24px 64px rgba(0,0,0,.7);
+            animation: modalIn .25s ease;
+        }
+        @keyframes modalIn {
+            from { opacity:0; transform:scale(.94) translateY(-10px); }
+            to   { opacity:1; transform:scale(1)   translateY(0); }
+        }
+        .fs-modal-icon {
+            width: 52px; height: 52px;
+            background: rgba(239,68,68,.12);
+            border: 1px solid rgba(239,68,68,.3);
+            border-radius: var(--radius-md);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 1.4rem;
+            color: var(--accent-red);
+            margin-bottom: 20px;
+        }
+        .fs-modal-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 6px;
+        }
+        .fs-modal-sub {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 20px;
+        }
+        .hash-display {
+            background: var(--terminal-bg);
+            border: 1px solid var(--border-mid);
+            border-radius: var(--radius-sm);
+            padding: 14px 16px;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--terminal-green);
+            word-break: break-all;
+            line-height: 1.8;
+            margin-bottom: 20px;
+        }
+        .hash-label {
+            font-size: 0.65rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+        .btn-modal-close {
+            width: 100%;
+            padding: 10px;
+            background: rgba(59,130,246,.15);
+            border: 1px solid rgba(59,130,246,.3);
+            border-radius: var(--radius-sm);
+            color: var(--accent-blue);
+            font-weight: 700;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: background var(--transition);
+        }
+        .btn-modal-close:hover { background: rgba(59,130,246,.25); }
+
+        /* ================================================================
+           EVIDENCE EXPLORER
+           ================================================================ */
+        #section-explorer {
+            /* Override overflow for explorer's internal scroll */
+        }
+        .explorer-layout {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 16px;
+            height: calc(100vh - var(--navbar-h) - 130px);
+            min-height: 460px;
+        }
+
+        /* File tree panel */
+        .explorer-tree-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-lg);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .explorer-tree-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border-dim);
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .tree-scroll {
+            overflow-y: auto;
+            flex: 1;
+            padding: 8px 0;
+        }
+        .tree-scroll::-webkit-scrollbar { width: 4px; }
+        .tree-scroll::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 2px; }
+
+        .tree-category {
+            user-select: none;
+        }
+        .tree-category-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: background var(--transition), color var(--transition);
+        }
+        .tree-category-label:hover { background: rgba(255,255,255,.04); color: var(--text-primary); }
+        .tree-category-label .caret {
+            margin-left: auto;
+            font-size: 0.65rem;
+            transition: transform var(--transition);
+        }
+        .tree-category.open .caret { transform: rotate(90deg); }
+
+        .tree-children {
+            display: none;
+            padding-left: 8px;
+        }
+        .tree-category.open .tree-children { display: block; }
+
+        .tree-file {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px 6px 28px;
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-radius: 4px;
+            margin: 1px 6px;
+            transition: background var(--transition), color var(--transition);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .tree-file:hover { background: rgba(59,130,246,.1); color: var(--text-primary); }
+        .tree-file.selected {
+            background: rgba(59,130,246,.18);
+            color: #fff;
+            border: 1px solid rgba(59,130,246,.25);
+        }
+        .tree-file-icon { flex-shrink: 0; font-size: 0.75rem; }
+
+        /* Preview panel */
+        .explorer-preview-panel {
+            background: var(--bg-card);
+            border: 1px solid var(--border-dim);
+            border-radius: var(--radius-lg);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .preview-header {
+            padding: 12px 18px;
+            border-bottom: 1px solid var(--border-dim);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+        }
+        .preview-no-selection {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-muted);
+            gap: 10px;
+        }
+        .preview-no-selection i { font-size: 2.5rem; opacity: .2; }
+        .preview-no-selection p { font-size: 0.82rem; }
+
+        .preview-content {
+            display: none;
+            flex: 1;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .preview-content.visible { display: flex; }
+
+        /* Metadata strip */
+        .meta-strip {
+            padding: 14px 18px;
+            border-bottom: 1px solid var(--border-dim);
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            background: var(--bg-card-alt);
+        }
+        .meta-item-label {
+            font-size: 0.64rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 3px;
+        }
+        .meta-item-value {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--text-primary);
+        }
+        .meta-hash-row {
+            grid-column: 1 / -1;
+            padding-top: 8px;
+            border-top: 1px solid var(--border-dim);
+            margin-top: 4px;
+        }
+        .meta-hash-value {
+            font-family: var(--font-mono);
+            font-size: 0.72rem;
+            color: var(--accent-green);
+            word-break: break-all;
+        }
+
+        /* Content viewer */
+        .viewer-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-dim);
+            padding: 0 18px;
+        }
+        .viewer-tab {
+            padding: 8px 14px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all var(--transition);
+        }
+        .viewer-tab:hover { color: var(--text-primary); }
+        .viewer-tab.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+        }
+        .viewer-pane {
+            display: none;
+            flex: 1;
+            overflow: auto;
+            padding: 16px 18px;
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            line-height: 1.7;
+            color: var(--text-muted);
+        }
+        .viewer-pane.active { display: block; }
+        .viewer-pane::-webkit-scrollbar { width: 6px; }
+        .viewer-pane::-webkit-scrollbar-thumb { background: var(--border-mid); border-radius: 3px; }
+
+        /* Hex view */
+        .hex-line {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 2px;
+        }
+        .hex-offset { color: #4b5563; min-width: 60px; }
+        .hex-bytes  { color: #67e8f9; letter-spacing: 1px; }
+        .hex-ascii  { color: #6ee7b7; }
+
+        /* ================================================================
+           SCROLLBAR GLOBAL
+           ================================================================ */
+        body::-webkit-scrollbar { width: 0; }
+    </style>
+</head>
+<body>
+
+<div id="app-shell">
+
+    <!-- ================================================================
+         SIDEBAR
+         ================================================================ -->
+    <aside id="sidebar">
+
+        <!-- Brand -->
+        <div class="sidebar-brand">
+            <div class="sidebar-brand-icon">
+                <i class="bi bi-shield-shaded"></i>
+            </div>
+            <div class="sidebar-brand-text">
+                <span class="sidebar-brand-name">Foren-Sys</span>
+                <span class="sidebar-brand-sub">Forense &amp; Triaje v2.0</span>
+            </div>
+        </div>
+
+        <!-- System status -->
+        <div class="system-status">
+            <div class="status-badge">
+                <div class="status-dot"></div>
+                Sistema Operativo
+            </div>
+        </div>
+
+        <!-- Active case indicator -->
+        <div id="case-indicator">
+            <div class="case-indicator-label"><i class="bi bi-folder2-open me-1"></i> Caso Activo</div>
+            <div class="case-indicator-value" id="case-indicator-value">—</div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="nav-section-label">Navegación</div>
+
+        <nav id="main-nav">
+            <a class="nav-item-custom active" data-section="section-casos" href="#" id="nav-casos">
+                <div class="nav-item-icon"><i class="bi bi-folder2"></i></div>
+                <span>Gestión de Casos</span>
+            </a>
+            <a class="nav-item-custom" data-section="section-overview" href="#" id="nav-overview">
+                <div class="nav-item-icon"><i class="bi bi-speedometer2"></i></div>
+                <span>Visión General</span>
+            </a>
+            <a class="nav-item-custom disabled-nav" data-section="section-ops" href="#" id="nav-ops">
+                <div class="nav-item-icon"><i class="bi bi-cpu"></i></div>
+                <span>Operaciones Forenses</span>
+                <span class="nav-lock-badge" id="ops-lock-badge"><i class="bi bi-lock-fill me-1"></i>Bloqueado</span>
+            </a>
+            <a class="nav-item-custom disabled-nav" data-section="section-explorer" href="#" id="nav-explorer">
+                <div class="nav-item-icon"><i class="bi bi-folder-symlink"></i></div>
+                <span>Explorador de Evidencia</span>
+                <span class="nav-lock-badge" id="explorer-lock-badge"><i class="bi bi-lock-fill me-1"></i>Bloqueado</span>
+            </a>
+            <a class="nav-item-custom" data-section="section-ia" href="#" id="nav-ia">
+                <div class="nav-item-icon"><i class="bi bi-robot"></i></div>
+                <span>Resultados IA</span>
+            </a>
+        </nav>
+
+        <!-- Footer -->
+        <div class="sidebar-footer">
+            <i class="bi bi-terminal"></i>
+            <span>Modo local &mdash; Sin conexión externa</span>
+        </div>
+
+    </aside>
+
+    <!-- ================================================================
+         MAIN AREA
+         ================================================================ -->
+    <div id="main-area">
+
+        <!-- Top bar -->
+        <header id="topbar">
+            <div class="topbar-breadcrumb">
+                <span>Foren-Sys</span>
+                <span class="separator">/</span>
+                <span class="topbar-page-name" id="topbar-title">Gestión de Casos</span>
+            </div>
+
+            <div class="topbar-actions">
+                <div id="active-case-topbar">
+                    <i class="bi bi-folder2-open"></i>
+                    <span>Caso:</span>
+                    <span class="case-id-text" id="topbar-case-id">—</span>
+                </div>
+                <div class="topbar-chip chip-time" id="clock-chip">--:--:--</div>
+                <div class="topbar-chip chip-online">
+                    <i class="bi bi-circle-fill" style="font-size:.5rem;"></i>
+                    Headless Online
+                </div>
+            </div>
+        </header>
+
+        <!-- Scrollable content -->
+        <main id="content-area">
+
+            <!-- ============================================================
+                 SECTION 1: GESTIÓN DE CASOS
+                 ============================================================ -->
+            <section class="page-section active" id="section-casos">
+                <div class="section-header">
+                    <div class="section-title">Gestión de Casos</div>
+                    <div class="section-subtitle">Registro de cadena de custodia &mdash; Una vez abierto, el caso queda bloqueado para garantizar integridad.</div>
+                </div>
+
+                <div class="fs-card">
+                    <div class="fs-card-header">
+                        <i class="bi bi-file-earmark-medical-fill fs-card-header-icon"></i>
+                        Datos del Expediente Forense
+                    </div>
+                    <div style="padding: 24px;">
+                        <form id="case-form" novalidate>
+                            <div class="form-grid">
+                                <!-- Nº Caso -->
+                                <div>
+                                    <label class="form-label-custom" for="case-number">Nº Expediente / Caso</label>
+                                    <input class="form-input-custom" type="text" id="case-number"
+                                           placeholder="Ej: EXP-2026-001" required>
+                                </div>
+                                <!-- Perito -->
+                                <div>
+                                    <label class="form-label-custom" for="investigator-name">Nombre del Perito</label>
+                                    <input class="form-input-custom" type="text" id="investigator-name"
+                                           placeholder="Ej: Fabian Conte" required>
+                                </div>
+                                <!-- Clasificación -->
+                                <div>
+                                    <label class="form-label-custom" for="case-class">Clasificación</label>
+                                    <input class="form-input-custom" type="text" id="case-class"
+                                           placeholder="Ej: CONFIDENCIAL">
+                                </div>
+                                <!-- Notas -->
+                                <div class="form-grid-full">
+                                    <label class="form-label-custom" for="case-notes">Notas del Incidente</label>
+                                    <textarea class="form-input-custom" id="case-notes"
+                                              placeholder="Descripción del incidente, contexto inicial, hipótesis..."></textarea>
+                                </div>
+                            </div>
+
+                            <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:8px;">
+                                <button type="button" class="" id="btn-close-case">
+                                    <i class="bi bi-lock-fill"></i>
+                                    <span>Cerrar y Exportar Caso</span>
+                                </button>
+                                <button type="submit" class="btn-open-case" id="btn-open-case">
+                                    <i class="bi bi-unlock-fill"></i>
+                                    <span id="btn-open-label">Abrir Caso / Iniciar Cadena de Custodia</span>
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- Post-open custody banner -->
+                        <div id="custody-banner">
+                            <i class="bi bi-shield-check custody-icon"></i>
+                            <div>
+                                <div class="custody-title">CADENA DE CUSTODIA INICIADA</div>
+                                <div class="custody-detail" id="custody-detail-text">—</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tabla de Casos Registrados -->
+                <div class="fs-card" style="margin-top: 16px;">
+                    <div class="fs-card-header">
+                        <i class="bi bi-journal-bookmark-fill fs-card-header-icon"></i>
+                        Casos Registrados en el Equipo
+                        <div style="margin-left:auto; display:flex; gap:8px;">
+                            <button onclick="abrirExploradorParaImportar()" style="background:none;border:1px solid var(--border-dim);color:var(--accent-purple);border-radius:4px;padding:2px 10px;font-size:.7rem;cursor:pointer;">
+                                <i class="bi bi-folder-symlink me-1"></i>Importar desde Ruta
+                            </button>
+                            <button onclick="cargarCasosRegistrados()" style="background:none;border:1px solid var(--border-dim);color:var(--accent-blue);border-radius:4px;padding:2px 10px;font-size:.7rem;cursor:pointer;">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+                            </button>
+                        </div>
+                    </div>
+                    <div style="padding: 16px; overflow-x: auto;">
+                        <table class="ai-results-table" id="cases-table">
+                            <thead>
+                                <tr>
+                                    <th>Expediente</th>
+                                    <th>Perito</th>
+                                    <th>Clasificación</th>
+                                    <th>Fecha Apertura</th>
+                                    <th>Estado</th>
+                                    <th>Hash Contexto</th>
+                                    <th>Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cases-tbody">
+                                <!-- JS populated -->
+                            </tbody>
+                        </table>
+                        <div id="cases-empty" style="text-align:center;padding:20px;color:var(--text-muted);font-size:.85rem;">
+                            <i class="bi bi-inbox" style="font-size:1.5rem;display:block;margin-bottom:8px;"></i>
+                            No hay casos registrados aún.
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 SECTION 2: VISIÓN GENERAL
+                 ============================================================ -->
+            <section class="page-section" id="section-overview">
+                <div class="section-header">
+                    <div class="section-title">Visión General</div>
+                    <div class="section-subtitle">Estado en tiempo real del sistema de adquisición.</div>
+                </div>
+
+                <div class="row g-3">
+                    <!-- Storage — device picker -->
+                    <div class="col-md-6">
+                        <div class="stat-card">
+                            <div class="stat-card-top">
+                                <div class="stat-label"><i class="bi bi-hdd-fill me-1"></i>Almacenamiento Destino</div>
+                                <div class="stat-icon-box" style="background:rgba(6,182,212,.1);color:var(--accent-cyan);">
+                                    <i class="bi bi-hdd-network-fill"></i>
+                                </div>
+                            </div>
+                            <!-- Device selector -->
+                            <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
+                                <div id="ov-disk-display" style="flex:1; background:var(--bg-body); border:1px solid var(--border-dim); border-radius:6px; padding:6px 12px; font-family:var(--font-mono); font-size:0.78rem; color:var(--text-muted);">
+                                    <i class="bi bi-hdd me-1"></i> / &nbsp;(disco del sistema)
+                                </div>
+                                <button id="btn-ov-scan-disk" style="background:rgba(6,182,212,0.12); border:1px solid rgba(6,182,212,0.35); color:var(--accent-cyan); border-radius:6px; padding:5px 12px; font-size:0.72rem; cursor:pointer; white-space:nowrap; transition:all 0.2s;">
+                                    <i class="bi bi-hdd-fill me-1"></i>Escanear
+                                </button>
+                            </div>
+                            <!-- Device list dropdown -->
+                            <div id="ov-disk-list" style="display:none; background:var(--bg-body); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden; margin-bottom:10px; max-height:180px; overflow-y:auto;"></div>
+                            <!-- Stats -->
+                            <div>
+                                <span class="stat-value" id="telemetry-disk-free" style="color:var(--accent-cyan);">...</span>
+                                <span class="stat-unit">GB libres</span>
+                            </div>
+                            <div class="stat-bar-track">
+                                <div class="stat-bar-fill" id="telemetry-disk-bar" style="width:0%;background:var(--accent-cyan);"></div>
+                            </div>
+                            <div class="stat-sub" id="telemetry-disk-sub">Calculando...</div>
+                        </div>
+                    </div>
+
+                    <!-- CPU -->
+                    <div class="col-md-6">
+                        <div class="stat-card">
+                            <div class="stat-card-top">
+                                <div class="stat-label"><i class="bi bi-cpu-fill me-1"></i>Uso de CPU</div>
+                                <div class="stat-icon-box" style="background:rgba(245,158,11,.1);color:var(--accent-yellow);">
+                                    <i class="bi bi-activity"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <span class="stat-value" id="telemetry-cpu-val" style="color:var(--accent-yellow);">...</span>
+                                <span class="stat-unit">%</span>
+                            </div>
+                            <div class="stat-bar-track">
+                                <div class="stat-bar-fill" id="telemetry-cpu-bar" style="width:0%;background:var(--accent-yellow);"></div>
+                            </div>
+                            <div class="stat-sub">Telemetría en tiempo real de la Raspberry Pi</div>
+                        </div>
+                    </div>
+
+                    <!-- RAM -->
+                    <div class="col-md-6">
+                        <div class="stat-card">
+                            <div class="stat-card-top">
+                                <div class="stat-label"><i class="bi bi-memory me-1"></i>Memoria RAM</div>
+                                <div class="stat-icon-box" style="background:rgba(16,185,129,.1);color:var(--accent-green);">
+                                    <i class="bi bi-layers-fill"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <span class="stat-value" id="telemetry-ram-free" style="color:var(--accent-green);">...</span>
+                                <span class="stat-unit">GB libres</span>
+                            </div>
+                            <div class="stat-bar-track">
+                                <div class="stat-bar-fill" id="telemetry-ram-bar" style="width:0%;background:var(--accent-green);"></div>
+                            </div>
+                            <div class="stat-sub" id="telemetry-ram-sub">Calculando...</div>
+                        </div>
+                    </div>
+
+                    <!-- Temperature -->
+                    <div class="col-md-6">
+                        <div class="stat-card">
+                            <div class="stat-card-top">
+                                <div class="stat-label"><i class="bi bi-thermometer-half me-1"></i>Temperatura del Sistema</div>
+                                <div class="stat-icon-box" style="background:rgba(239,68,68,.1);color:var(--accent-red);" id="temp-icon-box">
+                                    <i class="bi bi-thermometer-half"></i>
+                                </div>
+                            </div>
+                            <div>
+                                <span class="stat-value" id="telemetry-temp-val" style="color:var(--accent-red);">...</span>
+                                <span class="stat-unit">°C</span>
+                            </div>
+                            <div class="stat-bar-track">
+                                <div class="stat-bar-fill" id="telemetry-temp-bar" style="width:0%;background:var(--accent-red);"></div>
+                            </div>
+                            <!-- Sensor list -->
+                            <div id="telemetry-temp-sensors" class="stat-sub">Leyendo sensores...</div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+
+            <!-- ============================================================
+                 SECTION 3: OPERACIONES FORENSES
+                 ============================================================ -->
+            <section class="page-section" id="section-ops">
+                <div class="section-header">
+                    <div class="section-title">Operaciones Forenses</div>
+                    <div class="section-subtitle" id="ops-subtitle">Pipeline de adquisición y análisis forense.</div>
+                </div>
+
+
+                <div class="fs-card" style="margin-bottom: 16px;">
+                    <div class="fs-card-header">
+                        <i class="bi bi-grid-3x2-gap fs-card-header-icon"></i>
+                        Pipeline Forense &mdash; Módulos de Adquisición
+                    </div>
+                    <div class="pipeline-grid">
+                        <!-- 1. Wiping -->
+                        <button class="pipe-btn pb-red" id="btn-wiping" data-op="WIPING">
+                            <i class="bi bi-eraser-fill"></i>
+                            <span>1. Wiping (NIST)</span>
+                            <div class="btn-spinner"></div>
+                        </button>
+                        <!-- 2. Disco -->
+                        <button class="pipe-btn pb-blue" id="btn-disk" data-op="DISCO">
+                            <i class="bi bi-device-hdd-fill"></i>
+                            <span>2. Extraer Disco (dc3dd)</span>
+                            <div class="btn-spinner"></div>
+                        </button>
+                        <!-- 3. Creador USB RAM -->
+                        <button class="pipe-btn pb-slate" id="btn-usb-ram" data-op="CREADOR-USB">
+                            <i class="bi bi-usb-drive-fill"></i>
+                            <span>3. Creador USB RAM</span>
+                            <div class="btn-spinner"></div>
+                        </button>
+                        <!-- 4. RAM -->
+                        <button class="pipe-btn pb-cyan" id="btn-ram" data-op="RAM">
+                            <i class="bi bi-memory"></i>
+                            <span>4. Análisis RAM Volátil</span>
+                            <div class="btn-spinner"></div>
+                        </button>
+                        <!-- 5. Celular -->
+                        <button class="pipe-btn pb-yellow" id="btn-mobile" data-op="CELULAR">
+                            <i class="bi bi-phone-fill"></i>
+                            <span>5. Extracción Móvil (ADB)</span>
+                            <div class="btn-spinner"></div>
+                        </button>
+                        <!-- 6. Nube -->
+                        <button class="pipe-btn pb-slate" id="btn-cloud" data-op="NUBE">
+                            <i class="bi bi-cloud-arrow-down-fill"></i>
+                            <span>6. Captura Nube (OSINT)</span>
+                            <div class="btn-spinner"></div>
+                        </button>
+                        <!-- 7. Normalización -->
+                        <button class="pipe-btn pb-blue" id="btn-timeline" data-op="TIMELINE">
+                            <i class="bi bi-clock-history"></i>
+                            <span>7. Normalización (Super Timeline)</span>
+                            <div class="btn-spinner"></div>
+                        </button>
+                        <!-- 8. Triaje IA -->
+                        <button class="pipe-btn pb-green" id="btn-ia" data-op="TRIAJE-IA">
+                            <i class="bi bi-robot"></i>
+                            <span>8. Triaje IA (Ollama)</span>
+                            <div class="btn-spinner"></div>
+                        </button>
+                        <!-- 9. Reporte -->
+                        <button class="pipe-btn pb-purple" id="btn-report" data-op="REPORTE-PDF">
+                            <i class="bi bi-file-earmark-pdf-fill"></i>
+                            <span>9. Reporte PDF</span>
+                            <div class="btn-spinner"></div>
+                        </button>
+                    </div>
+                    
+                    <!-- DYNAMIC PANELS -->
+                    <div id="module-config-container" style="display: none; margin-top: 16px;">
+                        <!-- 1. WIPING -->
+                        <div class="module-panel" id="panel-WIPING" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(239,68,68,0.03);">
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-eraser-fill me-2" style="color: var(--accent-red);"></i>1. Wiping (NIST)</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Esterilización de disco destino (Llenado de ceros). <strong style="color:var(--accent-red);">ADVERTENCIA:</strong> Destruirá todos los datos en el disco seleccionado.</p>
+                            <label class="form-label-custom">Disco Destino a Esterilizar</label>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <div id="wiping-device-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin dispositivo seleccionado</div>
+                                <button class="btn-primary" id="btn-scan-wiping" style="white-space:nowrap;"><i class="bi bi-hdd-fill me-2"></i>Escanear Discos</button>
+                            </div>
+                            <div id="wiping-device-list" style="display:none; margin-top:10px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
+                            <div style="margin-top: 20px;">
+                                <button class="btn-primary" id="btn-run-wiping" style="background: var(--accent-red); border-color: var(--accent-red);"><i class="bi bi-play-fill me-2"></i>Ejecutar Wiping</button>
+                            </div>
+                            
+                            <!-- Progress Bar -->
+                            <div id="wiping-progress-container" style="display: none; margin-top: 20px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
+                                    <span id="wiping-progress-text">Progreso: 0%</span>
+                                    <span id="wiping-progress-detail">Iniciando...</span>
+                                </div>
+                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
+                                    <div id="wiping-progress-bar" style="width: 0%; height: 100%; background: var(--accent-red); transition: width 0.3s ease;"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 2. DISCO -->
+                        <div class="module-panel" id="panel-DISCO" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(59,130,246,0.03);">
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-device-hdd-fill me-2" style="color: var(--accent-blue);"></i>2. Extraer Disco (dc3dd)</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Adquisición física bit a bit con cálculo de hash al vuelo y Data Carving. Cumple norma ISO/IEC 27037:2012.</p>
+                            <label class="form-label-custom">Disco Sospechoso (Origen)</label>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <div id="disco-device-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin dispositivo seleccionado</div>
+                                <button class="btn-primary" id="btn-scan-disco" style="white-space:nowrap;"><i class="bi bi-hdd-fill me-2"></i>Escanear Discos</button>
+                            </div>
+                            <div id="disco-device-list" style="display:none; margin-top:10px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
+                            
+                            <!-- ISO 27037 Checklist -->
+                            <div style="margin-top:20px; background:var(--bg-body); border:1px solid var(--border-dim); border-radius:8px; padding:15px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                    <h6 style="color:var(--text-main); margin:0; font-size:0.9rem;"><i class="bi bi-shield-check me-2" style="color:var(--accent-green);"></i>Checklist ISO/IEC 27037</h6>
+                                    <button class="btn-primary" id="btn-verify-disk" style="background:var(--accent-cyan); border-color:var(--accent-cyan); font-size:0.75rem; padding:4px 10px;">
+                                        <i class="bi bi-check2-all me-1"></i>Verificar Pre-requisitos
+                                    </button>
+                                </div>
+                                <ul style="list-style:none; padding:0; margin:0; font-size:0.85rem; color:var(--text-muted);">
+                                    <li style="margin-bottom:8px; display:flex; align-items:center;">
+                                        <i id="chk-readonly" class="bi bi-circle me-2" style="color:var(--border-dim);"></i> 1. Bloqueador de Escritura Activado (Solo Lectura)
+                                    </li>
+                                    <li style="margin-bottom:8px; display:flex; align-items:center;">
+                                        <i id="chk-dest" class="bi bi-circle me-2" style="color:var(--border-dim);"></i> 2. Almacenamiento Seguro Destino Montado
+                                    </li>
+                                    <li style="margin-bottom:0; display:flex; align-items:center;">
+                                        <i id="chk-chain" class="bi bi-circle me-2" style="color:var(--border-dim);"></i> 3. Actas y Cadena de Custodia Listas para Emisión
+                                    </li>
+                                </ul>
+                            </div>
+
+                            <div style="margin-top: 20px;">
+                                <button class="btn-primary" id="btn-run-disk" style="display:none;"><i class="bi bi-play-fill me-2"></i>Ejecutar Extracción Forense</button>
+                            </div>
+                        </div>
+
+                        <!-- 3. CREADOR USB -->
+                        <div class="module-panel" id="panel-CREADOR-USB" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(148,163,184,0.03);">
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-usb-drive-fill me-2" style="color: var(--text-muted);"></i>3. Creador USB RAM</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Prepara una memoria USB con herramientas estáticas (LiME) para volcado de RAM en el equipo sospechoso.</p>
+                            <label class="form-label-custom">USB a Formatear</label>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <div id="usb-device-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin dispositivo seleccionado</div>
+                                <button class="btn-primary" id="btn-scan-usb" style="white-space:nowrap;"><i class="bi bi-hdd-fill me-2"></i>Escanear Discos</button>
+                            </div>
+                            <div id="usb-device-list" style="display:none; margin-top:10px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
+                            <div style="margin-top: 20px;">
+                                <button class="btn-primary" id="btn-run-creator" style="background: var(--text-muted); border-color: var(--text-muted);"><i class="bi bi-play-fill me-2"></i>Preparar USB</button>
+                            </div>
+                        </div>
+
+                        <!-- 4. RAM -->
+                        <div class="module-panel" id="panel-RAM" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(6,182,212,0.03);">
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-memory me-2" style="color: var(--accent-cyan);"></i>4. Análisis RAM Volátil</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Análisis con Volatility3 para extraer procesos activos e inyecciones de código (malfind).</p>
+                            <label class="form-label-custom">Archivo de Memoria (.raw / .dmp / .mem)</label>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <div id="ram-file-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Auto-detectar archivos .raw/.dmp en /media y /mnt</div>
+                                <button class="btn-primary" id="btn-browse-ram" style="white-space:nowrap;"><i class="bi bi-folder2-open me-2"></i>Explorar...</button>
+                            </div>
+                            <div style="margin-top: 20px;">
+                                <button class="btn-primary" id="btn-run-ram" style="background: var(--accent-cyan); border-color: var(--accent-cyan); color: #000;"><i class="bi bi-play-fill me-2"></i>Analizar RAM</button>
+                            </div>
+                        </div>
+
+                        <!-- 5. CELULAR -->
+                        <div class="module-panel" id="panel-CELULAR" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(245,158,11,0.03);">
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-phone-fill me-2" style="color: var(--accent-yellow);"></i>5. Extracción Móvil (ADB)</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Adquisición lógica de dispositivo Android vía ADB. Extrae info básica, contactos y dumps del sistema.</p>
+                            <p style="color: var(--text-main); font-size: 0.85rem; padding: 10px; background: rgba(245,158,11,0.1); border-left: 3px solid var(--accent-yellow);">Conecte el dispositivo desbloqueado con 'Depuración USB' activa. Autorice la conexión en la pantalla del celular.</p>
+                            <div style="margin-top: 20px;">
+                                <button class="btn-primary" id="btn-run-mobile" style="background: var(--accent-yellow); border-color: var(--accent-yellow); color: #000;"><i class="bi bi-play-fill me-2"></i>Iniciar Extracción ADB</button>
+                            </div>
+                        </div>
+
+                        <!-- 6. NUBE -->
+                        <div class="module-panel" id="panel-NUBE" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(148,163,184,0.03);">
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-cloud-arrow-down-fill me-2" style="color: var(--text-muted);"></i>6. Captura Nube (OSINT)</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Descarga de evidencias de perfiles públicos de redes sociales (Instagram/TikTok/Twitter).</p>
+                            <label class="form-label-custom" for="osint-url">URL del Perfil Objetivo</label>
+                            <input class="form-input-custom" type="url" id="osint-url" placeholder="Ej: https://instagram.com/usuario" style="margin-bottom:0;">
+                            <div style="margin-top: 20px;">
+                                <button class="btn-primary" id="btn-run-cloud" style="background: var(--text-muted); border-color: var(--text-muted);"><i class="bi bi-play-fill me-2"></i>Descargar Evidencia OSINT</button>
+                            </div>
+                        </div>
+
+                        <!-- 7. NORMALIZACION -->
+                        <div class="module-panel" id="panel-TIMELINE" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(59,130,246,0.03);">
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-clock-history me-2" style="color: var(--accent-blue);"></i>7. Normalización (Super Timeline)</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Generación de línea de tiempo con Plaso/Log2Timeline y extracción de artefactos Windows críticos (SAM, SYSTEM, SRUM).</p>
+                            <label class="form-label-custom">Imagen Forense Origen (.dd / .raw)</label>
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <div id="timeline-file-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Auto-detectar imagen .dd extraída del caso</div>
+                                <button class="btn-primary" id="btn-browse-timeline" style="white-space:nowrap;"><i class="bi bi-folder2-open me-2"></i>Explorar...</button>
+                            </div>
+                            <div style="margin-top: 20px;">
+                                <button class="btn-primary" id="btn-run-timeline"><i class="bi bi-play-fill me-2"></i>Generar Super Timeline</button>
+                            </div>
+                        </div>
+
+                        <!-- 8. TRIAJE IA -->
+                        <div class="module-panel" id="panel-TRIAJE-IA" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(16,185,129,0.03);">
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-robot me-2" style="color: var(--accent-green);"></i>8. Triaje IA (Ollama)</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Análisis automatizado usando LLM local (Ollama). Detecta vulnerabilidades y malware analizando los reportes anteriores.</p>
+                            <p style="color: var(--text-main); font-size: 0.85rem;">La IA procesará automáticamente los archivos generados en este caso (Plaso, Volatility, ADB).</p>
+                            <div style="margin-top: 20px;">
+                                <button class="btn-primary" id="btn-run-ia" style="background: var(--accent-green); border-color: var(--accent-green); color: #000;"><i class="bi bi-play-fill me-2"></i>Iniciar Análisis Inteligente</button>
+                            </div>
+                        </div>
+
+                        <!-- 9. REPORTE -->
+                        <div class="module-panel" id="panel-REPORTE-PDF" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(168,85,247,0.03);">
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-file-earmark-pdf-fill me-2" style="color: var(--accent-purple);"></i>9. Generar Reporte PDF</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Consolidación de cadena de custodia, hash maestro, hallazgos de IA y anexos en un único documento legal.</p>
+                            <div style="margin-top: 20px;">
+                                <button class="btn-primary" id="btn-run-report" style="background: var(--accent-purple); border-color: var(--accent-purple);"><i class="bi bi-play-fill me-2"></i>Generar y Sellar Reporte PDF</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Console -->
+                <div class="fs-card">
+                    <div class="fs-card-header" style="gap: 10px; flex-wrap: wrap;">
+                        <i class="bi bi-terminal-fill fs-card-header-icon"></i>
+                        Live Console &mdash; Tiempo Real
+                        <!-- SSE connection badge -->
+                        <span id="sse-badge" style="font-size:0.68rem; padding:2px 10px; border-radius:12px; border:1px solid rgba(107,114,128,0.4); background:rgba(107,114,128,0.1); color:var(--text-muted); display:flex; align-items:center; gap:5px;">
+                            <span id="sse-dot" style="width:7px;height:7px;border-radius:50%;background:#4b5563;display:inline-block;"></span>
+                            <span id="sse-label">Conectando…</span>
+                        </span>
+                        <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                            <!-- Manual Command Mode toggle -->
+                            <button id="btn-cmd-mode" title="Activar Modo Comandos Manual"
+                                style="background:none; border:1px solid var(--border-dim); color:var(--text-muted); border-radius:6px; padding:3px 12px; font-size:0.72rem; cursor:pointer; display:flex; align-items:center; gap:5px; transition: all 0.2s;">
+                                <i class="bi bi-terminal"></i> Modo Comando
+                            </button>
+                            <!-- Kill running process -->
+                            <button id="btn-kill-proc" title="Interrumpir proceso en ejecución"
+                                style="display:none; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.4); color:var(--accent-red); border-radius:6px; padding:3px 12px; font-size:0.72rem; cursor:pointer;">
+                                <i class="bi bi-stop-fill me-1"></i>Interrumpir
+                            </button>
+                            <button onclick="clearConsole()" 
+                                style="background:none; border:1px solid var(--border-dim); color:var(--text-muted); border-radius:6px; padding:3px 10px; font-size:0.72rem; cursor:pointer;">
+                                Limpiar
+                            </button>
+                        </div>
+                    </div>
+                    <div class="console-wrapper" style="margin: 0; border-radius: 0 0 var(--radius-lg) var(--radius-lg); border: none;">
+                        <div class="console-topbar">
+                            <div class="console-dots">
+                                <div class="dot dot-red"></div>
+                                <div class="dot dot-yellow"></div>
+                                <div class="dot dot-green"></div>
+                            </div>
+                            <div class="console-title">
+                                <i class="bi bi-terminal"></i>
+                                <span id="console-path-label">foren-sys@headless:~$</span>
+                            </div>
+                        </div>
+                        <div id="live-log">
+                            <div class="log-entry log-idle">
+                                <span class="log-ts"></span>
+                                <span class="log-msg">Foren-Sys Terminal Interface v2.0 — Conectando al servidor de logs...</span>
+                            </div>
+                        </div>
+                        <!-- Manual Command Input (hidden by default) -->
+                        <div id="cmd-input-bar" style="display:none; padding: 8px 14px; background:#0a1520; border-top: 1px solid rgba(59,130,246,0.3); display:none;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span style="color:var(--accent-blue); font-family:var(--font-mono); font-size:0.85rem; white-space:nowrap;">foren-sys:~$</span>
+                                <input id="cmd-input" type="text" autocomplete="off" spellcheck="false"
+                                    placeholder="Escribe un comando y presiona Enter..."
+                                    style="flex:1; background:transparent; border:none; outline:none; color:#e2e8f0; font-family:var(--font-mono); font-size:0.85rem; caret-color: var(--accent-blue);">
+                                <button id="btn-send-cmd"
+                                    style="background:var(--accent-blue); border:none; color:#fff; border-radius:4px; padding:4px 14px; font-size:0.78rem; cursor:pointer;">
+                                    <i class="bi bi-send-fill"></i>
+                                </button>
+                            </div>
+                            <!-- Command history hint -->
+                            <div style="font-size:0.65rem; color:#374151; margin-top:3px; padding-left:2px;">↑↓ historial · Ctrl+C para interrumpir proceso</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 SECTION 4: EXPLORADOR DE EVIDENCIA
+                 ============================================================ -->
+            <section class="page-section" id="section-explorer">
+                <div class="section-header">
+                    <div class="section-title">Explorador de Evidencia</div>
+                    <div class="section-subtitle">Navegador forense de artefactos adquiridos — Estilo Autopsy. Selecciona un archivo para ver su hash SHA-256 y contenido.</div>
+                </div>
+
+                <div class="explorer-layout">
+                    <!-- LEFT: File Tree -->
+                    <div class="explorer-tree-panel">
+                        <div class="explorer-tree-header">
+                            <i class="bi bi-folder-symlink" style="color:var(--accent-blue);"></i>
+                            Árbol de Evidencia
+                        </div>
+                        <div class="tree-scroll" id="evidence-tree">
+
+                            <!-- Super Timeline (MACB) -->
+                            <div class="tree-category" id="cat-timeline">
+                                <div class="tree-category-label" onclick="toggleCategory('cat-timeline')">
+                                    <i class="bi bi-clock-history" style="color:var(--accent-blue);"></i>
+                                    Super Timeline
+                                    <i class="bi bi-chevron-right caret"></i>
+                                </div>
+                                <div class="tree-children">
+                                    <div class="tree-file" onclick="selectFile('reporte_maestro_ts')">
+                                        <i class="bi bi-filetype-json tree-file-icon" style="color:#93c5fd;"></i>reporte_maestro_ts.jsonl
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Seguridad y Eventos (EVTX) -->
+                            <div class="tree-category" id="cat-security">
+                                <div class="tree-category-label" onclick="toggleCategory('cat-security')">
+                                    <i class="bi bi-shield-lock" style="color:var(--accent-green);"></i>
+                                    Seguridad y Eventos
+                                    <i class="bi bi-chevron-right caret"></i>
+                                </div>
+                                <div class="tree-children">
+                                    <div class="tree-file" onclick="selectFile('logs_seguridad')">
+                                        <i class="bi bi-filetype-json tree-file-icon" style="color:#6ee7b7;"></i>logs_seguridad.jsonl
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Artefactos Web -->
+                            <div class="tree-category" id="cat-web">
+                                <div class="tree-category-label" onclick="toggleCategory('cat-web')">
+                                    <i class="bi bi-globe" style="color:var(--accent-cyan);"></i>
+                                    Artefactos Web
+                                    <i class="bi bi-chevron-right caret"></i>
+                                </div>
+                                <div class="tree-children">
+                                    <div class="tree-file" onclick="selectFile('artefactos_web')">
+                                        <i class="bi bi-filetype-json tree-file-icon" style="color:#67e8f9;"></i>artefactos_web.jsonl
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Sistema y Persistencia -->
+                            <div class="tree-category" id="cat-system">
+                                <div class="tree-category-label" onclick="toggleCategory('cat-system')">
+                                    <i class="bi bi-cpu" style="color:var(--accent-purple);"></i>
+                                    Sistema y Persistencia
+                                    <i class="bi bi-chevron-right caret"></i>
+                                </div>
+                                <div class="tree-children">
+                                    <div class="tree-file" onclick="selectFile('usuarios_sistema')">
+                                        <i class="bi bi-filetype-json tree-file-icon" style="color:#c4b5fd;"></i>usuarios_sistema.jsonl
+                                    </div>
+                                    <div class="tree-file" onclick="selectFile('hardware_usb')">
+                                        <i class="bi bi-filetype-json tree-file-icon" style="color:#c4b5fd;"></i>hardware_usb.jsonl
+                                    </div>
+                                    <div class="tree-file" onclick="selectFile('auditoria_software')">
+                                        <i class="bi bi-filetype-json tree-file-icon" style="color:#c4b5fd;"></i>auditoria_software.jsonl
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Recuperación y Anomalías -->
+                            <div class="tree-category" id="cat-recovery">
+                                <div class="tree-category-label" onclick="toggleCategory('cat-recovery')">
+                                    <i class="bi bi-search" style="color:var(--accent-yellow);"></i>
+                                    Recuperación y Anomalías
+                                    <i class="bi bi-chevron-right caret"></i>
+                                </div>
+                                <div class="tree-children">
+                                    <div class="tree-file" onclick="selectFile('archivos_recuperados')">
+                                        <i class="bi bi-filetype-json tree-file-icon" style="color:#fcd34d;"></i>archivos_recuperados.jsonl
+                                    </div>
+                                    <div class="tree-file" onclick="selectFile('archivos_misteriosos')">
+                                        <i class="bi bi-filetype-json tree-file-icon" style="color:#fcd34d;"></i>archivos_misteriosos.jsonl
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Dictamen IA -->
+                            <div class="tree-category" id="cat-ia">
+                                <div class="tree-category-label" onclick="toggleCategory('cat-ia')">
+                                    <i class="bi bi-robot" style="color:var(--accent-red);"></i>
+                                    Dictamen IA
+                                    <i class="bi bi-chevron-right caret"></i>
+                                </div>
+                                <div class="tree-children">
+                                    <div class="tree-file" onclick="selectFile('dictamen_ia')">
+                                        <i class="bi bi-markdown-fill tree-file-icon" style="color:#fca5a5;"></i>Dictamen_Pericial_IA.md
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: Preview Panel -->
+                    <div class="explorer-preview-panel">
+                        <div class="preview-header">
+                            <i class="bi bi-eye" style="color:var(--accent-blue);"></i>
+                            Panel de Previsualización
+                            <span id="preview-filename" style="margin-left:auto;font-family:var(--font-mono);font-size:0.72rem;color:var(--accent-cyan);"></span>
+                        </div>
+
+                        <!-- No selection state -->
+                        <div class="preview-no-selection" id="preview-empty">
+                            <i class="bi bi-file-earmark-magnify"></i>
+                            <p>Selecciona un archivo del árbol para ver su contenido y metadatos.</p>
+                        </div>
+
+                        <!-- Active preview -->
+                        <div class="preview-content" id="preview-active">
+                            <!-- Metadata strip -->
+                            <div class="meta-strip">
+                                <div>
+                                    <div class="meta-item-label">Nombre</div>
+                                    <div class="meta-item-value" id="meta-name">—</div>
+                                </div>
+                                <div>
+                                    <div class="meta-item-label">Tamaño</div>
+                                    <div class="meta-item-value" id="meta-size">—</div>
+                                </div>
+                                <div>
+                                    <div class="meta-item-label">Tipo</div>
+                                    <div class="meta-item-value" id="meta-type">—</div>
+                                </div>
+                                <div class="meta-hash-row">
+                                    <div class="meta-item-label">SHA-256 (Artefacto)</div>
+                                    <div class="meta-hash-value" id="meta-hash">—</div>
+                                </div>
+                            </div>
+
+                            <!-- Viewer tabs -->
+                            <div class="viewer-tabs">
+                                <div class="viewer-tab active" id="tab-text" onclick="switchTab('text')">Texto / Contenido</div>
+                                <div class="viewer-tab" id="tab-hex" onclick="switchTab('hex')">Vista Hexadecimal</div>
+                            </div>
+
+                            <!-- Text pane -->
+                            <div class="viewer-pane active" id="pane-text"></div>
+                            <!-- Hex pane -->
+                            <div class="viewer-pane" id="pane-hex"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ============================================================
+                 SECTION 5: RESULTADOS IA
+                 ============================================================ -->
+            <section class="page-section" id="section-ia">
+                <div class="section-header">
+                    <div class="section-title">Resultados IA</div>
+                    <div class="section-subtitle">Hallazgos generados por el motor de triaje automatizado. Datos simulados — Pre-cargados desde JSON.</div>
+                </div>
+
+                <div class="fs-card">
+                    <div class="fs-card-header">
+                        <i class="bi bi-table fs-card-header-icon"></i>
+                        Tabla de Hallazgos &mdash; <span style="color:var(--accent-red);">2 Críticos</span>, 1 Medio, 1 Bajo
+                        <span class="ms-auto" style="font-size:.7rem;font-family:var(--font-mono);color:var(--accent-green);">
+                            Motor: LLM-Forense v0.9 | Temp: 0.0
+                        </span>
+                    </div>
+                    <div style="overflow-x:auto;">
+                        <table class="ai-results-table" id="ai-table">
+                            <thead>
+                                <tr>
+                                    <th>Artefacto</th>
+                                    <th>Tipo de Alerta</th>
+                                    <th>Nivel de Riesgo</th>
+                                    <th>Detalle Técnico</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ai-tbody">
+                                <!-- JS-populated -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+        </main><!-- /#content-area -->
+    </div><!-- /#main-area -->
+</div><!-- /#app-shell -->
+
+<!-- ================================================================
+     EXPLORER MODAL (Fase 3)
+     ================================================================ -->
+<div class="fs-modal-overlay" id="explorer-modal">
+    <div class="fs-modal" style="max-width: 600px;">
+        <div class="fs-modal-icon"><i class="bi bi-folder2-open"></i></div>
+        <div class="fs-modal-title">Seleccionar Evidencia</div>
+        <div style="display: flex; gap: 8px; margin-bottom: 15px;">
+            <input type="text" id="explorer-path-input" style="flex: 1; background: var(--bg-surface); border: 1px solid var(--border-dim); color: var(--text-main); padding: 8px; border-radius: 4px; font-family: var(--font-mono); font-size: 0.85rem;" placeholder="Ruta del directorio...">
+            <button class="btn-primary" id="btn-go-path" style="padding: 0 15px; border-radius: 4px;"><i class="bi bi-arrow-return-left"></i></button>
+        </div>
+        <div class="explorer-list" id="explorer-items" style="max-height: 300px; overflow-y: auto; text-align: left; background: var(--bg-surface); padding: 10px; border-radius: 8px; border: 1px solid var(--border-dim); margin-bottom: 15px;">
+            <!-- JS populated items -->
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-modal-close" style="background: var(--bg-body); color: var(--text-muted);" onclick="closeExplorerModal()"><i class="bi bi-x-lg me-2"></i>Cancelar</button>
+            <button class="btn-modal-close" id="btn-confirm-explorer"><i class="bi bi-check-lg me-2"></i>Seleccionar</button>
+        </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     SHA-256 EXPORT MODAL
+     ================================================================ -->
+<div class="fs-modal-overlay" id="hash-modal">
+    <div class="fs-modal">
+        <div class="fs-modal-icon"><i class="bi bi-patch-check-fill"></i></div>
+        <div class="fs-modal-title">Caso Cerrado — Hash Maestro Generado</div>
+        <div class="fs-modal-sub">El siguiente hash SHA-256 representa el estado inmutable de toda la carpeta de evidencia del caso. Regístrelo en el acta pericial.</div>
+        <div class="hash-display">
+            <div class="hash-label">Hash de Caso Maestro (SHA-256)</div>
+            <div id="modal-hash-value">—</div>
+            <br>
+            <div class="hash-label">Expediente</div>
+            <div id="modal-case-ref">—</div>
+            <br>
+            <div class="hash-label">Timestamp de sellado</div>
+            <div id="modal-timestamp">—</div>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:20px;">
+            <button class="btn-modal-close" style="flex:1;" onclick="closeHashModal()"><i class="bi bi-check-lg me-2"></i>Confirmar</button>
+            <button class="btn-modal-close" style="flex:1; background:var(--accent-purple);" onclick="resetCaseForm()"><i class="bi bi-folder-plus me-2"></i>Nuevo Caso</button>
+        </div>
+    </div>
+</div>
+
+<!-- Bootstrap 5 JS Bundle -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+/* ================================================================
+   FOREN-SYS — FRONTEND LOGIC v2.0
+   ================================================================ */
+
+// ── Global State ─────────────────────────────────────────────────
+let activeCaseNumber   = null;
+let activeCasePerito   = null;
+let isOperationRunning = false;
+
+// ── AI Findings Data (simulated JSON) ────────────────────────────
+const aiFindings = [
+    {
+        artifact:  '/usr/bin/svchost_reverse',
+        alertType: 'Malware',
+        alertClass:'type-malware',
+        risk:      'Crítico',
+        riskClass: 'risk-critico',
+        rowClass:  'row-critical',
+        detail:    'Reverse shell signature detected. Comunicación activa con C2 203.0.113.42:4444. Hash SHA-256 en lista negra MITRE ATT&CK T1059.'
+    },
+    {
+        artifact:  '/home/user/Documents/Encrypted/',
+        alertType: 'Ransomware',
+        alertClass:'type-ransomware',
+        risk:      'Crítico',
+        riskClass: 'risk-critico',
+        rowClass:  'row-critical',
+        detail:    'Alta entropía detectada (7.98 bits/byte). Extensiones .locky en 2,341 archivos. Timestamp de modificación: 2026-04-10 03:17 UTC.'
+    },
+    {
+        artifact:  '/var/log/auth.log',
+        alertType: 'Exfiltración',
+        alertClass:'type-exfil',
+        risk:      'Medio',
+        riskClass: 'risk-medio',
+        rowClass:  'row-medium',
+        detail:    'Transferencia SCP masiva (4.7 GB) hacia IP externa fuera del horario laboral. SIEM correlación: EVT-7821 → EVT-9923.'
+    },
+    {
+        artifact:  '/etc/cron.d/suspect_job',
+        alertType: 'Anomalía',
+        alertClass:'type-anomalia',
+        risk:      'Bajo',
+        riskClass: 'risk-bajo',
+        rowClass:  'row-low',
+        detail:    'Tarea programada añadida por usuario no privilegiado el 2026-04-09 a las 02:34 UTC. Ejecuta script en /tmp/.hidden/run.sh.'
+    },
+    {
+        artifact:  '/tmp/.hidden/run.sh',
+        alertType: 'Escalada',
+        alertClass:'type-escalada',
+        risk:      'Alto',
+        riskClass: 'risk-alto',
+        rowClass:  'row-critical',
+        detail:    'Script de escalada de privilegios. Exploita CVE-2023-0386 (OverlayFS). Permisos SUID establecidos en /bin/bash posterior a ejecución.'
+    }
+];
+
+// ── Pipeline Operations Messages ─────────────────────────────────
+const pipelineOps = {
+    'btn-wiping': {
+        name: 'WIPING NIST 800-88',
+        steps: [
+            { msg: '[INFO] Montando unidad destino /dev/sdc en modo escritura...', type: 'log-info' },
+            { msg: '[PROGRESO] Iniciando Pase 1 — NIST 800-88 Clear. Velocidad: 148 MB/s', type: 'log-info' },
+            { msg: '[PROGRESO] 50% completado — Sobreescribiendo sectores con patrón 0x00...', type: 'log-warn' },
+            { msg: '[PROGRESO] Pase 2 — Verificando borrado criptográfico por sectores...', type: 'log-info' },
+            { msg: '[ÉXITO] Especificación NIST 800-88 cumplida. Unidad certificada para reutilización.', type: 'log-success' }
+        ]
+    },
+    'btn-disk': {
+        name: 'EXTRACCIÓN DISCO (dc3dd)',
+        steps: [
+            { msg: '[INFO] Inicializando dc3dd versión 7.2.641 en modo imagen forense...', type: 'log-info' },
+            { msg: '[PROGRESO] Leyendo /dev/sdb — 512 bytes/sector, 1,953,525,168 sectores totales...', type: 'log-info' },
+            { msg: '[ADVERTENCIA] Error de lectura en sector 2,048,592 — Aplicando relleno con cero (00)...', type: 'log-warn' },
+            { msg: '[PROGRESO] Imagen al 78% — Calculando hash SHA-256 en paralelo...', type: 'log-info' },
+            { msg: '[ÉXITO] Imagen completada: /mnt/Destino_ForenSys/disk_image.dd — SHA-256 verificado: a3f8c21...', type: 'log-success' }
+        ]
+    },
+    'btn-ram': {
+        name: 'EXTRACCIÓN RAM (Volatility 3)',
+        steps: [
+            { msg: '[INFO] Inicializando Volatility 3 Framework — Perfil automático activado...', type: 'log-info' },
+            { msg: '[PROGRESO] Adquiriendo memoria física desde /dev/mem — Tamaño: 16 GB...', type: 'log-info' },
+            { msg: '[PROGRESO] Perfilando arquitectura del kernel Linux 6.1.0-amd64...', type: 'log-warn' },
+            { msg: '[PROGRESO] Analizando tabla de páginas, hilos ocultos y conexiones de red activas...', type: 'log-info' },
+            { msg: '[ÉXITO] Volcado guardado: memdump_24h.raw — SHA-256 verificado y almacenado en log de custodia.', type: 'log-success' }
+        ]
+    },
+    'btn-mobile': {
+        name: 'EXTRACCIÓN CELULAR (ADB)',
+        steps: [
+            { msg: '[INFO] Estableciendo puente ADB — Protocolo USB 3.2...', type: 'log-info' },
+            { msg: '[INFO] Dispositivo detectado: Pixel 7 Pro — Android 14 — IMEI: 35xxxxxxxxxxxxxx', type: 'log-info' },
+            { msg: '[PROGRESO] Extrayendo base de datos lógica (SMS, contactos, llamadas, apps)...', type: 'log-info' },
+            { msg: '[PROGRESO] Derivando claves AES-256 del keystore cifrado del dispositivo...', type: 'log-warn' },
+            { msg: '[ÉXITO] Extracción lógica completada. Archivo: mobile_backup.tar.gz – SHA-256 verificado.', type: 'log-success' }
+        ]
+    },
+    'btn-cloud': {
+        name: 'CAPTURA NUBE',
+        steps: [
+            { msg: '[INFO] Activando módulo de adquisición en la nube (UFED Cloud Analyzer modo CLI)...', type: 'log-info' },
+            { msg: '[INFO] Autenticando vía token OAuth2 preservado en evidencia digital...', type: 'log-info' },
+            { msg: '[PROGRESO] Descargando archivos de Google Drive, Gmail y Sheets corporativos...', type: 'log-warn' },
+            { msg: '[PROGRESO] Empaquetando evidencia con metadatos de integridad...', type: 'log-info' },
+            { msg: '[ÉXITO] Evidencia en la nube empaquetada: cloud_evidence.zip — SHA-256 verificado.', type: 'log-success' }
+        ]
+    },
+    'btn-ia': {
+        name: 'TRIAJE IA',
+        steps: [
+            { msg: '[INFO] Enviando artefactos al motor LLM-Forense v0.9 (temperatura=0.0)...', type: 'log-info' },
+            { msg: '[PROGRESO] Indexando vectores RAG sobre base de conocimiento forense MITRE ATT&CK...', type: 'log-info' },
+            { msg: '[PROGRESO] Correlacionando comportamientos anómalos y calculando puntaje de severidad...', type: 'log-warn' },
+            { msg: '[PROGRESO] Generando respuesta estructurada JSON con 5 hallazgos clasificados...', type: 'log-info' },
+            { msg: '[ÉXITO] Triaje IA completado. 2 hallazgos CRÍTICOS detectados. Ver sección "Resultados IA".', type: 'log-success' }
+        ]
+    },
+    'btn-report': {
+        name: 'REPORTE PDF',
+        steps: [
+            { msg: '[INFO] Consolidando datos del caso y cadena de custodia completa...', type: 'log-info' },
+            { msg: '[PROGRESO] Generando hash SHA-256 de todos los archivos de evidencia adquiridos...', type: 'log-warn' },
+            { msg: '[PROGRESO] Compilando tabla de hallazgos IA y timeline cronológico de eventos...', type: 'log-info' },
+            { msg: '[PROGRESO] Formateando PDF según estándar ASTM E2916 para informes periciales...', type: 'log-info' },
+            { msg: '[ÉXITO] Reporte pericial generado: Informe_Forense.pdf — Firmado digitalmente con GPG.', type: 'log-success' }
+        ]
+    }
+};
+
+// ── Timestamp helpers ─────────────────────────────────────────────
+function getTimestamp() {
+    const n = new Date();
+    const h = String(n.getHours()).padStart(2,'0');
+    const m = String(n.getMinutes()).padStart(2,'0');
+    const s = String(n.getSeconds()).padStart(2,'0');
+    const ms= String(n.getMilliseconds()).padStart(3,'0');
+    return `${h}:${m}:${s}.${ms}`;
+}
+
+// ── Clock ─────────────────────────────────────────────────────────
+function updateClock() {
+    const n = new Date();
+    const h = String(n.getHours()).padStart(2,'0');
+    const m = String(n.getMinutes()).padStart(2,'0');
+    const s = String(n.getSeconds()).padStart(2,'0');
+    document.getElementById('clock-chip').textContent = `${h}:${m}:${s}`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Console helpers ───────────────────────────────────────────────
+const liveLog = document.getElementById('live-log');
+const MAX_LOG_LINES = 500;  // prevent DOM bloat
+
+// Map backend level string → CSS class
+const levelClassMap = {
+    'info':    'log-info',
+    'success': 'log-success',
+    'warn':    'log-warn',
+    'error':   'log-error',
+    'system':  'log-system',
+};
+
+function addLogEntry(message, cssType = 'log-info') {
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${cssType}`;
+
+    const ts = document.createElement('span');
+    ts.className = 'log-ts';
+    ts.textContent = getTimestamp();
+
+    const msg = document.createElement('span');
+    msg.className = 'log-msg';
+    msg.textContent = message;
+
+    entry.appendChild(ts);
+    entry.appendChild(msg);
+    liveLog.appendChild(entry);
+
+    // Keep DOM lean
+    while (liveLog.children.length > MAX_LOG_LINES) {
+        liveLog.removeChild(liveLog.firstChild);
+    }
+
+    // Auto-scroll only if user hasn't scrolled up manually
+    const parent = liveLog.parentElement;
+    const isAtBottom = parent.scrollHeight - parent.clientHeight - parent.scrollTop < 60;
+    if (isAtBottom) {
+        parent.scrollTop = parent.scrollHeight;
+    }
+}
+
+function clearConsole() {
+    liveLog.innerHTML = '';
+    addLogEntry('[SISTEMA] Consola limpiada por el operador.', 'log-idle');
+}
+
+// ── SSE Real-time Log Stream ──────────────────────────────────────
+let sseSource = null;
+
+function initSSE() {
+    const dot   = document.getElementById('sse-dot');
+    const label = document.getElementById('sse-label');
+
+    sseSource = new EventSource('/api/logs/stream');
+
+    sseSource.onopen = () => {
+        dot.style.background   = '#10b981';
+        dot.style.boxShadow    = '0 0 6px #10b981';
+        label.textContent      = 'Conectado';
+        addLogEntry('[SISTEMA] Canal de logs en tiempo real establecido.', 'log-system');
+    };
+
+    sseSource.onmessage = (e) => {
+        try {
+            const data  = JSON.parse(e.data);
+            const cls   = levelClassMap[data.level] || 'log-info';
+            // Create entry with server-provided timestamp
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${cls}`;
+            const ts  = document.createElement('span');
+            ts.className   = 'log-ts';
+            ts.textContent = data.ts || getTimestamp();
+            const msg = document.createElement('span');
+            msg.className  = 'log-msg';
+            msg.textContent = data.msg;
+            entry.appendChild(ts);
+            entry.appendChild(msg);
+            liveLog.appendChild(entry);
+
+            while (liveLog.children.length > MAX_LOG_LINES) {
+                liveLog.removeChild(liveLog.firstChild);
+            }
+            const parent = liveLog.parentElement;
+            // Always auto-scroll to bottom so logs follow in real time
+            parent.scrollTop = parent.scrollHeight;
+
+            // Show kill button if a process is running
+            if (['[OPERADOR]', '[INFO]', '[PROGRESO]'].some(p => data.msg.startsWith(p)) || data.msg.startsWith('[PROGRESO:')) {
+                document.getElementById('btn-kill-proc').style.display = 'flex';
+            }
+            if (['[OK]', '[ERROR]', '[ÉXITO]'].some(p => data.msg.startsWith(p))) {
+                document.getElementById('btn-kill-proc').style.display = 'none';
+            }
+
+            // WIPING PROGRESS PARSER — formato nuevo: [PROGRESO:X] donde X es el porcentaje
+            const wipeMatch = data.msg.match(/^\[PROGRESO:(\d+)\]/);
+            if (wipeMatch) {
+                const pct = parseInt(wipeMatch[1]);
+                const pContainer = document.getElementById('wiping-progress-container');
+                const pBar = document.getElementById('wiping-progress-bar');
+                const pText = document.getElementById('wiping-progress-text');
+                const pDetail = document.getElementById('wiping-progress-detail');
+                if (pContainer && pBar) {
+                    pContainer.style.display = 'block';
+                    pBar.style.width = pct + '%';
+                    pText.textContent = `Progreso: ${pct}%`;
+                    pDetail.textContent = data.msg.replace(/^\[PROGRESO:\d+\]\s*/, '').trim();
+                    pBar.style.background = pct >= 100 ? 'var(--accent-green)' : 'var(--accent-red)';
+                }
+            }
+        } catch { /* malformed entry, ignore */ }
+    };
+
+    sseSource.onerror = () => {
+        dot.style.background = '#ef4444';
+        dot.style.boxShadow  = '0 0 6px #ef4444';
+        label.textContent    = 'Reconectando…';
+        // Browser auto-retries EventSource — we just update UI
+    };
+}
+
+// Start SSE after page loads
+initSSE();
+
+// ── Manual Command Mode ───────────────────────────────────────────
+let cmdMode = false;
+const cmdHistory = [];
+let cmdHistoryIdx = -1;
+
+const btnCmdMode  = document.getElementById('btn-cmd-mode');
+const cmdBar      = document.getElementById('cmd-input-bar');
+const cmdInput    = document.getElementById('cmd-input');
+const btnSendCmd  = document.getElementById('btn-send-cmd');
+const btnKillProc = document.getElementById('btn-kill-proc');
+
+btnCmdMode.addEventListener('click', () => {
+    cmdMode = !cmdMode;
+    if (cmdMode) {
+        cmdBar.style.display = 'block';
+        btnCmdMode.style.background  = 'rgba(59,130,246,0.15)';
+        btnCmdMode.style.borderColor = 'rgba(59,130,246,0.6)';
+        btnCmdMode.style.color       = 'var(--accent-blue)';
+        btnCmdMode.innerHTML         = '<i class="bi bi-terminal-fill"></i> Modo Comando <span style="font-size:0.6rem;margin-left:4px;background:var(--accent-blue);color:#fff;padding:1px 5px;border-radius:3px;">ON</span>';
+        addLogEntry('[SISTEMA] Modo Comando activado. Ejecuta comandos de sistema con precaución.', 'log-warn');
+        setTimeout(() => cmdInput.focus(), 100);
+    } else {
+        cmdBar.style.display = 'none';
+        btnCmdMode.style.background  = 'none';
+        btnCmdMode.style.borderColor = 'var(--border-dim)';
+        btnCmdMode.style.color       = 'var(--text-muted)';
+        btnCmdMode.innerHTML         = '<i class="bi bi-terminal"></i> Modo Comando';
+        addLogEntry('[SISTEMA] Modo Comando desactivado.', 'log-system');
+    }
+});
+
+function sendCommand() {
+    const cmd = cmdInput.value.trim();
+    if (!cmd) return;
+
+    // Add to history
+    cmdHistory.unshift(cmd);
+    if (cmdHistory.length > 50) cmdHistory.pop();
+    cmdHistoryIdx = -1;
+
+    addLogEntry(`$ ${cmd}`, 'log-warn');
+    cmdInput.value = '';
+
+    const casoId = activeCaseNumber || 'MANUAL';
+
+    fetch('/api/run_command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: cmd, caso_id: casoId })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status !== 'success') {
+            addLogEntry('[ERROR] ' + data.message, 'log-error');
+        } else {
+            document.getElementById('btn-kill-proc').style.display = 'flex';
+        }
+    })
+    .catch(err => addLogEntry('[ERROR] Fallo de red: ' + err, 'log-error'));
+}
+
+btnSendCmd.addEventListener('click', sendCommand);
+
+cmdInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        sendCommand();
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (cmdHistoryIdx < cmdHistory.length - 1) {
+            cmdHistoryIdx++;
+            cmdInput.value = cmdHistory[cmdHistoryIdx];
+        }
+    } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (cmdHistoryIdx > 0) {
+            cmdHistoryIdx--;
+            cmdInput.value = cmdHistory[cmdHistoryIdx];
+        } else {
+            cmdHistoryIdx = -1;
+            cmdInput.value = '';
+        }
+    } else if (e.key === 'c' && e.ctrlKey) {
+        e.preventDefault();
+        killProcess();
+    }
+});
+
+// Kill process
+function killProcess() {
+    fetch('/api/kill_command', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            addLogEntry(data.status === 'success' ? '[SISTEMA] Proceso interrumpido.' : '[WARN] ' + data.message, 
+                data.status === 'success' ? 'log-warn' : 'log-idle');
+            document.getElementById('btn-kill-proc').style.display = 'none';
+        })
+        .catch(err => addLogEntry('[ERROR] ' + err, 'log-error'));
+}
+
+btnKillProc.addEventListener('click', killProcess);
+
+// ── SPA Navigation ────────────────────────────────────────────────
+const navItems    = document.querySelectorAll('.nav-item-custom');
+const pageSections= document.querySelectorAll('.page-section');
+const topbarTitle = document.getElementById('topbar-title');
+
+navItems.forEach(item => {
+    item.addEventListener('click', function(e) {
+        e.preventDefault();
+        if (this.classList.contains('disabled-nav')) return;
+
+        // Deactivate all
+        navItems.forEach(i => i.classList.remove('active'));
+        pageSections.forEach(s => { s.classList.remove('active'); });
+
+        // Activate clicked
+        this.classList.add('active');
+        const targetId = this.getAttribute('data-section');
+        const targetSection = document.getElementById(targetId);
+        if (targetSection) {
+            targetSection.classList.add('active');
+        }
+
+        // Update topbar title (strip icon text)
+        topbarTitle.textContent = this.querySelector('span').textContent.trim();
+    });
+});
+
+// ── Case Management ───────────────────────────────────────────────
+const caseForm        = document.getElementById('case-form');
+const btnOpenCase     = document.getElementById('btn-open-case');
+const btnCloseCase    = document.getElementById('btn-close-case');
+const navOps          = document.getElementById('nav-ops');
+const navExplorer     = document.getElementById('nav-explorer');
+const opsLockBadge    = document.getElementById('ops-lock-badge');
+const explorerLockBadge = document.getElementById('explorer-lock-badge');
+const caseIndicator   = document.getElementById('case-indicator');
+const caseIndValue    = document.getElementById('case-indicator-value');
+const activeCaseBar   = document.getElementById('active-case-topbar');
+const topbarCaseId    = document.getElementById('topbar-case-id');
+const custodyBanner   = document.getElementById('custody-banner');
+const custodyDetail   = document.getElementById('custody-detail-text');
+
+// Simulates a SHA-256-like hex string deterministically from a seed string
+function fakeHash(seed) {
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+        const ch = seed.charCodeAt(i);
+        hash = ((hash << 5) - hash) + ch;
+        hash |= 0;
+    }
+    // Build 64-char hex using the seed hash as PRNG seed
+    let state = Math.abs(hash) || 0xdeadbeef;
+    let result = '';
+    for (let i = 0; i < 64; i++) {
+        state = (state * 1664525 + 1013904223) & 0xffffffff;
+        result += (Math.abs(state) % 16).toString(16);
+    }
+    return result;
+}
+
+caseForm.addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    const caseNumEl   = document.getElementById('case-number');
+    const peritoEl    = document.getElementById('investigator-name');
+    const classEl     = document.getElementById('case-class');
+    const notesEl     = document.getElementById('case-notes');
+
+    const caseNum  = caseNumEl.value.trim();
+    const perito   = peritoEl.value.trim();
+
+    if (!caseNum || !perito) {
+        caseNumEl.style.borderColor = !caseNum ? 'var(--accent-red)' : '';
+        peritoEl.style.borderColor  = !perito  ? 'var(--accent-red)' : '';
+        return;
+    }
+
+    // Enviar al backend para registro persistente
+    fetch('/api/case/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            caso_id: caseNum,
+            perito: perito,
+            clasificacion: classEl.value || '',
+            notas: notesEl.value.trim() || ''
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status !== 'success') {
+            addLogEntry('[ERROR] ' + data.message, 'log-error');
+            return;
+        }
+
+        // Store globally
+        activeCaseNumber = data.caso_id;
+        activeCasePerito = perito;
+
+        // Lock form fields
+        [caseNumEl, peritoEl, classEl, notesEl].forEach(el => {
+            el.setAttribute('readonly', true);
+            el.style.borderColor = '';
+        });
+
+        // Lock submit button, show close button
+        btnOpenCase.disabled = true;
+        // Using DOM methods instead of innerHTML for security
+        btnOpenCase.replaceChildren();
+        const lockIcon = document.createElement('i');
+        lockIcon.className = 'bi bi-lock-fill';
+        const lockSpan = document.createElement('span');
+        lockSpan.textContent = 'Caso Abierto — Sólo Lectura';
+        btnOpenCase.appendChild(lockIcon);
+        btnOpenCase.appendChild(lockSpan);
+        btnCloseCase.classList.add('visible');
+
+        // Unlock Operaciones nav
+        navOps.classList.remove('disabled-nav');
+        opsLockBadge.textContent = '';
+        const opsIcon = document.createElement('i');
+        opsIcon.className = 'bi bi-unlock-fill me-1';
+        opsLockBadge.appendChild(opsIcon);
+        opsLockBadge.appendChild(document.createTextNode('Activo'));
+        opsLockBadge.style.background = 'rgba(16,185,129,.15)';
+        opsLockBadge.style.borderColor = 'rgba(16,185,129,.3)';
+        opsLockBadge.style.color = 'var(--accent-green)';
+
+        // Unlock Explorador nav
+        navExplorer.classList.remove('disabled-nav');
+        explorerLockBadge.textContent = '';
+        const expIcon = document.createElement('i');
+        expIcon.className = 'bi bi-unlock-fill me-1';
+        explorerLockBadge.appendChild(expIcon);
+        explorerLockBadge.appendChild(document.createTextNode('Activo'));
+        explorerLockBadge.style.background = 'rgba(16,185,129,.15)';
+        explorerLockBadge.style.borderColor = 'rgba(16,185,129,.3)';
+        explorerLockBadge.style.color = 'var(--accent-green)';
+
+        // Show case indicator in sidebar
+        caseIndValue.textContent = data.caso_id + ' — ' + perito;
+        caseIndicator.classList.add('visible');
+
+        // Show case in topbar
+        topbarCaseId.textContent = data.caso_id;
+        activeCaseBar.classList.add('visible');
+
+        // Show custody banner
+        const now = new Date().toLocaleString('es-ES', { dateStyle:'long', timeStyle:'medium' });
+        custodyDetail.textContent =
+            'Expediente: ' + data.caso_id + '\n' +
+            'Perito: ' + perito + '\n' +
+            'Clasificación: ' + (classEl.value || 'No especificada') + '\n' +
+            'Ruta: ' + data.ruta_caso + '\n' +
+            'SHA-256 Contexto: ' + data.hash_contexto + '\n' +
+            'Timestamp apertura: ' + now;
+        custodyBanner.classList.add('visible');
+
+        // Auto-navigate to Operaciones
+        setTimeout(() => {
+            navOps.click();
+            addLogEntry('[SISTEMA] Caso registrado en disco: ' + data.ruta_caso, 'log-system');
+            addLogEntry('[SISTEMA] Cadena de custodia activa. SHA-256: ' + data.hash_contexto, 'log-system');
+            addLogEntry('[IA] contexto_incidente.json creado automáticamente en 03_Results/', 'log-system');
+            addLogEntry('[SISTEMA] Todas las operaciones serán registradas.', 'log-info');
+        }, 600);
+
+        // Recargar tabla de casos
+        cargarCasosRegistrados();
+    })
+    .catch(err => {
+        addLogEntry('[ERROR] Fallo al registrar caso: ' + err, 'log-error');
+    });
+});
+
+// ── Close & Export Case (SHA-256 Real) ──────────────────────────
+btnCloseCase.addEventListener('click', function() {
+    if (!activeCaseNumber) return;
+
+    addLogEntry('[SISTEMA] Calculando hash SHA-256 maestro de la carpeta del caso...', 'log-warn');
+
+    fetch('/api/case/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caso_id: activeCaseNumber })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status !== 'success') {
+            addLogEntry('[ERROR] ' + data.message, 'log-error');
+            return;
+        }
+
+        const now = new Date().toLocaleString('es-ES', { dateStyle:'long', timeStyle:'long' });
+
+        document.getElementById('modal-hash-value').textContent = data.hash_maestro;
+        document.getElementById('modal-case-ref').textContent   = activeCaseNumber + ' — Perito: ' + activeCasePerito;
+        document.getElementById('modal-timestamp').textContent  = now;
+        document.getElementById('hash-modal').classList.add('open');
+
+        addLogEntry('[SISTEMA] Caso cerrado. Hash maestro: ' + data.hash_maestro, 'log-success');
+
+        // Recargar tabla
+        cargarCasosRegistrados();
+    })
+    .catch(err => {
+        addLogEntry('[ERROR] Fallo al cerrar caso: ' + err, 'log-error');
+    });
+});
+
+function closeHashModal() {
+    document.getElementById('hash-modal').classList.remove('open');
+}
+
+// Close modal on backdrop click
+document.getElementById('hash-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeHashModal();
+});
+
+// ── Tabla de Casos Registrados ────────────────────────────────────
+function cargarCasosRegistrados() {
+    fetch('/api/case/list')
+    .then(res => res.json())
+    .then(data => {
+        const tbody = document.getElementById('cases-tbody');
+        const emptyMsg = document.getElementById('cases-empty');
+        tbody.replaceChildren();
+
+        if (!data.cases || data.cases.length === 0) {
+            emptyMsg.style.display = 'block';
+            return;
+        }
+        emptyMsg.style.display = 'none';
+
+        data.cases.forEach(caso => {
+            const tr = document.createElement('tr');
+
+            const tdId = document.createElement('td');
+            tdId.textContent = caso.caso_id;
+            tdId.style.fontFamily = 'var(--font-mono)';
+
+            const tdPerito = document.createElement('td');
+            tdPerito.textContent = caso.perito;
+
+            const tdClass = document.createElement('td');
+            tdClass.textContent = caso.clasificacion;
+
+            const tdFecha = document.createElement('td');
+            tdFecha.textContent = caso.fecha_apertura ? caso.fecha_apertura.substring(0, 19).replace('T', ' ') : '—';
+            tdFecha.style.fontSize = '0.78rem';
+
+            const tdEstado = document.createElement('td');
+            const badge = document.createElement('span');
+            badge.style.padding = '2px 10px';
+            badge.style.borderRadius = '4px';
+            badge.style.fontSize = '0.72rem';
+            badge.style.fontWeight = '600';
+            if (caso.estado === 'abierto') {
+                badge.textContent = 'ABIERTO';
+                badge.style.background = 'rgba(16,185,129,.15)';
+                badge.style.color = 'var(--accent-green)';
+            } else {
+                badge.textContent = 'CERRADO';
+                badge.style.background = 'rgba(239,68,68,.15)';
+                badge.style.color = 'var(--accent-red)';
+            }
+            tdEstado.appendChild(badge);
+
+            const tdHash = document.createElement('td');
+            tdHash.textContent = caso.hash_contexto ? caso.hash_contexto.substring(0, 16) + '...' : '—';
+            tdHash.style.fontFamily = 'var(--font-mono)';
+            tdHash.style.fontSize = '0.72rem';
+            tdHash.title = caso.hash_contexto || '';
+
+            const tdAction = document.createElement('td');
+            const btnLoad = document.createElement('button');
+            btnLoad.innerHTML = '<i class="bi bi-box-arrow-in-right"></i>';
+            btnLoad.title = "Cargar este caso";
+            btnLoad.style.background = 'transparent';
+            btnLoad.style.border = '1px solid var(--accent-purple)';
+            btnLoad.style.color = 'var(--accent-purple)';
+            btnLoad.style.borderRadius = '4px';
+            btnLoad.style.cursor = 'pointer';
+            btnLoad.onclick = () => {
+                if (caso.ruta) {
+                    importarCasoDesdeRuta(caso.ruta);
+                } else {
+                    alert("La ruta de este caso es desconocida.");
+                }
+            };
+            tdAction.appendChild(btnLoad);
+
+            tr.appendChild(tdId);
+            tr.appendChild(tdPerito);
+            tr.appendChild(tdClass);
+            tr.appendChild(tdFecha);
+            tr.appendChild(tdEstado);
+            tr.appendChild(tdHash);
+            tr.appendChild(tdAction);
+            tbody.appendChild(tr);
+        });
+    })
+    .catch(err => {
+        const emptyMsg = document.getElementById('cases-empty');
+        emptyMsg.textContent = 'Error al cargar casos: ' + err;
+        emptyMsg.style.display = 'block';
+    });
+}
+
+// Cargar casos al inicio
+cargarCasosRegistrados();
+
+// ── Reseteo de Formulario (Nuevo Caso) ────────────────────────────
+function resetCaseForm() {
+    closeHashModal();
+    activeCaseNumber = null;
+    activeCasePerito = null;
+
+    const caseNumEl   = document.getElementById('case-number');
+    const peritoEl    = document.getElementById('investigator-name');
+    const classEl     = document.getElementById('case-class');
+    const notesEl     = document.getElementById('case-notes');
+
+    // Limpiar valores y readonly
+    [caseNumEl, peritoEl, classEl, notesEl].forEach(el => {
+        el.value = '';
+        el.removeAttribute('readonly');
+        el.style.borderColor = '';
+    });
+
+    // Restaurar botones de caso
+    btnOpenCase.disabled = false;
+    btnOpenCase.replaceChildren();
+    const openIcon = document.createElement('i');
+    openIcon.className = 'bi bi-folder-plus me-2';
+    btnOpenCase.appendChild(openIcon);
+    btnOpenCase.appendChild(document.createTextNode('Abrir y Asegurar Caso'));
+    btnCloseCase.classList.remove('visible');
+
+    // Ocultar banner y barra
+    custodyBanner.classList.remove('visible');
+    activeCaseBar.classList.remove('visible');
+    caseIndicator.classList.remove('visible');
+
+    // Bloquear Operaciones y Explorador
+    navOps.classList.add('disabled-nav');
+    opsLockBadge.textContent = '';
+    const lockIcon1 = document.createElement('i');
+    lockIcon1.className = 'bi bi-lock-fill me-1';
+    opsLockBadge.appendChild(lockIcon1);
+    opsLockBadge.appendChild(document.createTextNode('Bloqueado'));
+    opsLockBadge.style.background = 'rgba(239,68,68,.15)';
+    opsLockBadge.style.borderColor = 'rgba(239,68,68,.3)';
+    opsLockBadge.style.color = 'var(--accent-red)';
+
+    navExplorer.classList.add('disabled-nav');
+    explorerLockBadge.textContent = '';
+    const lockIcon2 = document.createElement('i');
+    lockIcon2.className = 'bi bi-lock-fill me-1';
+    explorerLockBadge.appendChild(lockIcon2);
+    explorerLockBadge.appendChild(document.createTextNode('Bloqueado'));
+    explorerLockBadge.style.background = 'rgba(239,68,68,.15)';
+    explorerLockBadge.style.borderColor = 'rgba(239,68,68,.3)';
+    explorerLockBadge.style.color = 'var(--accent-red)';
+
+    addLogEntry('[SISTEMA] Formulario reseteado para nuevo caso.', 'log-info');
+}
+
+// ── Importación de Casos (Explorador Modal) ───────────────────────
+let explorerCurrentPath = '/';
+let explorerSelectedPath = '';
+
+function closeExplorerModal() {
+    document.getElementById('explorer-modal').classList.remove('open');
+}
+
+let explorerSelectedIndex = -1;
+let explorerItemsList = [];
+
+function abrirExploradorParaImportar() {
+    explorerCurrentPath = '/home/ciber-admin/ForenSys_Project/Casos_ForenSys';
+    document.getElementById('explorer-modal').classList.add('open');
+    cargarExplorador(explorerCurrentPath);
+    // Focus path input automatically
+    setTimeout(() => {
+        const input = document.getElementById('explorer-path-input');
+        if(input) {
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+        }
+    }, 100);
+}
+
+function cargarExplorador(path) {
+    fetch('/api/explore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: path })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status !== 'success') {
+            addLogEntry('[ERROR EXPLORADOR] ' + data.message, 'log-error');
+            return;
+        }
+        
+        explorerCurrentPath = data.current_path;
+        document.getElementById('explorer-path-input').value = explorerCurrentPath;
+        const container = document.getElementById('explorer-items');
+        container.replaceChildren();
+
+        explorerItemsList = [];
+        explorerSelectedIndex = 0; // Default focus on first item
+
+        // Botón "Subir nivel"
+        if (explorerCurrentPath !== '/') {
+            const upDiv = document.createElement('div');
+            upDiv.className = 'explorer-item focusable-item';
+            upDiv.style.cursor = 'pointer';
+            upDiv.style.padding = '8px';
+            upDiv.style.borderBottom = '1px solid var(--border-dim)';
+            upDiv.innerHTML = '<i class="bi bi-arrow-90deg-up me-2"></i>.. (Subir)';
+            
+            const upAction = () => {
+                const parts = explorerCurrentPath.split('/').filter(p => p);
+                parts.pop();
+                cargarExplorador('/' + parts.join('/'));
+            };
+            upDiv.onclick = upAction;
+            
+            container.appendChild(upDiv);
+            explorerItemsList.push({ el: upDiv, action: upAction });
+        }
+
+        // Listar directorios
+        data.items.forEach(item => {
+            const div = document.createElement('div');
+            div.style.padding = '8px';
+            div.style.cursor = 'pointer';
+            div.style.borderBottom = '1px solid var(--border-dim)';
+            div.className = 'explorer-item';
+            
+            if (item.is_dir) {
+                div.classList.add('focusable-item');
+                div.innerHTML = '<i class="bi bi-folder-fill me-2" style="color:var(--accent-blue);"></i>' + item.name;
+                
+                const dirAction = () => {
+                    cargarExplorador(data.current_path + (data.current_path.endsWith('/') ? '' : '/') + item.name);
+                };
+                div.onclick = dirAction;
+                container.appendChild(div);
+                explorerItemsList.push({ el: div, action: dirAction });
+            } else {
+                // Es archivo
+                const mode = document.getElementById('explorer-modal').getAttribute('data-mode');
+                if (mode === 'file-pick') {
+                    // In file-pick mode: files are selectable
+                    div.classList.add('focusable-item');
+                    div.innerHTML = '<i class="bi bi-file-earmark-fill me-2" style="color:var(--accent-cyan);"></i>' + item.name;
+                    div._filePath = item.path;
+                    
+                    const fileAction = () => {
+                        // Deselect all
+                        Array.from(container.querySelectorAll('.explorer-item')).forEach(el => el.style.background = 'transparent');
+                        div.style.background = 'rgba(59,130,246,0.25)';
+                        div._filePath = item.path;
+                        // Store on a shared variable for confirm button
+                        container._selectedFilePath = item.path;
+                    };
+                    div.onclick = fileAction;
+                    container.appendChild(div);
+                    explorerItemsList.push({ el: div, action: fileAction });
+                } else {
+                    // In folder-import mode: files are dimmed non-selectable
+                    div.innerHTML = '<i class="bi bi-file-earmark me-2" style="color:var(--text-muted);"></i>' + item.name;
+                    div.style.opacity = '0.5';
+                    div.style.cursor = 'default';
+                    container.appendChild(div);
+                }
+            }
+        });
+        
+        updateExplorerFocus();
+    })
+    .catch(err => console.error(err));
+}
+
+function updateExplorerFocus() {
+    explorerItemsList.forEach((item, index) => {
+        if (index === explorerSelectedIndex) {
+            item.el.style.background = 'rgba(59,130,246,0.2)';
+            item.el.scrollIntoView({ block: 'nearest' });
+        } else {
+            item.el.style.background = 'transparent';
+        }
+    });
+}
+
+// Global Keydown Listener for Modal
+window.addEventListener('keydown', function(e) {
+    const modal = document.getElementById('explorer-modal');
+    if (!modal.classList.contains('open')) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (explorerSelectedIndex < explorerItemsList.length - 1) {
+            explorerSelectedIndex++;
+            updateExplorerFocus();
+        }
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (explorerSelectedIndex > 0) {
+            explorerSelectedIndex--;
+            updateExplorerFocus();
+        }
+    } else if (e.key === 'Enter') {
+        // If holding Ctrl, import current folder
+        if (e.ctrlKey) {
+            e.preventDefault();
+            document.getElementById('btn-confirm-explorer').click();
+            return;
+        }
+        
+        // If focus is in the path input, load that path
+        if (document.activeElement.id === 'explorer-path-input') {
+            e.preventDefault();
+            cargarExplorador(document.getElementById('explorer-path-input').value);
+            // unfocus to allow arrow navigation easily
+            document.getElementById('explorer-path-input').blur();
+            return;
+        }
+
+        // Else, enter the focused directory
+        e.preventDefault();
+        if (explorerSelectedIndex >= 0 && explorerSelectedIndex < explorerItemsList.length) {
+            explorerItemsList[explorerSelectedIndex].action();
+        }
+    } else if (e.key === 'Backspace') {
+        // If we are NOT typing in the input, go up a directory
+        if (document.activeElement.id !== 'explorer-path-input' && explorerCurrentPath !== '/') {
+            e.preventDefault();
+            const parts = explorerCurrentPath.split('/').filter(p => p);
+            parts.pop();
+            cargarExplorador('/' + parts.join('/'));
+        }
+    }
+});
+
+// Event listener for "Go" button
+document.getElementById('btn-go-path').addEventListener('click', function() {
+    cargarExplorador(document.getElementById('explorer-path-input').value);
+});
+
+document.getElementById('btn-confirm-explorer').innerHTML = '<i class="bi bi-check-lg me-2"></i>Seleccionar Carpeta Actual';
+document.getElementById('btn-confirm-explorer').addEventListener('click', function() {
+    if (!explorerCurrentPath || explorerCurrentPath === '/') {
+        alert("Por favor navega dentro de la carpeta del caso que deseas importar.");
+        return;
+    }
+    closeExplorerModal();
+    importarCasoDesdeRuta(explorerCurrentPath);
+});
+
+function importarCasoDesdeRuta(ruta) {
+    addLogEntry('[SISTEMA] Importando caso desde: ' + ruta, 'log-warn');
+    
+    fetch('/api/case/load_from_path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ruta: ruta })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status !== 'success') {
+            addLogEntry('[ERROR IMPORT] ' + data.message, 'log-error');
+            return;
+        }
+        
+        loadCaseInUI(data.caso, data.notas);
+        cargarCasosRegistrados();
+    })
+    .catch(err => {
+        addLogEntry('[ERROR IMPORT] ' + err, 'log-error');
+    });
+}
+
+function loadCaseInUI(caso, notasTxt) {
+    // Cargar datos en el formulario
+    activeCaseNumber = caso.caso_id;
+    activeCasePerito = caso.perito;
+
+    const caseNumEl   = document.getElementById('case-number');
+    const peritoEl    = document.getElementById('investigator-name');
+    const classEl     = document.getElementById('case-class');
+    const notesEl     = document.getElementById('case-notes');
+
+    caseNumEl.value = caso.caso_id;
+    peritoEl.value = caso.perito;
+    classEl.value = caso.clasificacion;
+    notesEl.value = notasTxt || '';
+
+    // Bloquear formulario
+    [caseNumEl, peritoEl, classEl, notesEl].forEach(el => {
+        el.setAttribute('readonly', true);
+        el.style.borderColor = '';
+    });
+
+    // Actualizar botones
+    btnOpenCase.disabled = true;
+    btnOpenCase.replaceChildren();
+    const lockIcon = document.createElement('i');
+    lockIcon.className = 'bi bi-lock-fill';
+    const lockSpan = document.createElement('span');
+    lockSpan.textContent = 'Caso Importado — Sólo Lectura';
+    btnOpenCase.appendChild(lockIcon);
+    btnOpenCase.appendChild(lockSpan);
+    
+    if (caso.estado === 'abierto') {
+        btnCloseCase.classList.add('visible');
+    } else {
+        btnCloseCase.classList.remove('visible');
+    }
+
+    // Desbloquear navegación
+    navOps.classList.remove('disabled-nav');
+    opsLockBadge.textContent = '';
+    const opsIcon = document.createElement('i');
+    opsIcon.className = 'bi bi-unlock-fill me-1';
+    opsLockBadge.appendChild(opsIcon);
+    opsLockBadge.appendChild(document.createTextNode('Activo'));
+    opsLockBadge.style.background = 'rgba(16,185,129,.15)';
+    opsLockBadge.style.borderColor = 'rgba(16,185,129,.3)';
+    opsLockBadge.style.color = 'var(--accent-green)';
+
+    navExplorer.classList.remove('disabled-nav');
+    explorerLockBadge.textContent = '';
+    const expIcon = document.createElement('i');
+    expIcon.className = 'bi bi-unlock-fill me-1';
+    explorerLockBadge.appendChild(expIcon);
+    explorerLockBadge.appendChild(document.createTextNode('Activo'));
+    explorerLockBadge.style.background = 'rgba(16,185,129,.15)';
+    explorerLockBadge.style.borderColor = 'rgba(16,185,129,.3)';
+    explorerLockBadge.style.color = 'var(--accent-green)';
+
+    // Indicadores
+    caseIndValue.textContent = caso.caso_id + ' — ' + caso.perito;
+    caseIndicator.classList.add('visible');
+    topbarCaseId.textContent = caso.caso_id;
+    activeCaseBar.classList.add('visible');
+
+    // Custody Banner
+    custodyDetail.textContent =
+        'Expediente: ' + caso.caso_id + '\n' +
+        'Perito: ' + caso.perito + '\n' +
+        'Estado: ' + caso.estado.toUpperCase() + '\n' +
+        'Ruta: ' + caso.ruta + '\n' +
+        'SHA-256 Contexto: ' + (caso.hash_contexto || '—');
+    custodyBanner.classList.add('visible');
+
+    addLogEntry('[SISTEMA] Caso importado exitosamente. Expediente: ' + caso.caso_id, 'log-success');
+}
+
+// ── Pipeline Simulation ───────────────────────────────────────────
+const allPipeBtns = document.querySelectorAll('.pipe-btn');
+const consoleBadge= document.getElementById('console-status-badge');
+
+function disableAllPipeBtns() {
+    allPipeBtns.forEach(b => b.disabled = true);
+}
+
+function enableAllPipeBtns() {
+    allPipeBtns.forEach(b => b.disabled = false);
+}
+
+function runOperation(btnId) {
+    if (!activeCaseNumber) {
+        addLogEntry('[ERROR] No hay caso activo. Abra un caso antes de iniciar operaciones.', 'log-error');
+        return;
+    }
+
+    const btn = document.getElementById(btnId);
+
+    // Mapeo de comandos reales
+    let command = null;
+    if (btnId === 'btn-wiping') {
+        const targetDev = selectedDevices.wiping;
+        if (!targetDev) {
+            addLogEntry('[ERROR] Seleccione un disco destino para esterilizar.', 'log-error');
+            return;
+        }
+        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/01_wiping.py --target ${targetDev} --force`;
+        
+        // Reset progress bar
+        const pContainer = document.getElementById('wiping-progress-container');
+        if (pContainer) {
+            pContainer.style.display = 'block';
+            document.getElementById('wiping-progress-bar').style.width = '0%';
+            document.getElementById('wiping-progress-bar').style.background = 'var(--accent-red)';
+            document.getElementById('wiping-progress-text').textContent = 'Progreso: 0%';
+            document.getElementById('wiping-progress-detail').textContent = 'Iniciando esterilización...';
+        }
+    } else if (btnId === 'btn-disk') {
+        const targetDev = selectedDevices.disco;
+        if (!targetDev) {
+            addLogEntry('[ERROR] Seleccione un disco sospechoso para extraer.', 'log-error');
+            return;
+        }
+        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/02_deadbox_v2.py --target ${targetDev} --case ${activeCaseNumber} --perito "${activeCasePerito}"`;
+    } else {
+        // Fallback for not-yet-implemented modules
+        addLogEntry(`[INFO] El módulo ${btnId} aún no está conectado al backend real.`, 'log-warn');
+        return;
+    }
+
+    disableAllPipeBtns();
+    btn.classList.add('running');
+
+    addLogEntry(`[SISTEMA] Iniciando operación para el CASO: ${activeCaseNumber}`, 'log-system');
+    addLogEntry(`$ ${command}`, 'log-warn');
+
+    fetch('/api/run_command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: command, caso_id: activeCaseNumber })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status !== 'success') {
+            addLogEntry('[ERROR] ' + data.message, 'log-error');
+            btn.classList.remove('running');
+            enableAllPipeBtns();
+        } else {
+            // Se lanzó exitosamente. Los logs llegarán por SSE.
+            // Para desbloquear los botones al terminar, podríamos necesitar que el backend mande una señal de '[ÉXITO]' o '[ERROR]'.
+            // Por ahora habilitamos un listener simple o simplemente dejamos que el user interrumpa.
+            document.getElementById('btn-kill-proc').style.display = 'flex';
+            
+            // Check process completion via SSE messages in SSE handler
+            // The existing SSE handler already removes the kill button on completion patterns like [ÉXITO], [OK], [ERROR]
+            // We can re-enable buttons there. For now, let's enable buttons when the kill button hides.
+            
+            // A simple observer to re-enable pipeline buttons when execution stops
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.target.style.display === 'none') {
+                        btn.classList.remove('running');
+                        enableAllPipeBtns();
+                        observer.disconnect();
+                    }
+                });
+            });
+            observer.observe(document.getElementById('btn-kill-proc'), { attributes: true, attributeFilter: ['style'] });
+        }
+    })
+    .catch(err => {
+        addLogEntry('[ERROR] Fallo de red: ' + err, 'log-error');
+        btn.classList.remove('running');
+        enableAllPipeBtns();
+    });
+}
+
+// ── Pipeline Tab Panel Toggle ─────────────────────────────────────
+const configContainer = document.getElementById('module-config-container');
+const modulePanels    = document.querySelectorAll('.module-panel');
+
+allPipeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        const op = btn.getAttribute('data-op');
+
+        // Toggle: si ya estaba activo, lo cerramos
+        const panel = document.getElementById(`panel-${op}`);
+        const isAlreadyActive = panel && panel.style.display === 'block';
+
+        // Reset all buttons visual state
+        allPipeBtns.forEach(b => {
+            b.style.outline = 'none';
+            b.style.boxShadow = '';
+        });
+        // Hide all panels
+        modulePanels.forEach(p => p.style.display = 'none');
+
+        if (isAlreadyActive) {
+            // Close it
+            configContainer.style.display = 'none';
+        } else {
+            // Activate clicked button
+            btn.style.outline = '2px solid var(--accent-blue)';
+            btn.style.boxShadow = '0 0 12px rgba(59,130,246,0.35)';
+
+            // Show container and specific panel
+            if (panel) {
+                configContainer.style.display = 'block';
+                panel.style.display = 'block';
+                // Smooth scroll to panel
+                setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
+            }
+        }
+    });
+});
+
+// Map "Ejecutar" buttons inside panels to runOperation with the parent pipeline btn id
+const executeMap = {
+    'btn-run-wiping':   'btn-wiping',
+    'btn-run-disk':     'btn-disk',
+    'btn-run-creator':  'btn-usb-ram',
+    'btn-run-ram':      'btn-ram',
+    'btn-run-mobile':   'btn-mobile',
+    'btn-run-cloud':    'btn-cloud',
+    'btn-run-timeline': 'btn-timeline',
+    'btn-run-ia':       'btn-ia',
+    'btn-run-report':   'btn-report'
+};
+
+Object.entries(executeMap).forEach(([runId, pipeId]) => {
+    const runBtn = document.getElementById(runId);
+    if (runBtn) {
+        runBtn.addEventListener('click', () => runOperation(pipeId));
+    }
+});
+
+// ── Device Scanner (lsblk) ────────────────────────────────────────
+// State to track selected devices per panel
+const selectedDevices = { wiping: null, disco: null, usb: null };
+const selectedFiles   = { ram: null, timeline: null };
+
+function deviceItemHTML(dev) {
+    const mount = dev.mountpoint ? `<span style="color:var(--accent-yellow);font-size:0.75rem;"> [montado en ${dev.mountpoint}]</span>` : '';
+    const model = dev.model ? `<span style="color:var(--text-muted); font-size:0.78rem;"> — ${dev.model}</span>` : '';
+    const rm    = dev.removable ? '<span style="color:var(--accent-cyan);font-size:0.75rem;margin-left:6px;">[extraíble]</span>' : '';
+    return `
+        <div style="font-family:var(--font-mono); font-weight:600; color:var(--text-main);">${dev.path} <span style="color:var(--accent-green)">${dev.size}</span>${model}${rm}${mount}</div>
+        <div style="font-size:0.72rem; color:var(--text-muted); margin-top:2px;">Tipo: ${dev.type || 'desconocido'}</div>
+    `;
+}
+
+function setupDeviceScanner(scanBtnId, displayId, listId, stateKey) {
+    const scanBtn  = document.getElementById(scanBtnId);
+    const display  = document.getElementById(displayId);
+    const listDiv  = document.getElementById(listId);
+    if (!scanBtn) return;
+
+    scanBtn.addEventListener('click', () => {
+        scanBtn.innerHTML = '<i class="bi bi-arrow-repeat me-2" style="animation:spin 1s linear infinite;"></i>Escaneando...';
+        scanBtn.disabled = true;
+
+        fetch('/api/list_devices')
+            .then(r => r.json())
+            .then(data => {
+                scanBtn.disabled = false;
+                scanBtn.innerHTML = '<i class="bi bi-hdd-fill me-2"></i>Escanear Discos';
+
+                if (data.status !== 'success') {
+                    display.textContent = '[ERROR] ' + data.message;
+                    return;
+                }
+
+                listDiv.innerHTML = '';
+                listDiv.style.display = 'block';
+
+                data.devices.forEach(dev => {
+                    const item = document.createElement('div');
+                    item.style.cssText = 'padding:12px 16px; cursor:pointer; border-bottom:1px solid var(--border-dim); transition: background 0.15s;';
+                    item.innerHTML     = deviceItemHTML(dev);
+
+                    item.addEventListener('mouseenter', () => item.style.background = 'rgba(59,130,246,0.1)');
+                    item.addEventListener('mouseleave', () => {
+                        item.style.background = selectedDevices[stateKey] === dev.path ? 'rgba(59,130,246,0.18)' : 'transparent';
+                    });
+
+                    item.addEventListener('click', () => {
+                        selectedDevices[stateKey] = dev.path;
+                        // Highlight selection
+                        Array.from(listDiv.children).forEach(c => c.style.background = 'transparent');
+                        item.style.background = 'rgba(59,130,246,0.18)';
+                        // Update display
+                        display.style.color = 'var(--text-main)';
+                        display.innerHTML = `<i class="bi bi-hdd-fill me-2" style="color:var(--accent-blue);"></i>${dev.path} &nbsp;<span style="color:var(--accent-green)">${dev.size}</span>`;
+                        // Hide list
+                        listDiv.style.display = 'none';
+                        addLogEntry(`[DISPOSITIVO] Seleccionado: ${dev.path} (${dev.size})`, 'log-info');
+                    });
+
+                    listDiv.appendChild(item);
+                });
+            })
+            .catch(err => {
+                scanBtn.disabled = false;
+                scanBtn.innerHTML = '<i class="bi bi-hdd-fill me-2"></i>Escanear Discos';
+                display.textContent = '[ERROR] No se pudo conectar con el servidor';
+            });
+    });
+}
+
+// Initialize device scanners
+setupDeviceScanner('btn-scan-wiping', 'wiping-device-display', 'wiping-device-list', 'wiping');
+setupDeviceScanner('btn-scan-disco',  'disco-device-display',  'disco-device-list',  'disco');
+setupDeviceScanner('btn-scan-usb',    'usb-device-display',    'usb-device-list',    'usb');
+
+// ── ISO 27037 Verification Logic ──────────────────────────────────
+const btnVerifyDisk = document.getElementById('btn-verify-disk');
+if (btnVerifyDisk) {
+    btnVerifyDisk.addEventListener('click', () => {
+        const targetDev = selectedDevices.disco;
+        if (!targetDev) {
+            alert('Seleccione un disco sospechoso primero.');
+            return;
+        }
+
+        btnVerifyDisk.innerHTML = '<i class="bi bi-arrow-repeat me-1" style="animation:spin 1s linear infinite;"></i>Verificando...';
+        btnVerifyDisk.disabled = true;
+
+        fetch('/api/verify_disk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target_disk: targetDev })
+        })
+        .then(r => r.json())
+        .then(data => {
+            btnVerifyDisk.innerHTML = '<i class="bi bi-check2-all me-1"></i>Re-Verificar';
+            btnVerifyDisk.disabled = false;
+
+            if (data.status !== 'success') {
+                alert('[ERROR] ' + data.message);
+                return;
+            }
+
+            const c = data.checks;
+            
+            // UI Update Helpers
+            const setCheck = (id, pass) => {
+                const el = document.getElementById(id);
+                if (!el) return;
+                el.className = pass ? 'bi bi-check-circle-fill me-2 text-success' : 'bi bi-x-circle-fill me-2 text-danger';
+                el.style.color = ''; // remove inline gray color
+            };
+
+            setCheck('chk-readonly', c.readonly);
+            setCheck('chk-dest', c.destino_ok);
+            setCheck('chk-chain', c.cadena_ok);
+
+            if (c.readonly && c.destino_ok && c.cadena_ok) {
+                document.getElementById('btn-run-disk').style.display = 'inline-block';
+                addLogEntry('[SISTEMA] Checklist ISO 27037 aprobada. Extracción habilitada.', 'log-success');
+            } else {
+                document.getElementById('btn-run-disk').style.display = 'none';
+                addLogEntry('[SISTEMA] Checklist fallida. Corriga los errores antes de extraer.', 'log-error');
+            }
+        })
+        .catch(err => {
+            btnVerifyDisk.innerHTML = '<i class="bi bi-check2-all me-1"></i>Verificar Pre-requisitos';
+            btnVerifyDisk.disabled = false;
+            alert('Error de red al verificar.');
+        });
+    });
+}
+
+// ── File Browser (for RAM & Timeline) ────────────────────────────
+// We reuse the existing explorer modal in "file-pick" mode
+let fileBrowserCallback = null;  // Will be called with the selected file path
+
+function openFileBrowser(startPath, callback) {
+    fileBrowserCallback = callback;
+    explorerCurrentPath = startPath || '/home/ciber-admin';
+    // Put explorer into "file pick" mode
+    document.getElementById('explorer-modal').setAttribute('data-mode', 'file-pick');
+    document.getElementById('explorer-modal').classList.add('open');
+    cargarExplorador(explorerCurrentPath);
+    setTimeout(() => {
+        const input = document.getElementById('explorer-path-input');
+        if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+    }, 100);
+}
+
+// Override the "Seleccionar Carpeta Actual" button to handle both modes
+const origConfirmExplorer = document.getElementById('btn-confirm-explorer');
+if (origConfirmExplorer) {
+    origConfirmExplorer.replaceWith(origConfirmExplorer.cloneNode(true)); // remove old listener
+    const confirmBtn = document.getElementById('btn-confirm-explorer');
+    confirmBtn.addEventListener('click', () => {
+        const mode = document.getElementById('explorer-modal').getAttribute('data-mode');
+        if (mode === 'file-pick') {
+            const container = document.getElementById('explorer-items');
+            const chosen = container._selectedFilePath || explorerCurrentPath;
+            if (fileBrowserCallback && chosen) {
+                fileBrowserCallback(chosen);
+            }
+            closeExplorerModal();
+            document.getElementById('explorer-modal').removeAttribute('data-mode');
+            fileBrowserCallback = null;
+            if (container) container._selectedFilePath = null;
+        } else {
+            // Original case import mode
+            if (!explorerCurrentPath || explorerCurrentPath === '/') {
+                alert("Por favor navega dentro de la carpeta del caso que deseas importar.");
+                return;
+            }
+            closeExplorerModal();
+            importarCasoDesdeRuta(explorerCurrentPath);
+        }
+    });
+}
+
+// Wire the "Explorar..." buttons
+const btnBrowseRam = document.getElementById('btn-browse-ram');
+if (btnBrowseRam) {
+    btnBrowseRam.addEventListener('click', () => {
+        openFileBrowser('/media', (path) => {
+            selectedFiles.ram = path;
+            const display = document.getElementById('ram-file-display');
+            display.style.color = 'var(--text-main)';
+            display.innerHTML = `<i class="bi bi-file-earmark-binary me-2" style="color:var(--accent-cyan);"></i>${path}`;
+            addLogEntry(`[RAM] Archivo seleccionado: ${path}`, 'log-info');
+        });
+    });
+}
+
+const btnBrowseTimeline = document.getElementById('btn-browse-timeline');
+if (btnBrowseTimeline) {
+    btnBrowseTimeline.addEventListener('click', () => {
+        openFileBrowser('/home/ciber-admin/ForenSys_Project/Casos_ForenSys', (path) => {
+            selectedFiles.timeline = path;
+            const display = document.getElementById('timeline-file-display');
+            display.style.color = 'var(--text-main)';
+            display.innerHTML = `<i class="bi bi-file-earmark-binary me-2" style="color:var(--accent-blue);"></i>${path}`;
+            addLogEntry(`[TIMELINE] Imagen forense seleccionada: ${path}`, 'log-info');
+        });
+    });
+}
+
+// ── Populate AI Table ─────────────────────────────────────────────
+function populateAITable() {
+    const tbody = document.getElementById('ai-tbody');
+    tbody.innerHTML = '';
+
+    aiFindings.forEach(f => {
+        const tr = document.createElement('tr');
+        tr.className = f.rowClass;
+
+        tr.innerHTML = `
+            <td class="detail-mono">${f.artifact}</td>
+            <td><span class="type-badge ${f.alertClass}">${f.alertType}</span></td>
+            <td><span class="risk-badge ${f.riskClass}"><i class="bi bi-exclamation-triangle-fill"></i>${f.risk}</span></td>
+            <td style="max-width:380px;font-size:.78rem;color:var(--text-muted);">${f.detail}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+populateAITable();
+
+// ── Evidence Explorer ─────────────────────────────────────────────
+const evidenceFiles = {
+    'reporte_maestro_ts': {
+        name: 'reporte_maestro_ts.jsonl',
+        size: '14.2 MB',
+        type: 'JSON Lines',
+        hash: fakeHash('reporte_maestro_ts'),
+        viewType: 'text',
+        text: '{"timestamp": "2026-04-10T02:31:44Z", "event_type": "MACB", "source": "NTFS MFT", "detail": "Modificación de archivo C:\\\\Windows\\\\System32\\\\cmd.exe"}\n{"timestamp": "2026-04-10T02:34:02Z", "event_type": "MACB", "source": "NTFS MFT", "detail": "Creación de archivo oculto /tmp/.hidden/run.sh"}',
+        hex: false
+    },
+    'logs_seguridad': {
+        name: 'logs_seguridad.jsonl',
+        size: '8.4 MB',
+        type: 'JSON Lines',
+        hash: fakeHash('logs_seguridad'),
+        viewType: 'text',
+        text: '{"event_id": 4624, "type": "Logon", "user": "svcadmin", "ip": "203.0.113.42", "timestamp": "2026-04-10T02:31:53Z"}\n{"event_id": 4672, "type": "Special Privileges", "user": "svcadmin", "timestamp": "2026-04-10T02:32:01Z"}',
+        hex: false
+    },
+    'artefactos_web': {
+        name: 'artefactos_web.jsonl',
+        size: '2.1 MB',
+        type: 'JSON Lines',
+        hash: fakeHash('artefactos_web'),
+        viewType: 'text',
+        text: '{"browser": "Chrome", "url": "https://pastebin.com/raw/xyz", "timestamp": "2026-04-09T22:15:00Z", "type": "History"}\n{"browser": "Edge", "file": "mimikatz.zip", "url": "http://malicious.com/mimikatz.zip", "type": "Download"}',
+        hex: false
+    },
+    'usuarios_sistema': {
+        name: 'usuarios_sistema.jsonl',
+        size: '45 KB',
+        type: 'JSON Lines',
+        hash: fakeHash('usuarios_sistema'),
+        viewType: 'text',
+        text: '{"username": "Administrator", "uid": 500, "status": "Active", "last_login": "2026-04-08T10:00:00Z"}\n{"username": "svcadmin", "uid": 1001, "status": "Active", "last_login": "2026-04-10T02:31:53Z"}',
+        hex: false
+    },
+    'hardware_usb': {
+        name: 'hardware_usb.jsonl',
+        size: '120 KB',
+        type: 'JSON Lines',
+        hash: fakeHash('hardware_usb'),
+        viewType: 'text',
+        text: '{"device_name": "SanDisk Cruzer Glide", "serial": "SDC123456789", "first_connected": "2026-04-09T18:00:00Z"}\n{"device_name": "Kingston DataTraveler", "serial": "KDT987654321", "first_connected": "2025-11-20T10:30:00Z"}',
+        hex: false
+    },
+    'auditoria_software': {
+        name: 'auditoria_software.jsonl',
+        size: '5.6 MB',
+        type: 'JSON Lines',
+        hash: fakeHash('auditoria_software'),
+        viewType: 'text',
+        text: '{"software": "Nmap 7.92", "install_date": "2026-04-09T19:00:00Z", "source": "Registry"}\n{"run_key": "PersistenceScript", "command": "C:\\\\Users\\\\Public\\\\Videos\\\\update.vbs", "source": "HKCU\\\\Software\\\\Microsoft\\\\Windows\\\\CurrentVersion\\\\Run"}',
+        hex: false
+    },
+    'archivos_recuperados': {
+        name: 'archivos_recuperados.jsonl',
+        size: '34.2 MB',
+        type: 'JSON Lines',
+        hash: fakeHash('archivos_recuperados'),
+        viewType: 'text',
+        text: '{"filename": "passwords_backup.txt", "path": "C:\\\\Users\\\\Admin\\\\Desktop", "status": "Recovered", "inode": 45192}\n{"filename": "config.bak", "path": "C:\\\\Apache24\\\\conf", "status": "Recovered", "inode": 12845}',
+        hex: false
+    },
+    'archivos_misteriosos': {
+        name: 'archivos_misteriosos.jsonl',
+        size: '1.8 MB',
+        type: 'JSON Lines',
+        hash: fakeHash('archivos_misteriosos'),
+        viewType: 'text',
+        text: '{"filename": "svchost.exe", "path": "C:\\\\Users\\\\Public\\\\Music\\\\svchost.exe", "entropy": 7.98, "warning": "High Entropy (Packed/Encrypted)"}\n{"filename": "data.bin", "path": "C:\\\\Windows\\\\Temp\\\\data.bin", "entropy": 7.85, "warning": "High Entropy"}',
+        hex: false
+    },
+    'dictamen_ia': {
+        name: 'Dictamen_Pericial_IA.md',
+        size: '12 KB',
+        type: 'Markdown / Texto',
+        hash: fakeHash('dictamen_ia'),
+        viewType: 'text',
+        text: '# DICTAMEN PERICIAL GENERADO POR IA\n\n## 1. RESUMEN EJECUTIVO\nSe detectó acceso no autorizado a través de SSH con escalada de privilegios y uso de herramientas maliciosas. El atacante estableció persistencia y exfiltró datos.\n\n## 2. LÍNEA DE TIEMPO CRÍTICA\n- **2026-04-09T22:15:00Z**: Descarga de herramientas maliciosas (mimikatz.zip).\n- **2026-04-10T02:31:53Z**: Acceso exitoso por fuerza bruta (Logon Event 4624).\n- **2026-04-10T02:34:02Z**: Creación de script oculto /tmp/.hidden/run.sh para persistencia.\n\n## 3. ARTEFACTOS CLAVE\n- `C:\\\\Users\\\\Public\\\\Music\\\\svchost.exe` (Entropía alta, posible malware empaquetado).\n- `C:\\\\Users\\\\Public\\\\Videos\\\\update.vbs` (Llave RUN de persistencia).',
+        hex: false
+    }
+};
+
+// Generate fake hex dump lines from a seed
+function generateHexDump(seed, lineCount = 24) {
+    let state = 0;
+    for (let i = 0; i < seed.length; i++) {
+        state = (state * 31 + seed.charCodeAt(i)) & 0xffffffff;
+    }
+    const lines = [];
+    for (let row = 0; row < lineCount; row++) {
+        const offset = '0x' + (row * 16).toString(16).padStart(8, '0');
+        let bytes = [];
+        let ascii = '';
+        for (let col = 0; col < 16; col++) {
+            state = (state * 1664525 + 1013904223) & 0xffffffff;
+            const b = Math.abs(state) % 256;
+            bytes.push(b.toString(16).padStart(2, '0').toUpperCase());
+            ascii += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
+        }
+        lines.push({ offset, bytes: bytes.join(' '), ascii });
+    }
+    return lines;
+}
+
+function toggleCategory(catId) {
+    document.getElementById(catId).classList.toggle('open');
+}
+
+let currentFileId = null;
+
+function selectFile(fileId) {
+    currentFileId = fileId;
+    const file = evidenceFiles[fileId];
+    if (!file) return;
+
+    // Highlight selected in tree
+    document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('selected'));
+    event.currentTarget.classList.add('selected');
+
+    // Show preview
+    document.getElementById('preview-empty').style.display  = 'none';
+    document.getElementById('preview-active').classList.add('visible');
+    document.getElementById('preview-filename').textContent = file.name;
+
+    // Meta
+    document.getElementById('meta-name').textContent = file.name;
+    document.getElementById('meta-size').textContent = file.size;
+    document.getElementById('meta-type').textContent = file.type;
+    document.getElementById('meta-hash').textContent = file.hash;
+
+    // Text pane
+    document.getElementById('pane-text').textContent = file.text;
+
+    // Hex pane
+    const hexPane = document.getElementById('pane-hex');
+    hexPane.innerHTML = '';
+    const lines = generateHexDump(fileId, 28);
+    lines.forEach(line => {
+        const div = document.createElement('div');
+        div.className = 'hex-line';
+        div.innerHTML =
+            `<span class="hex-offset">${line.offset}</span>` +
+            `<span class="hex-bytes">${line.bytes}</span>` +
+            `<span class="hex-ascii">${line.ascii}</span>`;
+        hexPane.appendChild(div);
+    });
+
+    // Switch to appropriate default tab
+    switchTab(file.hex ? 'hex' : 'text');
+}
+
+function switchTab(tab) {
+    document.getElementById('tab-text').classList.toggle('active', tab === 'text');
+    document.getElementById('tab-hex').classList.toggle('active',  tab === 'hex');
+    document.getElementById('pane-text').classList.toggle('active', tab === 'text');
+    document.getElementById('pane-hex').classList.toggle('active',  tab === 'hex');
+}
+
+populateAITable();
+
+// ── TELEMETRÍA EN TIEMPO REAL ─────────────────────────────────────
+// Tracks which disk is selected in the Overview section
+let ovSelectedDevice = null;   // e.g. { path: '/dev/sda1', mountpoint: '/' }
+
+// ── Overview Disk Scanner ─────────────────────────────────────────
+const btnOvScan   = document.getElementById('btn-ov-scan-disk');
+const ovDiskDisp  = document.getElementById('ov-disk-display');
+const ovDiskList  = document.getElementById('ov-disk-list');
+
+if (btnOvScan) {
+    btnOvScan.addEventListener('click', () => {
+        btnOvScan.innerHTML = '<i class="bi bi-arrow-repeat me-1" style="animation:spin 1s linear infinite;"></i>Escaneando...';
+        btnOvScan.disabled = true;
+
+        fetch('/api/list_devices')
+            .then(r => r.json())
+            .then(data => {
+                btnOvScan.disabled = false;
+                btnOvScan.innerHTML = '<i class="bi bi-hdd-fill me-1"></i>Escanear';
+
+                if (data.status !== 'success') return;
+
+                ovDiskList.innerHTML = '';
+                ovDiskList.style.display = 'block';
+
+                data.devices.forEach(dev => {
+                    const item = document.createElement('div');
+                    item.style.cssText = 'padding:8px 12px; cursor:pointer; border-bottom:1px solid var(--border-dim); font-family:var(--font-mono); font-size:0.78rem; transition:background 0.15s;';
+
+                    const mount = dev.mountpoint ? `<span style="color:var(--accent-cyan); margin-left:8px;">→ ${dev.mountpoint}</span>` : '';
+                    const model = dev.model ? `<span style="color:var(--text-muted); font-size:0.7rem;"> (${dev.model})</span>` : '';
+                    const rm    = dev.removable ? '<span style="color:var(--accent-blue); font-size:0.68rem; margin-left:6px;">[USB]</span>' : '';
+
+                    item.innerHTML = `
+                        <div style="color:var(--text-main); font-weight:600;">
+                            ${dev.path} <span style="color:var(--accent-green)">${dev.size}</span>${model}${rm}${mount}
+                        </div>
+                        <div style="color:var(--text-muted); font-size:0.68rem;">Tipo: ${dev.type}</div>
+                    `;
+
+                    item.addEventListener('mouseenter', () => item.style.background = 'rgba(6,182,212,0.1)');
+                    item.addEventListener('mouseleave', () => {
+                        item.style.background = (ovSelectedDevice && ovSelectedDevice.path === dev.path) ? 'rgba(6,182,212,0.18)' : 'transparent';
+                    });
+
+                    item.addEventListener('click', () => {
+                        ovSelectedDevice = dev;
+                        // Highlight
+                        Array.from(ovDiskList.children).forEach(c => c.style.background = 'transparent');
+                        item.style.background = 'rgba(6,182,212,0.18)';
+                        // Update display
+                        ovDiskDisp.innerHTML = `<i class="bi bi-hdd-fill me-1" style="color:var(--accent-cyan);"></i>${dev.path} &nbsp;<span style="color:var(--accent-green)">${dev.size}</span>`;
+                        ovDiskDisp.style.color = 'var(--text-main)';
+                        // Ocultar menú tras seleccionar
+                        ovDiskList.style.display = 'none';
+                        // Immediate telemetry refresh with new device
+                        actualizarTelemetria();
+                    });
+
+                    ovDiskList.appendChild(item);
+                });
+            })
+            .catch(() => {
+                btnOvScan.disabled = false;
+                btnOvScan.innerHTML = '<i class="bi bi-hdd-fill me-1"></i>Escanear';
+            });
+    });
+}
+
+// ── Telemetría fetch ──────────────────────────────────────────────
+function actualizarTelemetria() {
+    const body = { storage_path: '/' };
+    if (ovSelectedDevice) {
+        body.device_path  = ovSelectedDevice.path;
+        body.storage_path = ovSelectedDevice.mountpoint || '/';
+    }
+
+    fetch('/api/telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.status !== 'success') return;
+
+        // ── CPU ──
+        const cpuVal = document.getElementById('telemetry-cpu-val');
+        const cpuBar = document.getElementById('telemetry-cpu-bar');
+        if (cpuVal) cpuVal.textContent = data.cpu.percent;
+        if (cpuBar) cpuBar.style.width = data.cpu.percent + '%';
+
+        // ── RAM ──
+        const ramFree = document.getElementById('telemetry-ram-free');
+        const ramBar  = document.getElementById('telemetry-ram-bar');
+        const ramSub  = document.getElementById('telemetry-ram-sub');
+        if (ramFree) ramFree.textContent = data.ram.free_gb;
+        if (ramBar)  ramBar.style.width  = data.ram.percent + '%';
+        if (ramSub)  ramSub.textContent  = `${data.ram.total_gb} GB total — ${data.ram.free_gb} GB libres (${data.ram.percent}%)`;
+
+        // ── Almacenamiento ──
+        const diskFree = document.getElementById('telemetry-disk-free');
+        const diskBar  = document.getElementById('telemetry-disk-bar');
+        const diskSub  = document.getElementById('telemetry-disk-sub');
+        if (diskFree) diskFree.textContent = data.storage.free_gb;
+        if (diskBar)  diskBar.style.width  = data.storage.percent + '%';
+        if (diskSub)  diskSub.textContent  = `${data.storage.total_gb} GB total — ${data.storage.used_gb} GB usados (${data.storage.percent}%)`;
+
+        // ── Temperatura ──
+        const tempVal     = document.getElementById('telemetry-temp-val');
+        const tempBar     = document.getElementById('telemetry-temp-bar');
+        const tempSensors = document.getElementById('telemetry-temp-sensors');
+        const tempIconBox = document.getElementById('temp-icon-box');
+
+        if (data.temperature && data.temperature.length > 0) {
+            const primary = data.temperature[0];
+            const t = primary.celsius;
+
+            if (tempVal) tempVal.textContent = t.toFixed(1);
+
+            // Color and bar based on threshold
+            let color = '#10b981';  // green < 55
+            if (t >= 75) color = '#ef4444';       // red critical
+            else if (t >= 65) color = '#f59e0b';  // amber warning
+            else if (t >= 55) color = '#06b6d4';  // cyan warm
+
+            if (tempBar)     { tempBar.style.width = Math.min(t / 100 * 100, 100) + '%'; tempBar.style.background = color; }
+            if (tempVal)     tempVal.style.color = color;
+            if (tempIconBox) { tempIconBox.style.color = color; tempIconBox.style.background = color + '1a'; }
+
+            // Status label
+            const statusText = t >= 75 ? '⚠ CRÍTICO — Ventilación requerida'
+                : t >= 65 ? '⚠ Caliente — Monitorear'
+                : t >= 55 ? 'Temperatura elevada'
+                : 'Temperatura normal';
+
+            if (tempSensors) {
+                const allSensors = data.temperature.map(s => `${s.label}: ${s.celsius}°C`).join(' · ');
+                tempSensors.textContent = `${statusText} — ${allSensors}`;
+            }
+        } else {
+            if (tempVal)     tempVal.textContent = 'N/D';
+            if (tempSensors) tempSensors.textContent = 'Sensores no disponibles en este sistema';
+        }
+    })
+    .catch(err => console.error('Telemetría error:', err));
+}
+
+// Arrancar sondeo automático cada 3 segundos (temperatura incluida)
+setInterval(actualizarTelemetria, 3000);
+actualizarTelemetria();  // Primera lectura inmediata
+
+</script>
+
+</body>
+</html>
