@@ -328,6 +328,59 @@ def load_case_from_path():
         "notas": contexto.get('notas', '')
     })
 
+
+# --- Rutas de Resultados OSINT ---
+
+@app.route('/api/osint/results/<caso_id>', methods=['GET'])
+def osint_results(caso_id):
+    """Retorna el resumen_osint.json del caso especificado."""
+    caso_id = sanitize_case_id(caso_id)
+    if not caso_id:
+        return jsonify({"status": "error", "message": "caso_id inválido"}), 400
+
+    ruta_resumen = os.path.join(
+        CASES_BASE_DIR, caso_id,
+        '03_Results_(Resultados_Extraidos)', 'OSINT', 'resumen_osint.json'
+    )
+    if not os.path.exists(ruta_resumen):
+        return jsonify({"status": "error", "message": "No hay resultados OSINT para este caso."}), 404
+
+    try:
+        with open(ruta_resumen, 'r', encoding='utf-8') as f:
+            datos = json.load(f)
+        return jsonify({"status": "success", "data": datos})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/osint/report/<caso_id>', methods=['GET'])
+def osint_html_report(caso_id):
+    """Sirve el reporte HTML de Maigret directamente en el navegador."""
+    from flask import send_file
+    caso_id = sanitize_case_id(caso_id)
+    if not caso_id:
+        return "caso_id inválido", 400
+
+    osint_dir = os.path.join(
+        CASES_BASE_DIR, caso_id,
+        '01_Images_(Fuentes_de_datos)', 'OSINT'
+    )
+    if not os.path.exists(osint_dir):
+        return "<h2>No hay reporte OSINT para este caso.</h2>", 404
+
+    # Busca el primer .html en la carpeta OSINT
+    html_file = None
+    for fname in os.listdir(osint_dir):
+        if fname.endswith('.html'):
+            html_file = os.path.join(osint_dir, fname)
+            break
+
+    if not html_file:
+        return "<h2>Reporte HTML no generado aún. Ejecuta primero el módulo OSINT.</h2>", 404
+
+    return send_file(html_file, mimetype='text/html')
+
+
 @app.route('/')
 def home():
     """Sirve el panel principal (index.html)"""

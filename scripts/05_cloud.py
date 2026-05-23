@@ -141,14 +141,26 @@ def ejecutar_maigret(alias, carpeta_tmp, top_sites=None):
             text=True,
             bufsize=1
         )
+        lineas_procesadas = 0
         lineas_encontradas = 0
+        # Maigret imprime ~1-3 líneas por sitio revisado
+        expected_lines = (top_sites or 3000) * 2
+
         for linea in proc.stdout:
             linea = linea.rstrip()
             if linea:
                 log(f"    {linea}")
+                lineas_procesadas += 1
                 # Maigret marca los encontrados con [+]
                 if '[+]' in linea or 'Found' in linea:
                     lineas_encontradas += 1
+
+                # Emitir progreso intermedio: rango 22% → 80%
+                if lineas_procesadas % 15 == 0:
+                    pct = min(22 + int((lineas_procesadas / expected_lines) * 58), 80)
+                    sitios_rev = lineas_procesadas // 2
+                    progress(pct, f"Analizando sitios... (~{sitios_rev} revisados, {lineas_encontradas} hallados)")
+
         proc.wait()
         rc = proc.returncode
     except FileNotFoundError:
@@ -157,6 +169,7 @@ def ejecutar_maigret(alias, carpeta_tmp, top_sites=None):
     except Exception as e:
         log(f"[X] Error ejecutando Maigret: {e}")
         return None, None, -1
+
 
     # Buscar archivos de salida generados por Maigret
     ruta_json = None

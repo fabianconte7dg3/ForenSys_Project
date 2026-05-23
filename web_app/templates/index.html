@@ -1787,9 +1787,16 @@
                                 <i class="bi bi-clock me-1"></i> Tiempo estimado: <span id="osint-time-text">5-10 minutos</span>. La consola mostrará los sitios encontrados en tiempo real.
                             </div>
 
-                            <div>
+                            <!-- Botones acción -->
+                            <div style="display:flex; gap:8px; flex-wrap:wrap;">
                                 <button class="btn-primary" id="btn-run-cloud" style="background: #475569; border-color: #475569;">
                                     <i class="bi bi-search me-2"></i>Iniciar Rastreo OSINT
+                                </button>
+                                <button class="btn-secondary" id="btn-osint-results" style="display:none; border:1px solid #94a3b8; color:#94a3b8; background:rgba(148,163,184,0.1); padding:8px 16px; border-radius:6px; cursor:pointer; font-size:0.85rem;" onclick="verResultadosOSINT()">
+                                    <i class="bi bi-table me-2"></i>Ver Resultados
+                                </button>
+                                <button class="btn-secondary" id="btn-osint-html" style="display:none; border:1px solid var(--border-dim); color:var(--text-muted); background:transparent; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:0.85rem;" onclick="verReporteOSINT()">
+                                    <i class="bi bi-file-earmark-html me-2"></i>Reporte Maigret
                                 </button>
                             </div>
 
@@ -1804,6 +1811,55 @@
                                 </div>
                             </div>
                         </div>
+
+                        <!-- ═══ MODAL: Resultados OSINT ═══════════════════════════ -->
+                        <div id="modal-osint" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7); z-index:9999; overflow:auto; backdrop-filter:blur(4px);">
+                            <div style="max-width:860px; margin:40px auto; background:var(--bg-panel); border:1px solid var(--border-dim); border-radius:12px; padding:28px; box-shadow: 0 20px 60px rgba(0,0,0,0.5);">
+
+                                <!-- Header -->
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:20px;">
+                                    <div>
+                                        <h4 style="color:var(--text-main); margin:0; font-weight:700;"><i class="bi bi-person-bounding-box me-2" style="color:#94a3b8;"></i>Resultados OSINT</h4>
+                                        <p id="osint-modal-subtitle" style="color:var(--text-muted); font-size:0.82rem; margin:4px 0 0 0;">Cargando...</p>
+                                    </div>
+                                    <button onclick="document.getElementById('modal-osint').style.display='none'" style="background:none; border:1px solid var(--border-dim); color:var(--text-muted); padding:6px 12px; border-radius:6px; cursor:pointer; font-size:0.85rem;"><i class="bi bi-x-lg"></i></button>
+                                </div>
+
+                                <!-- Stats rápidas -->
+                                <div id="osint-modal-stats" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px;"></div>
+
+                                <!-- Tabla de perfiles -->
+                                <div style="margin-bottom:20px;">
+                                    <div style="font-size:0.78rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Perfiles Encontrados</div>
+                                    <div style="max-height:320px; overflow-y:auto; border:1px solid var(--border-dim); border-radius:6px;">
+                                        <table style="width:100%; border-collapse:collapse; font-size:0.83rem;" id="osint-profiles-table">
+                                            <thead>
+                                                <tr style="background:var(--bg-surface); border-bottom:1px solid var(--border-dim);">
+                                                    <th style="padding:8px 12px; text-align:left; color:var(--text-muted); font-weight:500;">#</th>
+                                                    <th style="padding:8px 12px; text-align:left; color:var(--text-muted); font-weight:500;">Plataforma</th>
+                                                    <th style="padding:8px 12px; text-align:left; color:var(--text-muted); font-weight:500;">Categoría</th>
+                                                    <th style="padding:8px 12px; text-align:left; color:var(--text-muted); font-weight:500;">URL</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="osint-profiles-tbody"></tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                <!-- Integridad forense -->
+                                <div style="background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:14px; margin-bottom:16px;">
+                                    <div style="font-size:0.78rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px;"><i class="bi bi-shield-lock me-1"></i>Integridad Forense (ISO/IEC 27037)</div>
+                                    <div style="font-family:var(--font-mono); font-size:0.75rem; color:var(--text-muted);">
+                                        <div style="margin-bottom:4px;"><span style="color:#94a3b8;">PRE: </span><span id="osint-hash-pre"></span></div>
+                                        <div><span style="color:#94a3b8;">POST:</span><span id="osint-hash-post"></span></div>
+                                    </div>
+                                </div>
+
+                                <!-- Disclaimer -->
+                                <div id="osint-modal-disclaimer" style="font-size:0.75rem; color:var(--text-muted); border-left:3px solid var(--border-dim); padding-left:10px;"></div>
+                            </div>
+                        </div>
+
 
 
                         <!-- 7. NORMALIZACION -->
@@ -2427,6 +2483,10 @@ function initSSE() {
                         if (pct >= 100) {
                             if (pBar) pBar.style.background = 'var(--accent-green)';
                             if (pDetail) pDetail.textContent = 'Finalizando...';
+                            // Si es el módulo OSINT, disparar evento para mostrar botones de resultados
+                            if (prefix === 'cloud') {
+                                setTimeout(() => document.dispatchEvent(new Event('osint-complete')), 800);
+                            }
                         }
                     }
                 });
@@ -2503,6 +2563,88 @@ document.querySelectorAll('.osint-mode-btn').forEach(btn => {
         }
     });
 });
+
+// ── OSINT Results Modal ────────────────────────────────────────
+function verResultadosOSINT() {
+    const caso = activeCaseNumber;
+    if (!caso) {
+        addLogEntry('[ERROR] No hay un caso activo.', 'log-error');
+        return;
+    }
+    fetch(`/api/osint/results/${caso}`)
+        .then(r => r.json())
+        .then(resp => {
+            if (resp.status !== 'success') {
+                addLogEntry('[ERROR] ' + resp.message, 'log-error');
+                return;
+            }
+            const d = resp.data;
+            document.getElementById('modal-osint').style.display = 'block';
+
+            // Subtítulo
+            document.getElementById('osint-modal-subtitle').textContent =
+                `Caso: ${d.caso_id}  •  Alias: @${d.alias_buscado}  •  Perito: ${d.perito}  •  ${d.timestamp?.split('T')[0] || ''}`;
+
+            // Stats
+            const statsEl = document.getElementById('osint-modal-stats');
+            statsEl.innerHTML = `
+                <div style="flex:1; min-width:100px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px; text-align:center;">
+                    <div style="font-size:1.3rem; font-weight:700; color:#94a3b8;">${d.total_perfiles_encontrados}</div>
+                    <div style="font-size:0.72rem; color:var(--text-muted);">Perfiles hallados</div>
+                </div>
+                <div style="flex:1; min-width:100px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px; text-align:center;">
+                    <div style="font-size:1.3rem; font-weight:700; color:#94a3b8;">${d.total_sitios_analizados}</div>
+                    <div style="font-size:0.72rem; color:var(--text-muted);">Sitios analizados</div>
+                </div>
+                <div style="flex:1; min-width:100px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px; text-align:center;">
+                    <div style="font-size:1.3rem; font-weight:700; color:#4ade80;">✓</div>
+                    <div style="font-size:0.72rem; color:var(--text-muted);">Cadena de custodia</div>
+                </div>
+            `;
+
+            // Tabla de perfiles
+            const tbody = document.getElementById('osint-profiles-tbody');
+            tbody.innerHTML = '';
+            if (d.perfiles && d.perfiles.length > 0) {
+                d.perfiles.forEach((p, i) => {
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid var(--border-dim)';
+                    tr.innerHTML = `
+                        <td style="padding:8px 12px; color:var(--text-muted); font-size:0.8rem;">${i + 1}</td>
+                        <td style="padding:8px 12px; color:var(--text-main); font-weight:500;">${p.sitio}</td>
+                        <td style="padding:8px 12px;"><span style="font-size:0.72rem; padding:2px 8px; border-radius:20px; background:rgba(148,163,184,0.12); color:#94a3b8;">${p.categoria || '—'}</span></td>
+                        <td style="padding:8px 12px;"><a href="${p.url}" target="_blank" style="color:var(--accent-cyan); text-decoration:none; font-size:0.8rem; font-family:var(--font-mono);">${p.url}</a></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            } else {
+                tbody.innerHTML = '<tr><td colspan="4" style="padding:20px; text-align:center; color:var(--text-muted);">No se encontraron perfiles públicos con este alias.</td></tr>';
+            }
+
+            // Hashes
+            document.getElementById('osint-hash-pre').textContent  = ' ' + (d.integridad?.hash_pre_busqueda || '—');
+            document.getElementById('osint-hash-post').textContent = ' ' + (d.integridad?.hash_post_busqueda || '—');
+
+            // Disclaimer
+            document.getElementById('osint-modal-disclaimer').textContent = d.disclaimer || '';
+        })
+        .catch(err => addLogEntry('[ERROR] No se pudo cargar resultados OSINT: ' + err, 'log-error'));
+}
+
+function verReporteOSINT() {
+    if (!activeCaseNumber) return;
+    window.open(`/api/osint/report/${activeCaseNumber}`, '_blank');
+}
+
+// Mostrar botones "Ver Resultados" cuando OSINT llega al 100%
+const _origSSE = window.__osintWatcherInstalled;
+if (!_origSSE) {
+    window.__osintWatcherInstalled = true;
+    document.addEventListener('osint-complete', () => {
+        document.getElementById('btn-osint-results').style.display = 'inline-flex';
+        document.getElementById('btn-osint-html').style.display    = 'inline-flex';
+    });
+}
 
 // ── Manual Command Mode ───────────────────────────────────────────
 let cmdMode = false;
