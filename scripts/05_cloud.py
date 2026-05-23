@@ -1,161 +1,418 @@
+#!/usr/bin/env python3
+"""
+05_cloud.py — OSINT: Rastreo de Alias en Internet (Maigret)
+Busca un username en +3000 sitios web y construye un perfil digital.
+Cumplimiento: ISO/IEC 27037:2012
+
+Uso:
+    python3 05_cloud.py --alias john_doe --caso CASO-001 --perito "Juan Perez"
+    python3 05_cloud.py --alias john_doe --caso CASO-001 --perito "Juan Perez" --top 500
+"""
 import os
 import sys
-import time
-import re
-import subprocess
+import json
 import shutil
-from bs4 import BeautifulSoup
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
+import hashlib
+import argparse
+import subprocess
+from datetime import datetime
 
-def imprimir_banner():
-    print("==================================================")
-    print("   FOREN-SYS: ADQUISICIÓN OSINT (WEB / NUBE)      ")
-    print("==================================================")
+# ── Rutas base ─────────────────────────────────────────────────────
+CASES_BASE_DIR = '/home/ciber-admin/ForenSys_Project/Casos_ForenSys'
+MAIGRET_BIN    = shutil.which('maigret') or '/home/ciber-admin/.local/bin/maigret'
 
-def auto_desbloquear_destino(destino_base):
-    """Detecta el disco de la bóveda (SDA) y lo desbloquea temporalmente"""
-    print("[*] Aplicando Llave Maestra: Asegurando permisos de escritura en la bóveda SDA...")
+DISCLAIMER = (
+    "AVISO LEGAL: Los datos recopilados provienen exclusivamente de fuentes de "
+    "acceso publico en Internet. Esta busqueda se realiza en el marco de una "
+    "investigacion forense autorizada. El operador es responsable del cumplimiento "
+    "de la normativa vigente de proteccion de datos (RGPD / LOPDGDD)."
+)
+
+
+# ══════════════════════════════════════════════════════════════════
+# Utilidades generales
+# ══════════════════════════════════════════════════════════════════
+
+def log(msg):
+    print(msg, flush=True)
+
+
+def progress(pct, detail):
+    print(f"[PROGRESO:{pct}] {detail}", flush=True)
+
+
+def sha256_dir(dirpath):
+    """Hash SHA-256 compuesto de todo un directorio."""
+    h = hashlib.sha256()
+    for root, dirs, files in sorted(os.walk(dirpath)):
+        dirs.sort()
+        for fname in sorted(files):
+            fpath = os.path.join(root, fname)
+            rel = os.path.relpath(fpath, dirpath)
+            h.update(rel.encode('utf-8'))
+            try:
+                with open(fpath, 'rb') as f:
+                    for chunk in iter(lambda: f.read(65536), b''):
+                        h.update(chunk)
+            except (OSError, PermissionError):
+                h.update(b'UNREADABLE')
+    return h.hexdigest()
+
+
+def custodia(ruta_log, msg):
+    ts = datetime.now().isoformat()
+    with open(ruta_log, 'a', encoding='utf-8') as f:
+        f.write(f"[{ts}] [OSINT] {msg}\n")
+
+
+def guardar_json(ruta, datos):
+    with open(ruta, 'w', encoding='utf-8') as f:
+        json.dump(datos, f, ensure_ascii=False, indent=2)
+
+
+def preparar_carpetas(caso_id):
+    base = os.path.join(CASES_BASE_DIR, caso_id)
+    carpetas = {
+        'images':   os.path.join(base, '01_Images_(Fuentes_de_datos)', 'OSINT'),
+        'views':    os.path.join(base, '02_Views_(Vistas)', 'OSINT'),
+        'results':  os.path.join(base, '03_Results_(Resultados_Extraidos)', 'OSINT'),
+        'custodia': os.path.join(base, 'cadena_custodia.log'),
+    }
+    for k, v in carpetas.items():
+        if k != 'custodia':
+            os.makedirs(v, exist_ok=True)
+    return carpetas
+
+
+def sanitizar_alias(alias):
+    """Elimina caracteres peligrosos del alias para evitar inyeccion de comandos."""
+    return ''.join(c for c in alias if c.isalnum() or c in ('-', '_', '.'))
+
+
+# ══════════════════════════════════════════════════════════════════
+# LÓGICA MAIGRET
+# ══════════════════════════════════════════════════════════════════
+
+def verificar_maigret():
+    """Verifica que maigret esté instalado y accesible."""
+    if not MAIGRET_BIN or not os.path.exists(MAIGRET_BIN):
+        log("[X] Maigret no encontrado en el sistema.")
+        log("    Instalar con: pip3 install maigret --break-system-packages")
+        return False
     try:
-        comando_dev = ['findmnt', '-n', '-o', 'SOURCE', destino_base]
-        resultado = subprocess.run(comando_dev, capture_output=True, text=True)
-        particion_destino = resultado.stdout.strip()
-
-        if particion_destino:
-            disco_base = particion_destino.rstrip('0123456789')
-            subprocess.run(['sudo', 'blockdev', '--setrw', disco_base], check=False, stderr=subprocess.DEVNULL)
-            subprocess.run(['sudo', 'blockdev', '--setrw', particion_destino], check=False, stderr=subprocess.DEVNULL)
-            subprocess.run(['sudo', 'mount', '-o', 'remount,rw', destino_base], check=False, stderr=subprocess.DEVNULL)
+        r = subprocess.run([MAIGRET_BIN, '--version'],
+                           capture_output=True, text=True, timeout=10)
+        version = r.stdout.strip().split('\n')[0] if r.returncode == 0 else 'desconocida'
+        log(f"[+] Maigret disponible: {version}")
+        return True
     except Exception as e:
-        print(f"[!] Aviso: No se pudo auto-desbloquear el destino. Error: {e}")
+        log(f"[X] Error verificando Maigret: {e}")
+        return False
 
-def capturar_perfil(url_red_social, carpeta_caso):
-    print(f"\n[*] 1/2: Desplegando rastreador fantasma (ARM64 Optimized)...")
-    print(f"[*] Objetivo: {url_red_social}")
 
-    # Definición de rutas según tu instalación actual
-    ruta_chromedriver = "/usr/bin/chromedriver"
-    ruta_chromium = "/usr/bin/chromium"
+def ejecutar_maigret(alias, carpeta_tmp, top_sites=None):
+    """
+    Ejecuta maigret en modo JSON + HTML.
+    - Salida JSON:  <carpeta_tmp>/<alias>.json
+    - Salida HTML:  <carpeta_tmp>/<alias>.html
+    Retorna (ruta_json, ruta_html, returncode).
+    """
+    cmd = [
+        MAIGRET_BIN,
+        alias,
+        '--folderoutput', carpeta_tmp,
+        '-J', 'simple',       # JSON simple — el mas compatible con nuestro parser
+        '-H',                  # HTML report
+        '--no-color',
+        '--no-autoupdate',
+    ]
 
-    # Verificación de existencia de binarios
-    if not os.path.exists(ruta_chromedriver):
-        ruta_chromedriver = shutil.which('chromedriver')
-        if not ruta_chromedriver:
-            print("\n[X] ERROR FATAL: No se encuentra 'chromedriver' en /usr/bin/")
-            sys.exit(1)
+    if top_sites:
+        cmd += ['--top-sites', str(top_sites)]
 
-    # Limpieza rigurosa de perfil temporal para evitar conflictos de Root
-    user_data_dir = "/tmp/forensys_browser_profile"
-    if os.path.exists(user_data_dir):
-        shutil.rmtree(user_data_dir, ignore_errors=True)
-    os.makedirs(user_data_dir, exist_ok=True)
+    log(f"[*] Comando: {' '.join(cmd)}")
 
-    # CONFIGURACIÓN DEL NAVEGADOR
-    opciones = Options()
-    opciones.binary_location = ruta_chromium
+    # Ejecutamos mostrando salida en tiempo real (stream)
+    try:
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1
+        )
+        lineas_encontradas = 0
+        for linea in proc.stdout:
+            linea = linea.rstrip()
+            if linea:
+                log(f"    {linea}")
+                # Maigret marca los encontrados con [+]
+                if '[+]' in linea or 'Found' in linea:
+                    lineas_encontradas += 1
+        proc.wait()
+        rc = proc.returncode
+    except FileNotFoundError:
+        log(f"[X] Maigret no encontrado en: {MAIGRET_BIN}")
+        return None, None, -1
+    except Exception as e:
+        log(f"[X] Error ejecutando Maigret: {e}")
+        return None, None, -1
 
-    # Argumentos críticos para Raspberry Pi y ejecución como Root
-    opciones.add_argument('--headless=new')
-    opciones.add_argument('--no-sandbox')
-    opciones.add_argument('--disable-dev-shm-usage')
-    opciones.add_argument('--disable-gpu')
-    opciones.add_argument(f'--user-data-dir={user_data_dir}')
-    opciones.add_argument('--remote-debugging-port=9222')
-    
-    # User-Agent de Linux Real para evadir detección de bots en Instagram
-    opciones.add_argument("user-agent=Mozilla/5.0 (X11; Linux aarch64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+    # Buscar archivos de salida generados por Maigret
+    ruta_json = None
+    ruta_html = None
+    for fname in os.listdir(carpeta_tmp):
+        fpath = os.path.join(carpeta_tmp, fname)
+        if fname.endswith('.json') and alias.lower() in fname.lower():
+            ruta_json = fpath
+        if fname.endswith('.html') and alias.lower() in fname.lower():
+            ruta_html = fpath
 
-    archivo_html = os.path.join(carpeta_caso, "evidencia_nube.html")
+    return ruta_json, ruta_html, rc
+
+
+def parsear_resultados(ruta_json, alias):
+    """
+    Parsea el JSON de Maigret y extrae los perfiles encontrados.
+    Retorna una lista de dicts normalizados.
+    """
+    if not ruta_json or not os.path.exists(ruta_json):
+        log("[!] No se genero archivo JSON de Maigret. Puede que el alias no haya sido encontrado.")
+        return []
 
     try:
-        # Forzamos el uso del ejecutable específico
-        servicio = Service(executable_path=ruta_chromedriver)
-        driver = webdriver.Chrome(service=servicio, options=opciones)
-
-        print("[*] Conexión establecida. Extrayendo datos dinámicos...")
-        driver.get(url_red_social)
-
-        # Espera de 10 segundos: Instagram tarda en cargar los perfiles vía React
-        time.sleep(10)
-
-        codigo_fuente = driver.page_source
-
-        with open(archivo_html, 'w', encoding='utf-8') as f:
-            f.write(codigo_fuente)
-
-        print(f"[+] [ÉXITO] Código fuente preservado en la bóveda.")
-        driver.quit()
-        return archivo_html
-
+        with open(ruta_json, 'r', encoding='utf-8') as f:
+            datos = json.load(f)
     except Exception as e:
-        print(f"\n[X] Error crítico en Selenium: {e}")
+        log(f"[!] Error leyendo JSON de Maigret: {e}")
+        return []
+
+    perfiles = []
+    # Estructura del JSON de maigret -J simple:
+    # { "sitio": { "status": {"status": "Claimed"}, "url_user": "...", "site": {...} } }
+    for sitio, info in datos.items():
+        try:
+            status = info.get('status', {})
+            estado = status.get('status', 'Unknown')
+            if estado == 'Claimed':
+                url = info.get('url_user', '')
+                categoria = info.get('site', {}).get('tags', ['Sin categoria'])
+                if isinstance(categoria, list):
+                    categoria = ', '.join(categoria)
+                perfiles.append({
+                    'sitio':     sitio,
+                    'url':       url,
+                    'categoria': categoria,
+                    'estado':    estado,
+                })
+        except Exception:
+            continue
+
+    log(f"[+] Perfiles encontrados: {len(perfiles)}")
+    return perfiles
+
+
+def generar_vista_txt(perfiles, alias, perito, carpeta_views, total_sitios):
+    """Genera un resumen legible para el perito."""
+    ruta = os.path.join(carpeta_views, 'perfil_digital.txt')
+    with open(ruta, 'w', encoding='utf-8') as f:
+        f.write("=" * 60 + "\n")
+        f.write("    FOREN-SYS — PERFIL DIGITAL OSINT\n")
+        f.write("    ISO/IEC 27037:2012\n")
+        f.write("=" * 60 + "\n\n")
+        f.write(f"  Alias buscado:          {alias}\n")
+        f.write(f"  Perito:                 {perito}\n")
+        f.write(f"  Fecha:                  {datetime.now().isoformat()}\n")
+        f.write(f"  Sitios analizados:      {total_sitios}\n")
+        f.write(f"  Perfiles encontrados:   {len(perfiles)}\n\n")
+        f.write("-" * 60 + "\n")
+        f.write("  SITIOS DONDE SE ENCONTRÓ EL ALIAS:\n")
+        f.write("-" * 60 + "\n\n")
+        if perfiles:
+            for p in perfiles:
+                f.write(f"  [{p['categoria']}] {p['sitio']}\n")
+                f.write(f"    URL: {p['url']}\n\n")
+        else:
+            f.write("  No se encontraron perfiles publicos con este alias.\n\n")
+        f.write("=" * 60 + "\n")
+        f.write(f"\n{DISCLAIMER}\n")
+    return ruta
+
+
+# ══════════════════════════════════════════════════════════════════
+# FLUJO PRINCIPAL
+# ══════════════════════════════════════════════════════════════════
+
+def buscar_osint(alias, caso_id, perito, top_sites):
+    log("=" * 50)
+    log("   FOREN-SYS: OSINT — RASTREO DE ALIAS           ")
+    log("   Maigret (+3000 sitios)  —  ISO/IEC 27037       ")
+    log("=" * 50)
+    log(f"\n[*] Alias objetivo: {alias}")
+    log(f"[*] Caso:           {caso_id}")
+    log(f"[*] Perito:         {perito}")
+    if top_sites:
+        log(f"[*] Modo rapido:    Top {top_sites} sitios (Alexa)")
+    else:
+        log("[*] Modo completo:  +3000 sitios")
+    log(f"\n[!] {DISCLAIMER}\n")
+
+    carpetas = preparar_carpetas(caso_id)
+    ruta_custodia = carpetas['custodia']
+
+    custodia(ruta_custodia, f"INICIO busqueda OSINT por '{perito}' — Alias: '{alias}'")
+    custodia(ruta_custodia, DISCLAIMER)
+
+    # FASE 1 — Verificar Maigret
+    progress(5, "Verificando disponibilidad de Maigret...")
+    if not verificar_maigret():
+        custodia(ruta_custodia, "FALLO: Maigret no disponible.")
         sys.exit(1)
 
-def extraer_ids(html_path, carpeta_caso):
-    print("\n[*] 2/2: Iniciando autopsia del código fuente (BS4 + Regex)...")
-    archivo_reporte = os.path.join(carpeta_caso, "reporte_osint.txt")
+    # FASE 2 — Hash pre-búsqueda + cadena de custodia
+    progress(10, "Registrando estado inicial en cadena de custodia...")
+    dir_listado = os.listdir(carpetas['results'])
+    hash_pre = sha256_dir(carpetas['results']) if dir_listado else 'DIRECTORIO_VACIO_PRE'
+    custodia(ruta_custodia, f"Hash SHA-256 pre-busqueda (OSINT/): {hash_pre}")
+    custodia(ruta_custodia, f"Maigret iniciado — alias: '{alias}' — top_sites: {top_sites or 'ALL'}")
 
-    try:
-        with open(html_path, 'r', encoding='utf-8') as f:
-            html_content = f.read()
+    # FASE 3 — Ejecutar Maigret (la fase más larga)
+    progress(20, f"Ejecutando Maigret — rastreando '{alias}' en sitios web...")
+    log(f"\n[*] Iniciando rastreo. Esto puede tardar entre 2 y 10 minutos...")
+    log("[*] Los perfiles encontrados se mostrarán en tiempo real:\n")
 
-        soup = BeautifulSoup(html_content, 'html.parser')
-        titulo = soup.title.string if soup.title else "Sin Título detectable"
+    # Carpeta temporal de trabajo de Maigret
+    carpeta_tmp = os.path.join(carpetas['results'], '_maigret_tmp')
+    os.makedirs(carpeta_tmp, exist_ok=True)
 
-        # Regex mejorado para capturar IDs de Instagram (logging_page_id, profile_id, etc)
-        patron_ids = r'(?i)("profile_id"|"userid"|"id_str"|"actorid"|"target_id"|"entity_id")\s*[:=]\s*["\']?(\d+)["\']?'
-        ids_encontrados = re.findall(patron_ids, html_content)
-        ids_unicos = list(set(ids_encontrados))
+    ruta_json, ruta_html, rc = ejecutar_maigret(alias, carpeta_tmp, top_sites)
 
-        with open(archivo_reporte, 'w', encoding='utf-8') as f:
-            f.write("==================================================\n")
-            f.write("        REPORTE OSINT - FOREN-SYS CLOUD           \n")
-            f.write("==================================================\n\n")
-            f.write(f"[*] Meta-Título: {titulo}\n")
-            f.write(f"[*] Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+    if rc != 0 and rc != -1:
+        log(f"[!] Maigret terminó con código {rc} — pueden existir resultados parciales.")
+        custodia(ruta_custodia, f"Maigret terminó con codigo {rc} (parcial).")
+    elif rc == 0:
+        log("\n[+] Maigret completó la búsqueda exitosamente.")
+        custodia(ruta_custodia, "Maigret: busqueda completada.")
 
-            if ids_unicos:
-                f.write("[!] IDENTIFICADORES NUMÉRICOS ENCONTRADOS:\n")
-                for etiqueta, valor in ids_unicos:
-                    f.write(f"    -> {etiqueta.strip('\"')} = {valor}\n")
-            else:
-                f.write("[-] No se detectaron identificadores numéricos en el HTML superficial.\n")
+    # Mover archivos a carpetas del caso
+    if ruta_json and os.path.exists(ruta_json):
+        destino_json = os.path.join(carpetas['results'], f"maigret_{alias}.json")
+        shutil.move(ruta_json, destino_json)
+        ruta_json = destino_json
 
-        print(f"[+] [ÉXITO] Análisis completado. Reporte: {archivo_reporte}")
+    if ruta_html and os.path.exists(ruta_html):
+        destino_html = os.path.join(carpetas['images'], f"maigret_{alias}.html")
+        shutil.move(ruta_html, destino_html)
 
-    except Exception as e:
-        print(f"\n[X] Error en el análisis forense: {e}")
+    # Limpiar tmp
+    shutil.rmtree(carpeta_tmp, ignore_errors=True)
+
+    # FASE 4 — Parsear y generar resumen
+    progress(85, "Parseando resultados y generando resumen forense...")
+    log("\n[*] Procesando resultados de Maigret...")
+
+    perfiles = parsear_resultados(ruta_json, alias)
+    total_encontrados = len(perfiles)
+
+    # Estimar total de sitios analizados
+    total_sitios_analizados = top_sites if top_sites else 3000
+
+    # Resumen JSON para Módulo 8 (IA)
+    resumen = {
+        'caso_id':                 caso_id,
+        'perito':                  perito,
+        'timestamp':               datetime.now().isoformat(),
+        'alias_buscado':           alias,
+        'tipo_analisis':           'OSINT_USERNAME',
+        'normas':                  ['ISO/IEC 27037:2012'],
+        'herramienta':             f'Maigret {subprocess.run([MAIGRET_BIN, "--version"], capture_output=True, text=True).stdout.strip().split(chr(10))[0]}',
+        'total_sitios_analizados': total_sitios_analizados,
+        'total_perfiles_encontrados': total_encontrados,
+        'perfiles':                perfiles,
+        'integridad': {
+            'hash_pre_busqueda':  hash_pre,
+            'hash_post_busqueda': '',  # se calcula abajo
+        },
+        'rutas': {
+            'resultados': carpetas['results'],
+            'imagenes':   carpetas['images'],
+            'vistas':     carpetas['views'],
+        },
+        'disclaimer': DISCLAIMER,
+    }
+
+    # Vista legible para el perito
+    ruta_txt = generar_vista_txt(perfiles, alias, perito, carpetas['views'], total_sitios_analizados)
+    log(f"[+] Vista legible: {ruta_txt}")
+
+    # FASE 5 — Hash post-búsqueda + sellado
+    progress(95, "Calculando hash post-busqueda y sellando cadena de custodia...")
+    hash_post = sha256_dir(carpetas['results'])
+    resumen['integridad']['hash_post_busqueda'] = hash_post
+
+    ruta_resumen = os.path.join(carpetas['results'], 'resumen_osint.json')
+    guardar_json(ruta_resumen, resumen)
+
+    custodia(ruta_custodia, f"Hash SHA-256 post-busqueda (OSINT/): {hash_post}")
+    custodia(ruta_custodia, f"Perfiles encontrados: {total_encontrados}")
+    custodia(ruta_custodia, f"resumen_osint.json guardado — listo para Modulo 8 IA.")
+    custodia(ruta_custodia, f"FIN busqueda OSINT — alias: '{alias}'")
+
+    # Resultado final
+    progress(100, "Rastreo OSINT completado.")
+    log("\n" + "=" * 50)
+    log("   [SUCCESS] OSINT COMPLETADO                     ")
+    log("=" * 50)
+    log(f"[*] Alias rastreado:     {alias}")
+    log(f"[*] Sitios analizados:   {total_sitios_analizados}")
+    log(f"[*] Perfiles hallados:   {total_encontrados}")
+    log(f"[*] Resultados en:       {carpetas['results']}")
+    log(f"[*] Reporte HTML en:     {carpetas['images']}")
+    log(f"[*] Cadena custodia:     {ruta_custodia}")
+    log("[*] Listo para Triaje IA (Modulo 8).")
+
+    if total_encontrados > 0:
+        log(f"\n[*] Top hallazgos:")
+        for p in perfiles[:10]:
+            log(f"    [+] [{p['categoria']}] {p['sitio']} — {p['url']}")
+        if total_encontrados > 10:
+            log(f"    ... y {total_encontrados - 10} mas. Ver resumen_osint.json para el listado completo.")
+
+
+# ══════════════════════════════════════════════════════════════════
+# PUNTO DE ENTRADA
+# ══════════════════════════════════════════════════════════════════
 
 def main():
-    imprimir_banner()
+    parser = argparse.ArgumentParser(
+        description="OSINT: Rastreo de alias en +3000 sitios (Maigret) — ISO/IEC 27037"
+    )
+    parser.add_argument('-a', '--alias',   required=True,
+                        help='Nombre de usuario / alias a rastrear')
+    parser.add_argument('-c', '--caso',    required=True,
+                        help='ID del caso forense (ej: CASO-001)')
+    parser.add_argument('-p', '--perito',  required=True,
+                        help='Nombre del perito a cargo')
+    parser.add_argument('-t', '--top',     type=int, default=None,
+                        help='Limitar a N sitios top por Alexa (ej: 500). Sin este flag = todos los sitios.')
+    args = parser.parse_args()
 
-    destino_base = "/mnt/Destino_ForenSys"
-    if not os.path.ismount(destino_base):
-        print(f"\n[X] ERROR: La bóveda ({destino_base}) no está montada.")
+    # Sanitizar alias
+    alias_seguro = sanitizar_alias(args.alias)
+    if not alias_seguro:
+        print("[X] El alias contiene caracteres invalidos.")
+        sys.exit(1)
+    if alias_seguro != args.alias:
+        print(f"[!] Alias sanitizado: '{args.alias}' -> '{alias_seguro}'")
+
+    # Verificar caso
+    carpeta_caso = os.path.join(CASES_BASE_DIR, args.caso)
+    if not os.path.exists(carpeta_caso):
+        print(f"[X] Caso '{args.caso}' no existe. Crea el caso desde la interfaz web primero.")
         sys.exit(1)
 
-    auto_desbloquear_destino(destino_base)
+    buscar_osint(alias_seguro, args.caso, args.perito, args.top)
 
-    caso_id = input("\n[?] ID del Caso (Ej. CASO_006): ").strip()
-    url_objetivo = input("[?] URL del Perfil Objetivo: ").strip()
-
-    if not url_objetivo.startswith("http"):
-        print("[!] Error: La URL debe incluir http:// o https://")
-        sys.exit(1)
-
-    carpeta_caso = os.path.join(destino_base, f"{caso_id}_OSINT")
-    os.makedirs(carpeta_caso, exist_ok=True)
-
-    ruta_html = capturar_perfil(url_objetivo, carpeta_caso)
-    extraer_ids(ruta_html, carpeta_caso)
-
-    print("\n==================================================")
-    print("   [✔] PROCESO FINALIZADO CON ÉXITO               ")
-    print("==================================================")
 
 if __name__ == "__main__":
-    if os.geteuid() != 0:
-        print("\n[X] Error: Este script requiere privilegios de Root (sudo).")
-        sys.exit(1)
     main()

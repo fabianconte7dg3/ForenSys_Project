@@ -1735,14 +1735,76 @@
 
                         <!-- 6. NUBE -->
                         <div class="module-panel" id="panel-NUBE" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(148,163,184,0.03);">
-                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-cloud-arrow-down-fill me-2" style="color: var(--text-muted);"></i>6. Captura Nube (OSINT)</h5>
-                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Descarga de evidencias de perfiles públicos de redes sociales (Instagram/TikTok/Twitter).</p>
-                            <label class="form-label-custom" for="osint-url">URL del Perfil Objetivo</label>
-                            <input class="form-input-custom" type="url" id="osint-url" placeholder="Ej: https://instagram.com/usuario" style="margin-bottom:0;">
-                            <div style="margin-top: 20px;">
-                                <button class="btn-primary" id="btn-run-cloud" style="background: var(--text-muted); border-color: var(--text-muted);"><i class="bi bi-play-fill me-2"></i>Descargar Evidencia OSINT</button>
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 6px;"><i class="bi bi-person-bounding-box me-2" style="color: #94a3b8;"></i>6. OSINT — Rastreo de Alias</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">Rastreo de username en más de 3000 sitios web con <strong style="color: var(--text-main);">Maigret</strong>. Construye un perfil digital del alias objetivo a partir de fuentes públicas.</p>
+
+                            <!-- Stats -->
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom: 14px;">
+                                <div style="flex:1; min-width:100px; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius:6px; padding: 10px; text-align:center;">
+                                    <div style="font-size: 1.4rem; font-weight: 700; color: #94a3b8;">+3000</div>
+                                    <div style="font-size: 0.72rem; color: var(--text-muted);">Sitios rastreados</div>
+                                </div>
+                                <div style="flex:1; min-width:100px; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius:6px; padding: 10px; text-align:center;">
+                                    <div style="font-size: 1.4rem; font-weight: 700; color: #94a3b8;">JSON</div>
+                                    <div style="font-size: 0.72rem; color: var(--text-muted);">Salida para IA</div>
+                                </div>
+                                <div style="flex:1; min-width:100px; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius:6px; padding: 10px; text-align:center;">
+                                    <div style="font-size: 1.4rem; font-weight: 700; color: #94a3b8;">100%</div>
+                                    <div style="font-size: 0.72rem; color: var(--text-muted);">Local / Sin API</div>
+                                </div>
+                            </div>
+
+                            <!-- Aviso legal -->
+                            <div style="background: rgba(148,163,184,0.08); border-left: 3px solid #94a3b8; border-radius: 0 6px 6px 0; padding: 10px 14px; margin-bottom: 14px; font-size: 0.82rem; color: var(--text-muted);">
+                                <i class="bi bi-shield-check me-2" style="color: #94a3b8;"></i>
+                                <strong style="color: var(--text-main);">Uso legal:</strong> Esta herramienta accede únicamente a <strong>fuentes públicas</strong>. Úsala solo en el marco de investigaciones forenses autorizadas. Los resultados se guardan en el caso con cadena de custodia.
+                            </div>
+
+                            <!-- Input alias -->
+                            <label class="form-label-custom" for="osint-alias">Alias / Username Objetivo</label>
+                            <div style="display:flex; gap:8px; align-items:center; margin-bottom: 12px;">
+                                <div style="position:relative; flex:1;">
+                                    <span style="position:absolute; left:12px; top:50%; transform:translateY(-50%); color: var(--text-muted); font-size:0.9rem;">@</span>
+                                    <input class="form-input-custom" type="text" id="osint-alias"
+                                        placeholder="john_doe"
+                                        style="padding-left: 28px; margin-bottom:0; font-family: var(--font-mono);">
+                                </div>
+                            </div>
+
+                            <!-- Modo de búsqueda -->
+                            <label class="form-label-custom">Modo de Búsqueda</label>
+                            <div style="display:flex; gap:8px; margin-bottom: 16px;">
+                                <button class="osint-mode-btn active" id="osint-mode-full" data-top="" style="flex:1; padding:8px; border:1px solid #94a3b8; background:rgba(148,163,184,0.1); color:#94a3b8; border-radius:6px; cursor:pointer; font-size:0.82rem; transition: all 0.2s;">
+                                    <i class="bi bi-globe me-1"></i>Completo (+3000 sitios)
+                                </button>
+                                <button class="osint-mode-btn" id="osint-mode-fast" data-top="500" style="flex:1; padding:8px; border:1px solid var(--border-dim); background:transparent; color:var(--text-muted); border-radius:6px; cursor:pointer; font-size:0.82rem; transition: all 0.2s;">
+                                    <i class="bi bi-lightning-fill me-1"></i>Rápido (Top 500)
+                                </button>
+                            </div>
+
+                            <!-- Info tiempo estimado -->
+                            <div id="osint-time-info" style="font-size:0.78rem; color: var(--text-muted); margin-bottom: 14px; padding: 6px 10px; background: rgba(148,163,184,0.05); border-radius:4px;">
+                                <i class="bi bi-clock me-1"></i> Tiempo estimado: <span id="osint-time-text">5-10 minutos</span>. La consola mostrará los sitios encontrados en tiempo real.
+                            </div>
+
+                            <div>
+                                <button class="btn-primary" id="btn-run-cloud" style="background: #475569; border-color: #475569;">
+                                    <i class="bi bi-search me-2"></i>Iniciar Rastreo OSINT
+                                </button>
+                            </div>
+
+                            <!-- Progress Bar -->
+                            <div id="cloud-progress-container" style="display: none; margin-top: 20px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
+                                    <span id="cloud-progress-text">Progreso: 0%</span>
+                                    <span id="cloud-progress-detail">Iniciando rastreo...</span>
+                                </div>
+                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
+                                    <div id="cloud-progress-bar" style="width: 0%; height: 100%; background: #94a3b8; transition: width 0.4s ease;"></div>
+                                </div>
                             </div>
                         </div>
+
 
                         <!-- 7. NORMALIZACION -->
                         <div class="module-panel" id="panel-TIMELINE" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(59,130,246,0.03);">
@@ -2351,7 +2413,7 @@ function initSSE() {
                 const pct = parseInt(wipeMatch[1]);
                 const detailStr = data.msg.replace(/^\[PROGRESO:\d+\]\s*/, '').trim() || 'Operación en progreso...';
                 
-                ['wiping', 'usb', 'ram', 'mobile'].forEach(prefix => {
+                ['wiping', 'usb', 'ram', 'mobile', 'cloud'].forEach(prefix => {
                     const pContainer = document.getElementById(`${prefix}-progress-container`);
                     // Solo actualizamos si el contenedor de esta fase está visible
                     if (pContainer && pContainer.style.display !== 'none') {
@@ -2415,6 +2477,29 @@ document.querySelectorAll('.platform-btn').forEach(btn => {
                 androidArts.style.display = 'flex';
                 iosArts.style.display = 'none';
             }
+        }
+    });
+});
+
+// ── OSINT Mode Selector ─────────────────────────────────────
+let selectedOsintTop = '';
+
+document.querySelectorAll('.osint-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        selectedOsintTop = btn.dataset.top || '';
+
+        document.querySelectorAll('.osint-mode-btn').forEach(b => {
+            b.style.border = '1px solid var(--border-dim)';
+            b.style.background = 'transparent';
+            b.style.color = 'var(--text-muted)';
+        });
+        btn.style.border = '1px solid #94a3b8';
+        btn.style.background = 'rgba(148,163,184,0.1)';
+        btn.style.color = '#94a3b8';
+
+        const timeText = document.getElementById('osint-time-text');
+        if (timeText) {
+            timeText.textContent = selectedOsintTop ? '1-2 minutos' : '5-10 minutos';
         }
     });
 });
@@ -3273,6 +3358,25 @@ function runOperation(btnId) {
             document.getElementById('mobile-progress-text').textContent = 'Progreso: 0%';
             document.getElementById('mobile-progress-detail').textContent = `Iniciando extracción ${plataforma.toUpperCase()}...`;
         }
+    } else if (btnId === 'btn-cloud') {
+        const alias = document.getElementById('osint-alias')?.value?.trim();
+        if (!alias) {
+            addLogEntry('[ERROR] Ingresa un alias / username antes de iniciar el rastreo OSINT.', 'log-error');
+            return;
+        }
+        const topSites = selectedOsintTop;
+        const topFlag  = topSites ? ` --top ${topSites}` : '';
+        command = `python3 /home/ciber-admin/ForenSys_Project/scripts/05_cloud.py --alias ${alias} --caso ${activeCaseNumber} --perito "${activeCasePerito}"${topFlag}`;
+
+        const pCloudContainer = document.getElementById('cloud-progress-container');
+        if (pCloudContainer) {
+            pCloudContainer.style.display = 'block';
+            document.getElementById('cloud-progress-bar').style.width = '0%';
+            document.getElementById('cloud-progress-bar').style.background = '#94a3b8';
+            document.getElementById('cloud-progress-text').textContent = 'Progreso: 0%';
+            document.getElementById('cloud-progress-detail').textContent = `Rastreando @${alias} en ${topSites || '+3000'} sitios...`;
+        }
+        addLogEntry(`[OSINT] Iniciando rastreo de alias: @${alias}`, 'log-system');
     } else {
         // Fallback for not-yet-implemented modules
         addLogEntry(`[INFO] El módulo ${btnId} aún no está conectado al backend real.`, 'log-warn');
