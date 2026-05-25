@@ -15,7 +15,7 @@ app = Flask(__name__)
 
 # ── Real-time Log Stream via SSE ──────────────────────────────────
 # Global queue: worker threads push lines, SSE endpoint pops them
-log_queue = queue.Queue(maxsize=500)
+log_queue = queue.Queue(maxsize=2000)
 
 # Currently running process (for signal/kill support)
 running_proc = None
@@ -718,11 +718,14 @@ def run_command_api():
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
-                env=env
+                env=env,
+                # Crear nuevo grupo de procesos para poder matar toda la cadena
+                start_new_session=True,
             )
             with running_proc_lock:
                 running_proc = proc
 
+            # readline() es más eficiente que iterar char a char
             for line in iter(proc.stdout.readline, ''):
                 line = line.rstrip('\n')
                 if line:
@@ -747,15 +750,34 @@ def run_command_api():
 
 @app.route('/api/kill_command', methods=['POST'])
 def kill_command():
-    """Terminates the currently running subprocess if any."""
+    """Termina el subproceso activo y TODOS sus hijos (sudo → python → dc3dd, etc.)."""
     global running_proc
     with running_proc_lock:
-        if running_proc and running_proc.poll() is None:
-            # Send term signal to the immediate process (sudo)
-            # The python script inside sudo will catch it and kill its children.
-            running_proc.terminate()
-            push_log('[SISTEMA] Proceso interrumpido por el operador.', 'warn')
-            return jsonify({'status': 'success', 'message': 'Proceso terminado'})
+        proc = running_proc
+
+    if proc and proc.poll() is None:
+        try:
+            pgid = os.getpgid(proc.pid)
+            # SIGTERM al grupo completo — propaga a toda la cadena de procesos hijos
+            os.killpg(pgid, __import__('signal').SIGTERM)
+            # Esperar hasta 3 s; si no termina, SIGKILL
+            import signal as _sig
+            try:
+                proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                os.killpg(pgid, _sig.SIGKILL)
+        except (ProcessLookupError, PermissionError) as e:
+            # Fallback: matar solo el proceso raíz
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            push_log(f'[SISTEMA] Fallback kill (pgid no disponible): {e}', 'warn')
+        push_log('[SISTEMA] Proceso interrumpido por el operador.', 'warn')
+        with running_proc_lock:
+            running_proc = None
+        return jsonify({'status': 'success', 'message': 'Proceso terminado'})
+
     return jsonify({'status': 'error', 'message': 'No hay proceso activo'})
 
 

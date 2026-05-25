@@ -2507,21 +2507,30 @@ function initSSE() {
             if (wipeMatch) {
                 const pct = parseInt(wipeMatch[1]);
                 const detailStr = data.msg.replace(/^\[PROGRESO:\d+\]\s*/, '').trim() || 'Operación en progreso...';
-                
+
                 ['wiping', 'usb', 'ram', 'mobile', 'cloud'].forEach(prefix => {
                     const pContainer = document.getElementById(`${prefix}-progress-container`);
                     // Solo actualizamos si el contenedor de esta fase está visible
                     if (pContainer && pContainer.style.display !== 'none') {
-                        const pBar = document.getElementById(`${prefix}-progress-bar`);
-                        const pText = document.getElementById(`${prefix}-progress-text`);
+                        const pBar    = document.getElementById(`${prefix}-progress-bar`);
+                        const pText   = document.getElementById(`${prefix}-progress-text`);
                         const pDetail = document.getElementById(`${prefix}-progress-detail`);
-                        
-                        if (pBar) pBar.style.width = pct + '%';
-                        if (pText) pText.textContent = 'Progreso: ' + pct + '%';
-                        if (pDetail) pDetail.textContent = detailStr;
+
+                        // ── Monotónico: nunca retroceder ──────────────────
+                        const key = `_lastPct_${prefix}`;
+                        const prev = window[key] || 0;
+                        if (pct < prev) return;   // ignorar si es menor al actual
+                        window[key] = pct;
+                        // ──────────────────────────────────────────────────
+
+                        if (pBar)    pBar.style.width     = pct + '%';
+                        if (pText)   pText.textContent    = 'Progreso: ' + pct + '%';
+                        if (pDetail) pDetail.textContent  = detailStr;
+
                         if (pct >= 100) {
                             if (pBar) pBar.style.background = 'var(--accent-green)';
-                            if (pDetail) pDetail.textContent = 'Finalizando...';
+                            if (pDetail) pDetail.textContent = 'Finalizado ✓';
+                            window[key] = 0;   // reset para la próxima ejecución
                             // Si es el módulo OSINT, disparar evento para mostrar botones de resultados
                             if (prefix === 'cloud') {
                                 setTimeout(() => document.dispatchEvent(new Event('osint-complete')), 800);
