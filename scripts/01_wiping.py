@@ -124,64 +124,133 @@ def _human(b):
         b /= 1024
 
 
-def calcular_bufsz(device_info):
+def calcular_bs_dd(device_info):
     """
-    Elige el tamaño de buffer óptimo para dc3dd.
-
-    Lógica (basada en benchmarks y NIST recomendaciones):
-      - HDD / USB / SATA:  4 MB a 16 MB  → mejor throughput secuencial
-      - SSD / NVMe / eMMC: 1 MB a 4 MB   → límite de la cola de escritura
-      - Toma el mayor entre optimal_io_size y el mínimo seguro de 512 KB
-      - No supera el 5 % de la RAM disponible para no generar swapping
+    Elige el block size para dd.
+    Lógica:
+      - HDD / USB / SATA:  64 MB  → pocos syscalls, throughput máximo secuencial
+      - SSD / NVMe / eMMC: 16 MB  → la cola SSD se satura con bloques muy grandes
+      - Limitar al 10 % de RAM disponible
     """
-    # RAM disponible
     try:
         with open('/proc/meminfo') as f:
             for linea in f:
                 if linea.startswith('MemAvailable'):
                     ram_kb = int(linea.split()[1])
-                    ram_max = ram_kb * 1024 // 20   # 5 % de RAM
+                    ram_max = ram_kb * 1024 // 10   # 10 % de RAM
                     break
             else:
-                ram_max = 16 * 1024 * 1024  # 16 MB fallback
+                ram_max = 64 * 1024 * 1024
     except Exception:
-        ram_max = 16 * 1024 * 1024
+        ram_max = 64 * 1024 * 1024
 
-    # Punto de partida según tipo de dispositivo
     if device_info['transport'] in ('nvme', 'mmc') or not device_info['rotacional']:
-        base = 1 * 1024 * 1024    # 1 MB para SSD/NVMe
+        base = 16 * 1024 * 1024   # 16 MB para SSD/NVMe
     else:
-        base = 4 * 1024 * 1024    # 4 MB para HDD/USB
+        base = 64 * 1024 * 1024   # 64 MB para HDD
 
-    # Escalar con optimal_io_size si es útil
-    opt = device_info.get('optimal_io', 0)
-    if opt and opt > base:
-        base = min(opt, 16 * 1024 * 1024)  # máximo 16 MB
-
-    # No superar el 5 % de RAM
-    bufsz = min(base, ram_max)
-
-    # Nunca bajar de 512 KB (dc3dd default ya es menor)
-    bufsz = max(bufsz, 512 * 1024)
-
-    return bufsz
+    return min(base, ram_max)
 
 
-# ── Wiping con dc3dd (modo forense, máxima velocidad) ─────────────
 
-def wiping_dc3dd(disco, bufsz):
-    """Sobrescribe con ceros usando dc3dd con bufsz optimizado."""
+# ── Wiping con dd + I/O directo (pasada de ceros, más rápido que dc3dd) ───
+
+def wiping_dd_ceros(disco, bs, size_bytes):
+    """
+    Sobrescribe con ceros usando dd + oflag=direct.
+
+    Ventajas vs dc3dd:
+    - oflag=direct: las escrituras van directamente al disco SIN pasar por el
+      caché del kernel → velocidad CONSTANTE desde el primer segundo, sin el
+      falso burst inicial que luego colapsa al vaciarse el caché.
+    - bs=64M: mínimos syscalls de escritura por MB.
+    - NIST 800-88 Clear: una pasada de ceros es suficiente en dispositivos
+      modernos y es el método recomendado por el propio NIST.
+    """
     global proc_hijo
 
-    bufsz_str = str(bufsz)
+    bs_str = str(bs)
+    # ionice -c 1 = clase I/O RealTime (prioridad máxima en scheduler)
     cmd = [
-        'dc3dd',
-        f'wipe={disco}',
-        f'bufsz={bufsz_str}',
-        'verb=on',           # reporte de progreso continuo
+        'ionice', '-c', '1', '-n', '0',
+        'dd',
+        'if=/dev/zero',
+        f'of={disco}',
+        f'bs={bs_str}',
+        'oflag=direct',
+        'conv=notrunc,noerror',
+        'status=progress',
     ]
-    log(f"[*] Comando dc3dd: {' '.join(cmd)}")
-    log(f"[*] Buffer size:   {_human(bufsz)}")
+    log(f"[*] Comando: {' '.join(cmd)}")
+    log(f"[*] Block size: {_human(bs)} — I/O directo (sin caché del kernel)")
+
+    try:
+        proc_hijo = subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,   # dd progress → stderr
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+        )
+
+        buf = ''
+        ultimo_pct = -1
+        while True:
+            char = proc_hijo.stderr.read(1)
+            if not char:
+                break
+            if char in ('\r', '\n'):
+                linea = buf.strip()
+                if linea:
+                    # Formato dd: "64424509440 bytes (64 GB, 60 GiB) copied, 718 s, 89.7 MB/s"
+                    m_bytes = re.match(r'(\d+)\s+bytes', linea)
+                    m_speed = re.search(r'(\d+(?:\.\d+)?\s+[GMK]?B/s)', linea)
+                    if m_bytes and size_bytes > 0:
+                        bytes_hechos = int(m_bytes.group(1))
+                        pct = min(99, int(bytes_hechos * 100 / size_bytes))
+                        pct_global = 5 + int(pct * 0.75)
+                        speed = m_speed.group(1) if m_speed else '?'
+                        if pct != ultimo_pct:
+                            progress(pct_global,
+                                     f"{_human(bytes_hechos)} / {_human(size_bytes)} — {speed}")
+                            ultimo_pct = pct
+                    else:
+                        log(linea)
+                buf = ''
+            else:
+                buf += char
+
+        if buf.strip():
+            # Última línea tras el EOF
+            linea = buf.strip()
+            m_speed = re.search(r'(\d+(?:\.\d+)?\s+[GMK]?B/s)', linea)
+            log(f"[dd] {linea}")
+
+        proc_hijo.wait()
+        rc = proc_hijo.returncode
+        proc_hijo = None
+        return rc in (0, 1)   # dd retorna 1 si hubo errores corregidos
+
+    except FileNotFoundError as exc:
+        log(f"[X] Herramienta no encontrada: {exc}. Verifique que 'ionice' y 'dd' estén instalados.")
+        sys.exit(1)
+
+
+# ── Wiping con dc3dd (multi-pasada DoD) ──────────────────────────────────
+
+def wiping_dc3dd_multipasada(disco, pasada, total_pasadas):
+    """
+    Usa dc3dd para pasadas adicionales (DoD 3/7 pasadas con patrones).
+    dc3dd maneja los patrones hex necesarios (0x00, 0xFF, random).
+    Se reserva solo para pasadas 2+ ya que la pasada de ceros la hace dd.
+    """
+    global proc_hijo
+
+    patrones = ['pat=00', 'pat=ff', 'pat=random', 'pat=00', 'pat=ff', 'pat=random', 'pat=random']
+    patron   = patrones[(pasada - 1) % len(patrones)]
+
+    cmd = ['dc3dd', f'wipe={disco}', patron, f'bufsz=16777216', 'verb=on']
+    log(f"[*] dc3dd pasada {pasada}/{total_pasadas} — {patron}")
 
     try:
         proc_hijo = subprocess.Popen(
@@ -191,7 +260,6 @@ def wiping_dc3dd(disco, bufsz):
             text=True,
             bufsize=1,
         )
-
         buf = ''
         ultimo_pct = -1
         while True:
@@ -204,25 +272,21 @@ def wiping_dc3dd(disco, bufsz):
                     pct_match = re.search(r'\(\s*(\d+)%\s*\)', linea)
                     if pct_match:
                         pct = int(pct_match.group(1))
-                        # Escalar al rango 5%–80% del wiping total (pasos 0/3 y 1/3)
                         pct_global = 5 + int(pct * 0.75)
                         if pct != ultimo_pct:
-                            progress(pct_global, linea)
+                            progress(pct_global, f"Pasada {pasada}/{total_pasadas}: {linea}")
                             ultimo_pct = pct
                     else:
                         log(linea)
                 buf = ''
             else:
                 buf += char
-
         if buf.strip():
             log(buf.strip())
-
         proc_hijo.wait()
         rc = proc_hijo.returncode
         proc_hijo = None
         return rc
-
     except FileNotFoundError:
         log("[X] 'dc3dd' no encontrado. Instale con: sudo apt install dc3dd")
         sys.exit(1)
@@ -337,18 +401,28 @@ def main():
         wiping_exitoso = wiping_blkdiscard(disco)
 
     if not wiping_exitoso:
-        # dc3dd con buffer optimizado
-        bufsz = calcular_bufsz(dev_info)
-        log(f"\n[*] Iniciando dc3dd con buffer {_human(bufsz)}...")
-        log(f"[*] {'Este proceso puede tardar varios minutos. La barra se actualizará en tiempo real.'}")
+        # Pasada 1 (NIST Clear / DoD Pass 1): Usar dd + oflag=direct
+        log(f"\n[*] Iniciando dd directo para sobrescritura continua...")
+        bs_dd = calcular_bs_dd(dev_info)
+        
+        if args.passes > 1:
+            log(f"\n[*] Pasada 1/{args.passes} (Ceros)...")
+        else:
+            log(f"\n[*] Pasada 1/1 (Ceros)...")
+            
+        exito_dd = wiping_dd_ceros(disco, bs_dd, dev_info['size_bytes'])
+        if not exito_dd:
+            log("[X] La herramienta 'dd' falló o fue interrumpida.")
+            sys.exit(1)
 
-        for pasada in range(1, args.passes + 1):
-            if args.passes > 1:
-                log(f"\n[*] Pasada {pasada}/{args.passes}...")
-            rc = wiping_dc3dd(disco, bufsz)
-            if rc not in [0, 1]:
-                log(f"[X] dc3dd terminó con código de error: {rc}")
-                sys.exit(1)
+        # Pasadas 2 a N (DoD Básico o Full): Usar dc3dd para los patrones hex
+        if args.passes > 1:
+            log("\n[*] Iniciando dc3dd para patrones multi-pasada DoD...")
+            for pasada in range(2, args.passes + 1):
+                rc = wiping_dc3dd_multipasada(disco, pasada, args.passes)
+                if rc not in [0, 1]:
+                    log(f"[X] dc3dd terminó con código de error: {rc}")
+                    sys.exit(1)
 
         wiping_exitoso = True
 
