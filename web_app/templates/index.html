@@ -1905,13 +1905,48 @@
                         <div class="module-panel" id="panel-TIMELINE" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(59,130,246,0.03);">
                             <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-clock-history me-2" style="color: var(--accent-blue);"></i>7. Normalización (Super Timeline)</h5>
                             <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Generación de línea de tiempo con Plaso/Log2Timeline y extracción de artefactos Windows críticos (SAM, SYSTEM, SRUM).</p>
+                            
                             <label class="form-label-custom">Imagen Forense Origen (.dd / .raw)</label>
-                            <div style="display:flex; gap:8px; align-items:center;">
-                                <div id="timeline-file-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Auto-detectar imagen .dd extraída del caso</div>
-                                <button class="btn-primary" id="btn-browse-timeline" style="white-space:nowrap;"><i class="bi bi-folder2-open me-2"></i>Explorar...</button>
+                            <div style="display:flex; gap:8px; align-items:center; margin-bottom:14px;">
+                                <div id="timeline-file-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin imagen seleccionada</div>
+                                <button class="btn-primary" id="btn-browse-timeline" style="white-space:nowrap;"><i class="bi bi-folder2-open me-2"></i>Escanear Caso</button>
                             </div>
+                            <div id="timeline-file-list" style="display:none; margin-top:0px; margin-bottom:14px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
+
+                            <!-- Opciones de Recuperación de Borrados -->
+                            <label class="form-label-custom">Recuperación de Archivos Borrados</label>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                                <button class="timeline-recov-btn active" data-method="n" style="flex:1; min-width:110px; padding:9px 8px; border:1px solid var(--accent-blue); background:rgba(59,130,246,0.1); color:var(--accent-blue); border-radius:6px; cursor:pointer; font-size:0.82rem; text-align:center; transition:all 0.2s;">
+                                    <i class="bi bi-skip-forward-fill me-1"></i><strong>Ninguno</strong><br>
+                                    <span style="font-size:0.72rem; color:var(--text-muted);">Más rápido</span>
+                                </button>
+                                <button class="timeline-recov-btn" data-method="1" style="flex:1; min-width:110px; padding:9px 8px; border:1px solid var(--border-dim); background:transparent; color:var(--text-muted); border-radius:6px; cursor:pointer; font-size:0.82rem; text-align:center; transition:all 0.2s;">
+                                    <i class="bi bi-file-earmark-medical-fill me-1"></i><strong>MFT</strong><br>
+                                    <span style="font-size:0.72rem;">Rápido, retiene nombres</span>
+                                </button>
+                                <button class="timeline-recov-btn" data-method="2" style="flex:1; min-width:110px; padding:9px 8px; border:1px solid var(--border-dim); background:transparent; color:var(--text-muted); border-radius:6px; cursor:pointer; font-size:0.82rem; text-align:center; transition:all 0.2s;">
+                                    <i class="bi bi-search me-1"></i><strong>PhotoRec</strong><br>
+                                    <span style="font-size:0.72rem;">Lento, sin nombres</span>
+                                </button>
+                                <button class="timeline-recov-btn" data-method="3" style="flex:1; min-width:110px; padding:9px 8px; border:1px solid var(--border-dim); background:transparent; color:var(--text-muted); border-radius:6px; cursor:pointer; font-size:0.82rem; text-align:center; transition:all 0.2s;">
+                                    <i class="bi bi-layers-fill me-1"></i><strong>Ambos</strong><br>
+                                    <span style="font-size:0.72rem;">Lento, máxima recov.</span>
+                                </button>
+                            </div>
+
                             <div style="margin-top: 20px;">
-                                <button class="btn-primary" id="btn-run-timeline"><i class="bi bi-play-fill me-2"></i>Generar Super Timeline</button>
+                                <button class="btn-primary" id="btn-run-timeline" style="background: var(--accent-blue); border-color: var(--accent-blue);"><i class="bi bi-play-fill me-2"></i>Generar Super Timeline</button>
+                            </div>
+
+                            <!-- Progress Bar -->
+                            <div id="timeline-progress-container" style="display: none; margin-top: 20px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
+                                    <span id="timeline-progress-text">Progreso: 0%</span>
+                                    <span id="timeline-progress-detail">Iniciando...</span>
+                                </div>
+                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
+                                    <div id="timeline-progress-bar" style="width: 0%; height: 100%; background: var(--accent-blue); transition: width 0.3s ease;"></div>
+                                </div>
                             </div>
                         </div>
 
@@ -3617,6 +3652,23 @@ function runOperation(btnId) {
             document.getElementById('cloud-progress-detail').textContent = `Rastreando @${alias} en ${topSites || '+3000'} sitios...`;
         }
         addLogEntry(`[OSINT] Iniciando rastreo de alias: @${alias}`, 'log-system');
+    } else if (btnId === 'btn-timeline') {
+        const imageFile = window.selectedTimelineImage;
+        if (!imageFile) {
+            addLogEntry('[ERROR] Seleccione una imagen forense (.dd/.raw) primero.', 'log-error');
+            return;
+        }
+        const recovMethod = window.selectedTimelineRecovMethod || 'n';
+        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/06_normalizacion.py --caso ${activeCaseNumber} --ruta "${imageFile}" --recuperar ${recovMethod}`;
+        
+        const pTimelineContainer = document.getElementById('timeline-progress-container');
+        if (pTimelineContainer) {
+            pTimelineContainer.style.display = 'block';
+            document.getElementById('timeline-progress-bar').style.width = '0%';
+            document.getElementById('timeline-progress-bar').style.background = 'var(--accent-blue)';
+            document.getElementById('timeline-progress-text').textContent = 'Progreso: 0%';
+            document.getElementById('timeline-progress-detail').textContent = `Iniciando Normalización...`;
+        }
     } else {
         // Fallback for not-yet-implemented modules
         addLogEntry(`[INFO] El módulo ${btnId} aún no está conectado al backend real.`, 'log-warn');
@@ -3768,6 +3820,87 @@ Object.entries(executeMap).forEach(([runId, pipeId]) => {
     if (runBtn) {
         runBtn.addEventListener('click', () => runOperation(pipeId));
     }
+});
+
+// ── Timeline Panel Logic ────────────────────────────────────────
+window.selectedTimelineImage = null;
+window.selectedTimelineRecovMethod = 'n';
+
+// Recovery buttons toggle
+document.querySelectorAll('.timeline-recov-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.timeline-recov-btn').forEach(b => {
+            b.classList.remove('active');
+            b.style.background = 'transparent';
+            b.style.color = 'var(--text-muted)';
+            b.style.borderColor = 'var(--border-dim)';
+        });
+        btn.classList.add('active');
+        btn.style.background = 'rgba(59,130,246,0.1)';
+        btn.style.color = 'var(--accent-blue)';
+        btn.style.borderColor = 'var(--accent-blue)';
+        window.selectedTimelineRecovMethod = btn.dataset.method;
+    });
+});
+
+// Browse image files
+document.getElementById('btn-browse-timeline')?.addEventListener('click', () => {
+    if (!activeCaseNumber) {
+        alert("Debe abrir un caso primero.");
+        return;
+    }
+    const btn = document.getElementById('btn-browse-timeline');
+    const listDiv = document.getElementById('timeline-file-list');
+    const display = document.getElementById('timeline-file-display');
+
+    btn.innerHTML = '<i class="bi bi-arrow-repeat me-2" style="animation:spin 1s linear infinite;"></i>Buscando...';
+    btn.disabled = true;
+
+    fetch(`/api/case/${activeCaseNumber}/images`)
+        .then(r => r.json())
+        .then(data => {
+            btn.innerHTML = '<i class="bi bi-folder2-open me-2"></i>Escanear Caso';
+            btn.disabled = false;
+
+            if (data.status !== 'success') {
+                display.textContent = '[ERROR] ' + data.message;
+                return;
+            }
+
+            if (data.images.length === 0) {
+                display.textContent = 'No se encontraron imágenes (.dd/.raw) en el caso.';
+                listDiv.style.display = 'none';
+                return;
+            }
+
+            listDiv.innerHTML = '';
+            listDiv.style.display = 'block';
+
+            data.images.forEach(img => {
+                const item = document.createElement('div');
+                item.style.cssText = 'padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--border-dim); transition: background 0.15s; font-family:var(--font-mono); font-size:0.85rem;';
+                item.innerHTML = `<i class="bi bi-file-earmark-binary me-2" style="color:var(--accent-blue)"></i>${img.name} <span style="color:var(--text-muted); font-size:0.75rem; float:right;">${img.size_mb} MB</span><br><span style="color:var(--text-muted); font-size:0.7rem; margin-left:22px;">${img.rel_path}</span>`;
+                
+                item.addEventListener('mouseenter', () => item.style.background = 'var(--bg-lighter)');
+                item.addEventListener('mouseleave', () => item.style.background = 'transparent');
+                
+                item.addEventListener('click', () => {
+                    window.selectedTimelineImage = img.abs_path;
+                    display.innerHTML = `<span style="color:var(--accent-green)"><i class="bi bi-check-circle-fill me-2"></i>${img.name}</span> (${img.size_mb} MB)`;
+                    listDiv.style.display = 'none';
+                    // clear selection highlight logic
+                    Array.from(listDiv.children).forEach(c => c.style.borderLeft = 'none');
+                    item.style.borderLeft = '3px solid var(--accent-blue)';
+                });
+                
+                listDiv.appendChild(item);
+            });
+        })
+        .catch(err => {
+            btn.innerHTML = '<i class="bi bi-folder2-open me-2"></i>Escanear Caso';
+            btn.disabled = false;
+            display.textContent = '[ERROR] ' + err;
+        });
 });
 
 // ── Device Scanner (lsblk) ────────────────────────────────────────

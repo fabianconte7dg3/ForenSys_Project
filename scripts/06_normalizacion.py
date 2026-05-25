@@ -138,7 +138,7 @@ def encontrar_offset_y_so(lista_imagenes):
         return ("0", "Error", "Genérico")
 
 def extraer_todo_el_disco(lista_imagenes, offset, carpeta_destino):
-    print(f"\n[*] Reconstruyendo el sistema de archivos desde el offset {offset}...")
+    print(f"[PROGRESO:20] Reconstruyendo el sistema de archivos desde el offset {offset}...")
     os.makedirs(carpeta_destino, exist_ok=True)
     comando = ["tsk_recover", "-a", "-o", str(offset)] + lista_imagenes + [carpeta_destino]
     try:
@@ -148,7 +148,7 @@ def extraer_todo_el_disco(lista_imagenes, offset, carpeta_destino):
         return False
 
 def recuperar_archivos_borrados(lista_imagenes, offset, ruta_unalloc):
-    print("\n[*] Iniciando Motor de Carving (Recuperación de Archivos Borrados)...")
+    print("[PROGRESO:35] Iniciando Motor de Carving (PhotoRec) sobre espacio no asignado...")
     archivo_bloques = os.path.join(ruta_unalloc, "unallocated_blocks.dd")
 
     print("    [1/2] Extrayendo espacio no asignado (blkls)...")
@@ -1574,6 +1574,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Normalización Forense y Super Timeline")
     parser.add_argument("--caso", required=True, help="ID del Caso Forense (Ej. CASO_001)")
     parser.add_argument("--ruta", required=True, help="Ruta absoluta de la imagen o evidencia")
+    parser.add_argument("--dest", required=False, help="Directorio destino (Opcional, usa default si no se provee)")
+    parser.add_argument("--recuperar", required=False, default="n", choices=["1", "2", "3", "n"], help="Método de rec. borrados: 1=MFT, 2=PhotoRec, 3=Ambos, n=Ninguno")
     
     # Leer los argumentos enviados por la consola o por el servidor Flask
     args = parser.parse_args()
@@ -1582,23 +1584,16 @@ if __name__ == "__main__":
     ruta_inicial = args.ruta.strip()
     ruta_dd = ruta_inicial  # Mapeo para no romper las funciones originales
     
-    print(f"[*] Iniciando normalización para el caso: {caso_id}")
+    directorio_base_actual = args.dest.strip() if args.dest else DIRECTORIO_DEFAULT
+    opcion_borrados = args.recuperar.lower()
+    
+    print(f"[PROGRESO:5] Iniciando normalización para el caso: {caso_id}")
     print(f"[*] Leyendo evidencia desde: {ruta_inicial}")
+    print(f"[*] Método de recuperación: {opcion_borrados.upper()}")
 
     if not os.path.isfile(ruta_dd):
-        print(f"[-] ERROR: La ruta indicada no existe o es un directorio.")
-        exit()
-
-    dest_input = input(f"[?] Ruta donde se guardará el caso (Presiona Enter para usar {DIRECTORIO_DEFAULT}): ").strip()
-    directorio_base_actual = dest_input if dest_input else DIRECTORIO_DEFAULT
-
-    print("\n--- MÓDULOS AVANZADOS ---")
-    print("  [1] Recuperación de borrados por MFT (rápido, con nombres originales)")
-    print("  [2] Carving con PhotoRec (lento, recupera más pero sin nombres)")
-    print("  [3] Ambos métodos (MFT + PhotoRec)")
-    print("  [N] Ninguno")
-    opcion_borrados = input("[?] Elige método de recuperación de archivos borrados (1/2/3/N): ").strip().lower()
-
+        print(f"[-] ERROR: La ruta indicada no existe o es un directorio: {ruta_dd}")
+        exit(1)
     os.makedirs(directorio_base_actual, exist_ok=True)
     lista_imagenes_completas = detectar_imagenes_segmentadas(ruta_dd)
 
@@ -1615,18 +1610,23 @@ if __name__ == "__main__":
     os.makedirs(ruta_vistas, exist_ok=True)
     os.makedirs(ruta_resultados, exist_ok=True)
 
+    print("[PROGRESO:10] Calculando offset y particiones...")
     offset, tipo_fs, os_detectado = encontrar_offset_y_so(lista_imagenes_completas)
-    if offset is None: offset = input("[>] Ingresa el Offset matemático manualmente: ").strip()
+    
+    if offset is None:
+        print("[-] ERROR: No se pudo detectar un offset NTFS válido automáticamente.")
+        print("[-] Asegúrese de que la imagen contenga una partición NTFS de Windows.")
+        exit(1)
 
-    if offset is not None:
-        print("\n========================================================")
-        print("  INICIANDO ORQUESTADOR FORENSE V11.0 NECROMANTE")
-        print("========================================================")
+    print("\n========================================================")
+    print("  [PROGRESO:15] INICIANDO ORQUESTADOR FORENSE V11.0 NECROMANTE")
+    print("========================================================")
 
         if extraer_todo_el_disco(lista_imagenes_completas, offset, ruta_vol_ntfs):
 
             # --- NECROMANTE DE ARCHIVOS (MFT) ---
             if opcion_borrados in ['1', '3']:
+                print("[PROGRESO:25] Iniciando recuperación rápida MFT...")
                 jsonl_mft_path = os.path.join(ruta_resultados, "Master_Timeline.jsonl")
                 with open(jsonl_mft_path, 'a', encoding='utf-8') as f_jsonl_mft:
                     total_borrados = recuperar_borrados_mft(lista_imagenes_completas, offset, ruta_borrados_mft, f_jsonl_mft)
@@ -1636,12 +1636,14 @@ if __name__ == "__main__":
                 recuperar_archivos_borrados(lista_imagenes_completas, offset, ruta_vol_unalloc)
 
             if opcion_borrados == 'n':
-                print("\n[*] Saltando recuperación de archivos borrados.")
+                print("[PROGRESO:35] Saltando recuperación de archivos borrados por solicitud del usuario.")
 
             # --- EXTRACCIÓN MAC TSK ---
+            print("[PROGRESO:50] Generando línea de tiempo MAC (fls / mactime)...")
             generar_timeline_tsk(ruta_dd, offset, ruta_resultados)
 
             # --- ESTRUCTURA AUTOPSY, SQLITE, JSONL & HTML ---
+            print("[PROGRESO:75] Organizando datos y generando bases de datos SQLite / JSONL...")
             organizar_estilo_autopsy(ruta_vol_ntfs, ruta_vistas, ruta_resultados, carpeta_caso, caso_id)
 
             print("\n========================================================")
@@ -1653,3 +1655,5 @@ if __name__ == "__main__":
             print(f"    [5] Programas Instalados:       {ruta_resultados}/Lista_Programas_Instalados.csv")
             print(f"    [6] Mecanismos Persistencia:    {ruta_resultados}/Mecanismos_Persistencia.csv")
             print("========================================================")
+            print("[PROGRESO:100] Normalización y Triaje finalizados.")
+

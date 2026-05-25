@@ -249,6 +249,42 @@ def close_case():
         "fecha_cierre": now_iso
     })
 
+
+@app.route('/api/case/<raw_caso_id>/images', methods=['GET'])
+def list_case_images(raw_caso_id):
+    """Escanea la carpeta de un caso en busca de imágenes forenses (.dd, .img, .raw, .e01)."""
+    caso_id = sanitize_case_id(raw_caso_id)
+    if not caso_id:
+        return jsonify({"status": "error", "message": "caso_id inválido."}), 400
+
+    carpeta_caso = os.path.join(CASES_BASE_DIR, caso_id)
+    resolved = os.path.realpath(carpeta_caso)
+    if not resolved.startswith(os.path.realpath(CASES_BASE_DIR) + os.sep):
+        return jsonify({"status": "error", "message": "Ruta del caso inválida."}), 403
+
+    if not os.path.exists(carpeta_caso):
+        return jsonify({"status": "error", "message": "El caso no existe en disco."}), 404
+
+    valid_extensions = ('.dd', '.img', '.raw', '.e01', '.iso', '.bin')
+    found_images = []
+
+    # Escanear recursivamente
+    for root, dirs, files in os.walk(carpeta_caso):
+        for file in files:
+            if file.lower().endswith(valid_extensions):
+                abs_path = os.path.join(root, file)
+                rel_path = os.path.relpath(abs_path, carpeta_caso)
+                size_mb = round(os.path.getsize(abs_path) / (1024 * 1024), 2)
+                found_images.append({
+                    "name": file,
+                    "rel_path": rel_path,
+                    "abs_path": abs_path,
+                    "size_mb": size_mb
+                })
+
+    return jsonify({"status": "success", "images": found_images})
+
+
 @app.route('/api/case/load_from_path', methods=['POST'])
 def load_case_from_path():
     """Carga un caso existente desde una ruta específica."""
