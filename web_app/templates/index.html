@@ -1507,18 +1507,54 @@
                     <div id="module-config-container" style="display: none; margin-top: 16px;">
                         <!-- 1. WIPING -->
                         <div class="module-panel" id="panel-WIPING" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(239,68,68,0.03);">
-                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-eraser-fill me-2" style="color: var(--accent-red);"></i>1. Wiping (NIST)</h5>
-                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Esterilización de disco destino (Llenado de ceros). <strong style="color:var(--accent-red);">ADVERTENCIA:</strong> Destruirá todos los datos en el disco seleccionado.</p>
+                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 6px;"><i class="bi bi-eraser-fill me-2" style="color: var(--accent-red);"></i>1. Wiping (NIST 800-88)</h5>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 12px;">Esterilización de disco destino. <strong style="color:var(--accent-red);">ADVERTENCIA:</strong> Destruirá todos los datos en el disco seleccionado.</p>
+
+                            <!-- Disco objetivo -->
                             <label class="form-label-custom">Disco Destino a Esterilizar</label>
-                            <div style="display:flex; gap:8px; align-items:center;">
+                            <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
                                 <div id="wiping-device-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin dispositivo seleccionado</div>
                                 <button class="btn-primary" id="btn-scan-wiping" style="white-space:nowrap;"><i class="bi bi-hdd-fill me-2"></i>Escanear Discos</button>
                             </div>
-                            <div id="wiping-device-list" style="display:none; margin-top:10px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
-                            <div style="margin-top: 20px;">
+                            <div id="wiping-device-list" style="display:none; margin-top:0px; margin-bottom:14px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
+
+                            <!-- Opciones de velocidad -->
+                            <label class="form-label-custom" style="margin-top:4px;">Modo de Borrado</label>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                                <button class="wipe-mode-btn active" id="wipe-mode-normal" data-fast="" style="flex:1; min-width:130px; padding:9px 12px; border:1px solid var(--accent-red); background:rgba(239,68,68,0.1); color:var(--accent-red); border-radius:6px; cursor:pointer; font-size:0.82rem; text-align:center; transition:all 0.2s;">
+                                    <i class="bi bi-shield-fill me-1"></i><strong>Estándar</strong><br>
+                                    <span style="font-size:0.72rem; color:var(--text-muted);">dc3dd buffer auto (HDD/USB/SSD)</span>
+                                </button>
+                                <button class="wipe-mode-btn" id="wipe-mode-fast" data-fast="--fast" style="flex:1; min-width:130px; padding:9px 12px; border:1px solid var(--border-dim); background:transparent; color:var(--text-muted); border-radius:6px; cursor:pointer; font-size:0.82rem; text-align:center; transition:all 0.2s;">
+                                    <i class="bi bi-lightning-charge-fill me-1"></i><strong>Rápido</strong><br>
+                                    <span style="font-size:0.72rem;">TRIM/UNMAP si SSD/NVMe</span>
+                                </button>
+                            </div>
+
+                            <!-- Número de pasadas -->
+                            <label class="form-label-custom">Pasadas de Borrado</label>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;">
+                                <button class="wipe-passes-btn active" data-passes="1" style="flex:1; padding:7px; border:1px solid var(--accent-red); background:rgba(239,68,68,0.1); color:var(--accent-red); border-radius:6px; cursor:pointer; font-size:0.8rem; transition:all 0.2s;">
+                                    1 pasada <span style="font-size:0.72rem; display:block; color:var(--text-muted);">NIST 800-88 Clear</span>
+                                </button>
+                                <button class="wipe-passes-btn" data-passes="3" style="flex:1; padding:7px; border:1px solid var(--border-dim); background:transparent; color:var(--text-muted); border-radius:6px; cursor:pointer; font-size:0.8rem; transition:all 0.2s;">
+                                    3 pasadas <span style="font-size:0.72rem; display:block;">DoD 5220.22-M básico</span>
+                                </button>
+                                <button class="wipe-passes-btn" data-passes="7" style="flex:1; padding:7px; border:1px solid var(--border-dim); background:transparent; color:var(--text-muted); border-radius:6px; cursor:pointer; font-size:0.8rem; transition:all 0.2s;">
+                                    7 pasadas <span style="font-size:0.72rem; display:block;">DoD 5220.22-M full</span>
+                                </button>
+                            </div>
+
+                            <!-- Info contextual -->
+                            <div id="wipe-info-box" style="font-size:0.78rem; color:var(--text-muted); padding:8px 12px; background:rgba(239,68,68,0.05); border-radius:5px; margin-bottom:14px; border-left:3px solid var(--accent-red);">
+                                <i class="bi bi-info-circle me-1"></i>
+                                <strong style="color:var(--text-main);">Estándar HDD/USB:</strong> Buffer auto-ajustado (4–16 MB) para máximo throughput secuencial. Buffer grande = menos overhead I/O.
+                            </div>
+
+                            <div>
                                 <button class="btn-primary" id="btn-run-wiping" style="background: var(--accent-red); border-color: var(--accent-red);"><i class="bi bi-play-fill me-2"></i>Ejecutar Wiping</button>
                             </div>
-                            
+
                             <!-- Progress Bar -->
                             <div id="wiping-progress-container" style="display: none; margin-top: 20px;">
                                 <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
@@ -1530,6 +1566,7 @@
                                 </div>
                             </div>
                         </div>
+
 
                         <!-- 2. DISCO -->
                         <div class="module-panel" id="panel-DISCO" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(59,130,246,0.03);">
@@ -3488,8 +3525,10 @@ function runOperation(btnId) {
             addLogEntry('[ERROR] Seleccione un disco destino para esterilizar.', 'log-error');
             return;
         }
-        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/01_wiping.py --target ${targetDev} --force`;
-        
+        const fastFlag   = window._wipeFastFlag   || '';
+        const passesFlag = window._wipePassesFlag  || '--passes 1';
+        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/01_wiping.py --target ${targetDev} --force ${fastFlag} ${passesFlag}`.trim();
+
         // Reset progress bar
         const pContainer = document.getElementById('wiping-progress-container');
         if (pContainer) {
@@ -3658,6 +3697,47 @@ allPipeBtns.forEach(btn => {
                 setTimeout(() => panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 50);
             }
         }
+    });
+});
+
+// ── Wiping Mode & Passes Selectors ───────────────────────────────
+window._wipeFastFlag   = '';
+window._wipePassesFlag = '--passes 1';
+
+const WIPE_INFO = {
+    '':       { std: 'Estándar HDD/USB:', detail: 'Buffer auto-ajustado (4–16 MB) para máximo throughput secuencial. Buffer grande = menos overhead I/O.' },
+    '--fast': { std: 'Modo Rápido SSD/NVMe (--fast):', detail: 'Usa TRIM/UNMAP (blkdiscard) si el dispositivo lo soporta — completa en segundos. Fallback automático a dc3dd si no hay soporte. Norma NIST 800-88 §2.4 Purge.' }
+};
+
+document.querySelectorAll('.wipe-mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        window._wipeFastFlag = btn.dataset.fast || '';
+        document.querySelectorAll('.wipe-mode-btn').forEach(b => {
+            b.style.border     = '1px solid var(--border-dim)';
+            b.style.background = 'transparent';
+            b.style.color      = 'var(--text-muted)';
+        });
+        btn.style.border     = '1px solid var(--accent-red)';
+        btn.style.background = 'rgba(239,68,68,0.1)';
+        btn.style.color      = 'var(--accent-red)';
+
+        const info = WIPE_INFO[window._wipeFastFlag] || WIPE_INFO[''];
+        const box  = document.getElementById('wipe-info-box');
+        if (box) box.innerHTML = `<i class="bi bi-info-circle me-1"></i><strong style="color:var(--text-main);">${info.std}</strong> ${info.detail}`;
+    });
+});
+
+document.querySelectorAll('.wipe-passes-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        window._wipePassesFlag = `--passes ${btn.dataset.passes}`;
+        document.querySelectorAll('.wipe-passes-btn').forEach(b => {
+            b.style.border     = '1px solid var(--border-dim)';
+            b.style.background = 'transparent';
+            b.style.color      = 'var(--text-muted)';
+        });
+        btn.style.border     = '1px solid var(--accent-red)';
+        btn.style.background = 'rgba(239,68,68,0.1)';
+        btn.style.color      = 'var(--accent-red)';
     });
 });
 
