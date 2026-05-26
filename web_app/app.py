@@ -257,10 +257,17 @@ def list_case_images(raw_caso_id):
     if not caso_id:
         return jsonify({"status": "error", "message": "caso_id inválido."}), 400
 
-    carpeta_caso = os.path.join(CASES_BASE_DIR, caso_id)
-    resolved = os.path.realpath(carpeta_caso)
-    if not resolved.startswith(os.path.realpath(CASES_BASE_DIR) + os.sep):
-        return jsonify({"status": "error", "message": "Ruta del caso inválida."}), 403
+    registry = load_registry()
+    caso_encontrado = None
+    for caso in registry:
+        if caso['caso_id'] == caso_id and caso['estado'] == 'abierto':
+            caso_encontrado = caso
+            break
+
+    if not caso_encontrado:
+        return jsonify({"status": "error", "message": f"No se encontró un caso abierto con ID: {caso_id}"}), 404
+
+    carpeta_caso = caso_encontrado['ruta']
 
     if not os.path.exists(carpeta_caso):
         return jsonify({"status": "error", "message": "El caso no existe en disco."}), 404

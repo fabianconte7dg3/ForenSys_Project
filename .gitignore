@@ -1,2 +1,20 @@
 Casos_ForenSys/
 Raw/
+
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Logs y temporales
+*.log
+*.tmp
+*.bak
+
+# Servicio systemd (específico del servidor, no del repo)
+forensys.service

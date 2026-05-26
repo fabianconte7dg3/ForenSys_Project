@@ -3659,7 +3659,14 @@ function runOperation(btnId) {
             return;
         }
         const recovMethod = window.selectedTimelineRecovMethod || 'n';
-        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/06_normalizacion.py --caso ${activeCaseNumber} --ruta "${imageFile}" --recuperar ${recovMethod}`;
+        // Obtain the base path from the active case path via an API or just use the parent directory of the image file
+        // Or simply ask the backend for the current case path. Since activeCasePath isn't directly stored in JS, 
+        // we can extract it from the image path (which is absolute, e.g. /mnt/Destino_ForenSys/TEST-123/01_Images.../file.e01)
+        // by taking everything before the case_id.
+        const basePathMatch = imageFile.match(new RegExp(`^(.*)/${activeCaseNumber}/`));
+        const baseDest = basePathMatch ? basePathMatch[1] : '/home/ciber-admin/ForenSys_Project/Casos_ForenSys';
+        
+        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/06_normalizacion.py --caso ${activeCaseNumber} --ruta "${imageFile}" --recuperar ${recovMethod} --dest "${baseDest}"`;
         
         const pTimelineContainer = document.getElementById('timeline-progress-container');
         if (pTimelineContainer) {
