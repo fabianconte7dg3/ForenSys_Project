@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import sys
 import requests
@@ -333,39 +334,53 @@ REGLAS: No inventes datos. Solo analiza lo proporcionado. Tono formal y pericial
         print(f"[-] Error de comunicación con la IA: {e}")
 
 # ==========================================
-# INICIO
+# INICIO — Modo no interactivo (para Web o CLI)
 # ==========================================
 if __name__ == "__main__":
-    imprimir_banner()
+    import argparse
 
-    # Mostrar configuración de rendimiento
+    parser = argparse.ArgumentParser(description="Analizador IA Forense (Ollama) — Foren-Sys")
+    parser.add_argument("--caso",  required=True,  help="ID del caso (Ej: TEST-123)")
+    parser.add_argument("--dest",  required=False, default=DIRECTORIO_DEFAULT,
+                        help=f"Ruta base donde vive el caso (default: {DIRECTORIO_DEFAULT})")
+    args = parser.parse_args()
+
+    caso_id               = re.sub(r'[^a-zA-Z0-9_\-]', '', args.caso.strip())
+    directorio_base_actual = args.dest.strip()
+
+    print(f"[PROGRESO:5] Iniciando Triaje IA para el caso: {caso_id}")
     print(f"    Configuración RPi5: ctx={NUM_CTX} | threads={NUM_THREAD} | keep_alive={KEEP_ALIVE}")
-    print(f"    Límite evidencia: {MAX_CARACTERES_EVIDENCIA} caracteres\n")
+    print(f"    Límite evidencia: {MAX_CARACTERES_EVIDENCIA} caracteres")
 
+    # -- Verificar Ollama --
+    print(f"[PROGRESO:10] Verificando motor Ollama ({MODELO_LLM})...")
     if not comprobar_ollama():
-        exit()
-
-    caso_id = input("[?] ID del Caso a analizar por la IA (Ej. CASONORMA): ").strip()
-    dest_input = input(f"[?] Ruta base del caso (Presiona Enter para usar {DIRECTORIO_DEFAULT}): ").strip()
-    directorio_base_actual = dest_input if dest_input else DIRECTORIO_DEFAULT
+        print("[-] ERROR: Motor Ollama no disponible. Verifica que el servicio esté activo.")
+        sys.exit(1)
 
     carpeta_resultados = os.path.join(directorio_base_actual, caso_id, "03_Results_(Resultados_Extraidos)")
-    
+
     if not os.path.exists(carpeta_resultados):
         print(f"[-] ERROR: No se encontró la carpeta de resultados en: {carpeta_resultados}")
-        print("    Asegúrate de haber ejecutado 06_normalizacion.py primero.")
-        exit()
+        print("    Asegúrate de haber ejecutado el Módulo 7 (Normalización) primero.")
+        sys.exit(1)
 
     ruta_informe_ia = os.path.join(carpeta_resultados, f"Dictamen_Pericial_IA_{caso_id}.md")
 
-    # 1. Filtramos y preparamos la evidencia (con presupuesto de caracteres)
+    # -- Recopilar evidencia --
+    print("[PROGRESO:30] Recopilando y filtrando evidencia de los módulos anteriores...")
     evidencia_filtrada = recopilar_inteligencia(carpeta_resultados)
-    
-    if len(evidencia_filtrada) < 100:
-        print("[-] Advertencia: Se encontró muy poca evidencia para analizar.")
-        confirmar = input("    ¿Continuar de todos modos? (S/N): ").strip().lower()
-        if confirmar != 's':
-            exit()
-    
-    # 2. Análisis con streaming (token por token, sin acumular en RAM)
+
+    if len(evidencia_filtrada) < 50:
+        print("[-] Advertencia: Se encontró muy poca evidencia. Asegúrate de que el Módulo 7 haya completado correctamente.")
+        print("[-] Continuando de todos modos con la evidencia disponible...")
+
+    print("[PROGRESO:60] Transmitiendo evidencia al LLM local (streaming activado)...")
+    # -- Análisis con streaming --
     analizar_con_ia(evidencia_filtrada, ruta_informe_ia)
+
+    if os.path.exists(ruta_informe_ia):
+        print(f"[PROGRESO:100] Dictamen Pericial guardado en: {ruta_informe_ia}")
+    else:
+        print("[-] ERROR: No se generó el informe final.")
+        sys.exit(1)

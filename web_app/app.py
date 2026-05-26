@@ -34,10 +34,31 @@ def push_log(message: str, level: str = 'info'):
 # Definir la ruta base de tus scripts
 SCRIPTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-# Ruta base donde se almacenan los casos forenses
+# Ruta base donde se almacenan los casos forenses (local)
 CASES_BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'Casos_ForenSys'))
 # Registro centralizado de casos
 CASES_REGISTRY = os.path.join(CASES_BASE_DIR, 'casos_registro.json')
+# Dispositivo externo forense — toda la evidencia real vive aquí
+DESTINO_FORENSYS = '/mnt/Destino_ForenSys'
+
+def get_case_results_path(caso_id):
+    """Devuelve la ruta a la carpeta de resultados del caso,
+    buscando primero en el dispositivo externo y luego en local."""
+    for base in (DESTINO_FORENSYS, CASES_BASE_DIR):
+        ruta = os.path.join(base, caso_id, '03_Results_(Resultados_Extraidos)')
+        if os.path.exists(ruta):
+            return ruta
+    return None
+
+def get_case_base_from_registry(caso_id):
+    """Obtiene la ruta base del caso desde el registro (puede ser ext. o local)."""
+    registry = load_registry()
+    for caso in registry:
+        if caso.get('caso_id') == caso_id:
+            ruta = caso.get('ruta', '')
+            if ruta:
+                return os.path.dirname(ruta)  # ruta_base es la carpeta padre del caso
+    return DESTINO_FORENSYS
 
 # --- Utilidades de Seguridad ---
 
@@ -213,9 +234,13 @@ def close_case():
         return jsonify({"status": "error", "message": f"No se encontró un caso abierto con ID: {caso_id}"}), 404
 
     carpeta_caso = caso_encontrado['ruta']
-    # Validar que la ruta del caso está dentro de CASES_BASE_DIR
+    # Validar que la ruta del caso está dentro de CASES_BASE_DIR o DESTINO_FORENSYS
     resolved = os.path.realpath(carpeta_caso)
-    if not resolved.startswith(os.path.realpath(CASES_BASE_DIR) + os.sep):
+    allowed_bases = [
+        os.path.realpath(CASES_BASE_DIR) + os.sep,
+        os.path.realpath(DESTINO_FORENSYS) + os.sep,
+    ]
+    if not any(resolved.startswith(base) for base in allowed_bases):
         return jsonify({"status": "error", "message": "Ruta del caso inválida."}), 403
 
     if not os.path.exists(carpeta_caso):
@@ -248,6 +273,176 @@ def close_case():
         "hash_maestro": hash_maestro,
         "fecha_cierre": now_iso
     })
+
+
+@app.route('/api/case/<raw_caso_id>/results', methods=['GET'])
+def list_case_results(raw_caso_id):
+    """Lista los archivos de resultados de normalización (03_Results) para el Explorador de Evidencia."""
+    caso_id = sanitize_case_id(raw_caso_id)
+    if not caso_id:
+        return jsonify({"status": "error", "message": "caso_id inválido."}), 400
+
+    ruta_results = get_case_results_path(caso_id)
+    if not ruta_results:
+        return jsonify({"status": "ok", "archivos": [], "message": "No se encontró carpeta de resultados."})
+
+    # Archivos clave producidos por la normalización
+    archivos_clave = [
+        {"key": "reporte_maestro",         "filename": "Reporte_Forense_Maestro.txt",         "tipo": "txt",  "categoria": "Super Timeline",        "icono": "bi-file-text-fill",         "color": "#93c5fd"},
+        {"key": "master_timeline",         "filename": "Master_Timeline.jsonl",               "tipo": "jsonl", "categoria": "Super Timeline",       "icono": "bi-filetype-json",          "color": "#93c5fd"},
+        {"key": "filesystem_timeline",     "filename": "filesystem_timeline.csv",             "tipo": "csv",  "categoria": "Super Timeline",        "icono": "bi-table",                  "color": "#6ee7b7"},
+        {"key": "eventos_sistema",         "filename": "Eventos_Sistema.csv",                 "tipo": "csv",  "categoria": "Seguridad y Eventos",   "icono": "bi-shield-lock",            "color": "#6ee7b7"},
+        {"key": "web_history",             "filename": "Web_History_and_Bookmarks.txt",       "tipo": "txt",  "categoria": "Artefactos Web",        "icono": "bi-globe",                  "color": "#67e8f9"},
+        {"key": "descargas_web",           "filename": "Descargas_Web.csv",                   "tipo": "csv",  "categoria": "Artefactos Web",        "icono": "bi-cloud-arrow-down-fill",  "color": "#67e8f9"},
+        {"key": "usuarios_equipo",         "filename": "Usuarios_Equipo.csv",                 "tipo": "csv",  "categoria": "Sistema y Persistencia","icono": "bi-person-fill",            "color": "#c4b5fd"},
+        {"key": "hardware_usb",            "filename": "Hardware_y_USB.csv",                  "tipo": "csv",  "categoria": "Sistema y Persistencia","icono": "bi-usb-symbol",             "color": "#c4b5fd"},
+        {"key": "programas_instalados",    "filename": "Lista_Programas_Instalados.csv",      "tipo": "csv",  "categoria": "Sistema y Persistencia","icono": "bi-grid-3x3-gap-fill",      "color": "#c4b5fd"},
+        {"key": "mecanismos_persistencia", "filename": "Mecanismos_Persistencia.csv",          "tipo": "csv",  "categoria": "Sistema y Persistencia","icono": "bi-exclamation-triangle-fill","color": "#fcd34d"},
+        {"key": "archivos_borrados",       "filename": "Archivos_Borrados_Recuperados.jsonl", "tipo": "jsonl","categoria": "Recuperación y Anomalías","icono": "bi-trash3-fill",            "color": "#fcd34d"},
+        {"key": "metadatos_multimedia",    "filename": "Metadatos_Multimedia.csv",             "tipo": "csv",  "categoria": "Recuperación y Anomalías","icono": "bi-camera-fill",            "color": "#fcd34d"},
+        {"key": "dictamen_ia",             "filename": f"Dictamen_Pericial_IA_{caso_id}.md", "tipo": "md",   "categoria": "Dictamen IA",           "icono": "bi-robot",                  "color": "#fca5a5"},
+    ]
+
+    resultado = []
+    for arch in archivos_clave:
+        ruta_archivo = os.path.join(ruta_results, arch["filename"])
+        if os.path.exists(ruta_archivo):
+            stat = os.stat(ruta_archivo)
+            size_kb = round(stat.st_size / 1024, 1)
+            resultado.append({
+                "key":      arch["key"],
+                "filename": arch["filename"],
+                "tipo":     arch["tipo"],
+                "categoria":arch["categoria"],
+                "icono":    arch["icono"],
+                "color":    arch["color"],
+                "size_kb":  size_kb,
+                "ruta_abs": ruta_archivo,
+            })
+
+    return jsonify({"status": "ok", "archivos": resultado, "ruta_base": ruta_results})
+
+
+@app.route('/api/case/<raw_caso_id>/file_content', methods=['GET'])
+def get_file_content(raw_caso_id):
+    """Devuelve las primeras N líneas de un archivo de resultados para el visor."""
+    caso_id = sanitize_case_id(raw_caso_id)
+    if not caso_id:
+        return jsonify({"status": "error", "message": "caso_id inválido."}), 400
+
+    filename = request.args.get('filename', '').strip()
+    # Sanitizar: solo nombre de archivo, sin barras ni traversal
+    if not filename or '/' in filename or '\\' in filename or '..' in filename:
+        return jsonify({"status": "error", "message": "Nombre de archivo inválido."}), 400
+
+    ruta_results = get_case_results_path(caso_id)
+    if not ruta_results:
+        return jsonify({"status": "error", "message": "Carpeta de resultados no encontrada."}), 404
+
+    ruta_archivo = os.path.join(ruta_results, filename)
+    # Prevenir path traversal verificando que el archivo esté dentro de ruta_results
+    if not os.path.realpath(ruta_archivo).startswith(os.path.realpath(ruta_results) + os.sep):
+        return jsonify({"status": "error", "message": "Acceso denegado."}), 403
+
+    if not os.path.exists(ruta_archivo):
+        return jsonify({"status": "error", "message": f"Archivo '{filename}' no encontrado."}), 404
+
+    try:
+        max_chars = 8000  # Límite para no sobrecargar el frontend
+        with open(ruta_archivo, 'r', encoding='utf-8', errors='replace') as f:
+            contenido = f.read(max_chars)
+        truncado = os.path.getsize(ruta_archivo) > max_chars
+        sha = hashlib.sha256()
+        with open(ruta_archivo, 'rb') as f:
+            for chunk in iter(lambda: f.read(8192), b''):
+                sha.update(chunk)
+        return jsonify({
+            "status":   "ok",
+            "content":  contenido,
+            "truncado": truncado,
+            "sha256":   sha.hexdigest(),
+            "size_bytes": os.path.getsize(ruta_archivo),
+        })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/case/<raw_caso_id>/ai_report', methods=['GET'])
+def get_ai_report(raw_caso_id):
+    """Devuelve el contenido del Dictamen Pericial IA (Markdown) del caso."""
+    caso_id = sanitize_case_id(raw_caso_id)
+    if not caso_id:
+        return jsonify({"status": "error", "message": "caso_id inválido."}), 400
+
+    ruta_results = get_case_results_path(caso_id)
+    if not ruta_results:
+        return jsonify({"status": "not_found", "exists": False})
+
+    nombre_informe = f"Dictamen_Pericial_IA_{caso_id}.md"
+    ruta_informe = os.path.join(ruta_results, nombre_informe)
+
+    if not os.path.exists(ruta_informe):
+        return jsonify({"status": "not_found", "exists": False,
+                        "message": "El Dictamen IA aún no ha sido generado."})
+
+    try:
+        with open(ruta_informe, 'r', encoding='utf-8', errors='replace') as f:
+            contenido = f.read()
+        return jsonify({"status": "ok", "exists": True, "content": contenido,
+                        "filename": nombre_informe})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+
+@app.route('/api/run/ia', methods=['POST'])
+def run_ia():
+    """Ejecuta el Módulo 8 (Triaje IA) en segundo plano vía SSE."""
+    global running_proc
+    data = request.json or {}
+    caso_id = sanitize_case_id(data.get('caso_id', '').strip())
+    if not caso_id:
+        return jsonify({"status": "error", "message": "caso_id es obligatorio."}), 400
+
+    # Determinar destino real del caso
+    base_dest = get_case_base_from_registry(caso_id) or DESTINO_FORENSYS
+
+    script_path = os.path.join(SCRIPTS_DIR, '08_analista_ia.py')
+    if not os.path.exists(script_path):
+        return jsonify({"status": "error", "message": f"Script no encontrado: {script_path}"}), 404
+
+    def run_in_thread():
+        global running_proc
+        cmd = ['python3', script_path, '--caso', caso_id, '--dest', base_dest]
+        push_log(f'[SISTEMA] Iniciando Módulo 8: Triaje IA para caso {caso_id}', 'warn')
+        push_log(f'$ {" ".join(cmd)}', 'warn')
+        try:
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
+            proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, bufsize=1, env=env, start_new_session=True
+            )
+            with running_proc_lock:
+                running_proc = proc
+            for line in iter(proc.stdout.readline, ''):
+                line = line.rstrip('\n')
+                if line:
+                    push_log(line, 'info')
+            proc.wait()
+            rc = proc.returncode
+            if rc == 0:
+                push_log(f'[OK] Triaje IA completado (código: {rc})', 'success')
+            else:
+                push_log(f'[ERROR] Triaje IA terminó con código: {rc}', 'error')
+        except Exception as e:
+            push_log(f'[ERROR] Excepción en Módulo 8: {e}', 'error')
+        finally:
+            with running_proc_lock:
+                running_proc = None
+
+    t = threading.Thread(target=run_in_thread, daemon=True)
+    t.start()
+    return jsonify({"status": "success", "message": f"Módulo 8 iniciado para caso {caso_id}"})
 
 
 @app.route('/api/case/<raw_caso_id>/images', methods=['GET'])
