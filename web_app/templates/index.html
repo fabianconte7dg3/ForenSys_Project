@@ -1953,11 +1953,33 @@
                         <!-- 8. TRIAJE IA -->
                         <div class="module-panel" id="panel-TRIAJE-IA" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(16,185,129,0.03);">
                             <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-robot me-2" style="color: var(--accent-green);"></i>8. Triaje IA (Ollama)</h5>
-                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px;">Análisis forense automatizado con LLM local (Ollama / <strong style="color:var(--accent-green);">gemma3:4b</strong>). Lee los reportes generados por el Módulo 7 y genera un Dictamen Pericial en Markdown.</p>
-                            <div style="background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; margin-bottom:14px; font-size:0.82rem; color:var(--text-muted);">
-                                <i class="bi bi-info-circle me-2" style="color:var(--accent-blue);"></i>
-                                El dictamen se guarda en <code style="font-size:0.78rem;color:var(--accent-cyan);">03_Results_(Resultados_Extraidos)/Dictamen_Pericial_IA_<caso_id>.md</code> dentro del caso en el disco externo. Requiere que el Módulo 7 haya corrido primero.
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px;">Análisis forense automatizado con LLM local o remoto. Lee los reportes generados por el Módulo 7 y genera un Dictamen Pericial en Markdown.</p>
+                            
+                            <!-- AI Engine Configuration -->
+                            <div style="background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:12px 14px; margin-bottom:14px;">
+                                <div style="display:flex; gap:15px; flex-wrap:wrap; margin-bottom:10px;">
+                                    <div style="flex:1; min-width:200px;">
+                                        <label class="form-label-custom">Motor de Inferencia</label>
+                                        <select id="ia-motor-select" class="form-control-custom" onchange="toggleIaRemoteHost()">
+                                            <option value="local">Raspberry Pi 5 (Local - Menor Potencia)</option>
+                                            <option value="remoto">PC Escritorio (Remoto Ryzen/RX - Máx Potencia)</option>
+                                        </select>
+                                    </div>
+                                    <div style="flex:1; min-width:200px;">
+                                        <label class="form-label-custom">Modelo LLM</label>
+                                        <input type="text" id="ia-model-input" class="form-control-custom" value="gemma3:4b" placeholder="Ej: gemma3:4b, mistral:7b">
+                                    </div>
+                                </div>
+                                <div id="ia-remote-host-container" style="display:none;">
+                                    <label class="form-label-custom">URL Motor Remoto (Ollama Desktop PC)</label>
+                                    <div style="display:flex; gap:8px;">
+                                        <input type="text" id="ia-host-input" class="form-control-custom" placeholder="Ej: http://192.168.1.50:11434">
+                                        <button class="btn-secondary" onclick="saveIaConfig()"><i class="bi bi-save me-1"></i>Guardar</button>
+                                    </div>
+                                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:5px;">Asegúrate de que Ollama en el PC tenga configurada la variable <code>OLLAMA_HOST=0.0.0.0</code></div>
+                                </div>
                             </div>
+                            
                             <!-- Botón de estado dictamen -->
                             <div id="ia-report-status" style="margin-bottom:12px; font-size:0.82rem;"></div>
                             <div style="margin-top: 12px;">
@@ -1982,6 +2004,16 @@
                             <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Consolidación de cadena de custodia, hash maestro, hallazgos de IA y anexos en un único documento legal.</p>
                             <div style="margin-top: 20px;">
                                 <button class="btn-primary" id="btn-run-report" style="background: var(--accent-purple); border-color: var(--accent-purple);"><i class="bi bi-play-fill me-2"></i>Generar y Sellar Reporte PDF</button>
+                            </div>
+                            <!-- Progress Bar Reporte -->
+                            <div id="report-progress-container" style="display: none; margin-top: 20px;">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
+                                    <span id="report-progress-text">Progreso: 0%</span>
+                                    <span id="report-progress-detail">Generando documento...</span>
+                                </div>
+                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
+                                    <div id="report-progress-bar" style="width: 0%; height: 100%; background: var(--accent-purple); transition: width 0.3s ease;"></div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -2229,36 +2261,24 @@
             </section>
 
             <!-- ============================================================
-                 SECTION 5: RESULTADOS IA
+                 SECTION 5: RESULTADOS IA (DICTAMEN PERICIAL)
                  ============================================================ -->
             <section class="page-section" id="section-ia">
                 <div class="section-header">
-                    <div class="section-title">Resultados IA</div>
-                    <div class="section-subtitle">Hallazgos generados por el motor de triaje automatizado. Datos simulados — Pre-cargados desde JSON.</div>
+                    <div class="section-title">Resultados IA (Dictamen Pericial)</div>
+                    <div class="section-subtitle">Informe técnico-legal generado automáticamente por el motor LLM (Módulo 8).</div>
                 </div>
 
                 <div class="fs-card">
                     <div class="fs-card-header">
-                        <i class="bi bi-table fs-card-header-icon"></i>
-                        Tabla de Hallazgos &mdash; <span style="color:var(--accent-red);">2 Críticos</span>, 1 Medio, 1 Bajo
-                        <span class="ms-auto" style="font-size:.7rem;font-family:var(--font-mono);color:var(--accent-green);">
-                            Motor: LLM-Forense v0.9 | Temp: 0.0
-                        </span>
+                        <i class="bi bi-file-text fs-card-header-icon"></i>
+                        Dictamen Pericial
+                        <button class="btn-secondary ms-auto" onclick="loadRealIaReport(activeCaseNumber)" style="padding:4px 8px; font-size:0.75rem;">
+                            <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
+                        </button>
                     </div>
-                    <div style="overflow-x:auto;">
-                        <table class="ai-results-table" id="ai-table">
-                            <thead>
-                                <tr>
-                                    <th>Artefacto</th>
-                                    <th>Tipo de Alerta</th>
-                                    <th>Nivel de Riesgo</th>
-                                    <th>Detalle Técnico</th>
-                                </tr>
-                            </thead>
-                            <tbody id="ai-tbody">
-                                <!-- JS-populated -->
-                            </tbody>
-                        </table>
+                    <div style="padding:15px;">
+                        <pre id="ia-real-report-content" style="white-space: pre-wrap; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-main); background: var(--bg-body); padding: 15px; border-radius: 6px; border: 1px solid var(--border-dim); min-height: 200px;">El dictamen aún no ha sido generado o no se ha cargado un caso.</pre>
                     </div>
                 </div>
             </section>
@@ -2572,8 +2592,8 @@ function initSSE() {
                 const pct = parseInt(wipeMatch[1]);
                 const detailStr = data.msg.replace(/^\[PROGRESO:\d+\]\s*/, '').trim() || 'Operación en progreso...';
 
-                // Incluye 'timeline' e 'ia' además de los módulos anteriores
-                ['wiping', 'usb', 'ram', 'mobile', 'cloud', 'timeline', 'ia'].forEach(prefix => {
+                // Incluye 'timeline', 'ia' y 'report' además de los módulos anteriores
+                ['wiping', 'usb', 'ram', 'mobile', 'cloud', 'timeline', 'ia', 'report'].forEach(prefix => {
                     const pContainer = document.getElementById(`${prefix}-progress-container`);
                     if (pContainer && pContainer.style.display !== 'none') {
                         const pBar    = document.getElementById(`${prefix}-progress-bar`);
@@ -2596,9 +2616,12 @@ function initSSE() {
                             if (prefix === 'cloud') {
                                 setTimeout(() => document.dispatchEvent(new Event('osint-complete')), 800);
                             }
-                            // Al terminar IA, recargar el explorador de evidencia
+                            // Al terminar IA, recargar el explorador de evidencia y el reporte
                             if (prefix === 'ia' && activeCaseNumber) {
-                                setTimeout(() => loadRealEvidence(activeCaseNumber), 1500);
+                                setTimeout(() => {
+                                    loadRealEvidence(activeCaseNumber);
+                                    loadRealIaReport(activeCaseNumber);
+                                }, 1500);
                             }
                             // Al terminar la normalización, recargar el explorador
                             if (prefix === 'timeline' && activeCaseNumber) {
@@ -3729,11 +3752,15 @@ function runOperation(btnId) {
         const btnIaEl = document.getElementById('btn-ia');
         if (btnIaEl) btnIaEl.classList.add('running');
         addLogEntry(`[SISTEMA] Iniciando Módulo 8: Triaje IA para CASO: ${activeCaseNumber}`, 'log-system');
+        const motorSel = document.getElementById('ia-motor-select')?.value || 'local';
+        const modelVal = document.getElementById('ia-model-input')?.value || '';
+
         fetch('/api/run/ia', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ caso_id: activeCaseNumber })
+            body: JSON.stringify({ caso_id: activeCaseNumber, motor: motorSel, modelo: modelVal })
         })
+
         .then(r => r.json())
         .then(data => {
             if (data.status !== 'success') {
@@ -3750,6 +3777,20 @@ function runOperation(btnId) {
             if (btnIaEl) btnIaEl.classList.remove('running');
         });
         return; // Salir — no llama a /api/run_command
+    } else if (btnId === 'btn-report') {
+        if (!activeCaseNumber) {
+            addLogEntry('[ERROR] No hay caso activo.', 'log-error');
+            return;
+        }
+        command = `python3 /home/ciber-admin/ForenSys_Project/scripts/09_reporte_pdf.py --caso ${activeCaseNumber}`;
+        const pReportContainer = document.getElementById('report-progress-container');
+        if (pReportContainer) {
+            pReportContainer.style.display = 'block';
+            document.getElementById('report-progress-bar').style.width = '0%';
+            document.getElementById('report-progress-bar').style.background = 'var(--accent-purple)';
+            document.getElementById('report-progress-text').textContent = 'Progreso: 0%';
+            document.getElementById('report-progress-detail').textContent = 'Iniciando generación de PDF...';
+        }
     } else {
         // Módulos no reconocidos: ignorar
         addLogEntry(`[INFO] Módulo ${btnId} no está conectado aún.`, 'log-warn');
@@ -4494,7 +4535,37 @@ function switchTab(tab) {
     document.getElementById('pane-hex').classList.toggle('active',  tab === 'hex');
 }
 
-populateAITable();
+function loadRealIaReport(casoId) {
+    const reportBox = document.getElementById('ia-real-report-content');
+    if (!reportBox) return;
+
+    if (!casoId) {
+        reportBox.textContent = "No hay un caso activo.";
+        return;
+    }
+
+    reportBox.textContent = "Cargando dictamen...";
+    
+    fetch(`/api/case/${casoId}/ai_report`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok' && data.exists) {
+                reportBox.textContent = data.content;
+            } else if (data.status === 'not_found') {
+                reportBox.textContent = "El dictamen de IA aún no ha sido generado para este caso. Ejecuta el Módulo 8 primero.";
+            } else {
+                reportBox.textContent = `Error: ${data.message || 'Desconocido'}`;
+            }
+        })
+        .catch(err => {
+            reportBox.textContent = `Error de red al cargar el dictamen: ${err}`;
+        });
+}
+
+// Call if there's an active case (though initially it's null, it's safer)
+if (typeof activeCaseNumber !== 'undefined' && activeCaseNumber) {
+    loadRealIaReport(activeCaseNumber);
+}
 
 // ── TELEMETRÍA EN TIEMPO REAL ─────────────────────────────────────
 // Tracks which disk is selected in the Overview section
@@ -4647,6 +4718,49 @@ function actualizarTelemetria() {
 // Arrancar sondeo automático cada 3 segundos (temperatura incluida)
 setInterval(actualizarTelemetria, 3000);
 actualizarTelemetria();  // Primera lectura inmediata
+
+// ── CONFIGURACIÓN IA (MÓDULO 8) ──────────────────────────────────
+function toggleIaRemoteHost() {
+    const motor = document.getElementById('ia-motor-select').value;
+    const container = document.getElementById('ia-remote-host-container');
+    container.style.display = (motor === 'remoto') ? 'block' : 'none';
+}
+
+function loadIaConfig() {
+    fetch('/api/config/ia')
+        .then(r => r.json())
+        .then(data => {
+            if (data.remote_host) {
+                document.getElementById('ia-host-input').value = data.remote_host;
+            }
+        })
+        .catch(err => console.error("Error loading IA config:", err));
+}
+
+function saveIaConfig() {
+    const host = document.getElementById('ia-host-input').value.trim();
+    if (!host) {
+        addLogEntry('[ERROR] Ingresa una URL válida para el motor remoto.', 'log-error');
+        return;
+    }
+    fetch('/api/config/ia', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ remote_host: host, ctx: 4096, threads: 12 })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            addLogEntry('[OK] Configuración IA remota guardada en el disco externo.', 'log-success');
+        } else {
+            addLogEntry('[ERROR] ' + data.message, 'log-error');
+        }
+    })
+    .catch(err => addLogEntry('[ERROR] ' + err, 'log-error'));
+}
+
+// Inicializar configuración IA
+loadIaConfig();
 
 </script>
 

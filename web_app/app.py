@@ -410,9 +410,16 @@ def run_ia():
     if not os.path.exists(script_path):
         return jsonify({"status": "error", "message": f"Script no encontrado: {script_path}"}), 404
 
+    # Opciones de IA enviadas desde el frontend
+    motor = data.get('motor', 'local').strip()
+    modelo = data.get('modelo', '').strip()
+
     def run_in_thread():
         global running_proc
-        cmd = ['python3', script_path, '--caso', caso_id, '--dest', base_dest]
+        cmd = ['python3', script_path, '--caso', caso_id, '--dest', base_dest, '--motor', motor]
+        if modelo:
+            cmd.extend(['--model', modelo])
+            
         push_log(f'[SISTEMA] Iniciando Módulo 8: Triaje IA para caso {caso_id}', 'warn')
         push_log(f'$ {" ".join(cmd)}', 'warn')
         try:
@@ -442,7 +449,33 @@ def run_ia():
 
     t = threading.Thread(target=run_in_thread, daemon=True)
     t.start()
-    return jsonify({"status": "success", "message": f"Módulo 8 iniciado para caso {caso_id}"})
+    return jsonify({"status": "success", "message": f"Módulo 8 iniciado para caso {caso_id} con motor {motor}"})
+
+
+@app.route('/api/config/ia', methods=['GET', 'POST'])
+def manage_ia_config():
+    """Gestiona la configuración del motor de IA."""
+    config_path = os.path.join(DESTINO_FORENSYS, ".ia_config.json")
+    
+    if request.method == 'GET':
+        if not os.path.exists(config_path):
+            return jsonify({"remote_host": "", "ctx": 4096, "threads": 12})
+        try:
+            with open(config_path, 'r') as f:
+                return jsonify(json.load(f))
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
+            
+    if request.method == 'POST':
+        data = request.json or {}
+        try:
+            # Si el directorio no existe, se intenta crear
+            os.makedirs(DESTINO_FORENSYS, exist_ok=True)
+            with open(config_path, 'w') as f:
+                json.dump(data, f, indent=4)
+            return jsonify({"status": "success", "message": "Configuración guardada."})
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 500
 
 
 @app.route('/api/case/<raw_caso_id>/images', methods=['GET'])

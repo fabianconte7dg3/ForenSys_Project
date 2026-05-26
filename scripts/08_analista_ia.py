@@ -6,32 +6,31 @@ import requests
 from datetime import datetime
 
 # ==========================================
-# CONFIGURACIÓN DEL LLM LOCAL (OLLAMA)
+# CONFIGURACIÓN DEL LLM (Valores default — sobreescribibles por args)
 # ==========================================
-OLLAMA_URL = "http://localhost:11434/api/generate"
-MODELO_LLM = "gemma3:4b"  # Cambia esto si usaste otro modelo en Ollama
+OLLAMA_BASE_URL   = "http://localhost:11434"   # Host Ollama (local o remoto)
+OLLAMA_URL        = OLLAMA_BASE_URL + "/api/generate"
+MODELO_LLM        = "gemma3:4b"               # Modelo por defecto (RPi5)
 DIRECTORIO_DEFAULT = "/mnt/Destino_ForenSys"
 
-# --- CONFIGURACIÓN DE RENDIMIENTO (Raspberry Pi 5 - 8GB) ---
-# Ventana de contexto: cuántos tokens puede procesar el modelo.
-# Más bajo = menos RAM. 2048 es seguro para 8GB con un modelo 4B.
-NUM_CTX = 2048
+# --- PERFIL: Raspberry Pi 5 (8 GB RAM) ---
+RPI_CTX     = 2048   # Ventana de contexto conservadora
+RPI_THREAD  = 4      # 4 cores físicos
+RPI_TIMEOUT = 900    # 15 minutos
 
-# Hilos de CPU: la RPi5 tiene 4 cores. 4 hilos es el máximo eficiente.
-# Usar más causa context-switching y congelamiento.
-NUM_THREAD = 4
+# --- PERFIL: PC Escritorio (Ryzen 5600G + RX 6600 XT) ---
+PC_CTX     = 4096   # Ventana de contexto amplia
+PC_THREAD  = 12     # 6c/12t del 5600G
+PC_TIMEOUT = 300    # 5 minutos (GPU/CPU más rápida)
 
-# Cuánto tiempo mantener el modelo en memoria después de responder.
-# "0" = descargarlo inmediatamente para liberar RAM.
-KEEP_ALIVE = "0"
+# Valores activos (se sobrescriben en main según el motor elegido)
+NUM_CTX    = RPI_CTX
+NUM_THREAD = RPI_THREAD
+KEEP_ALIVE = "0"     # Descargar modelo tras responder
+TIMEOUT_SOLICITUD = RPI_TIMEOUT
 
-# Límite máximo de caracteres del prompt de evidencia.
-# Esto evita que un caso enorme sature la ventana de contexto.
+# Presupuesto de caracteres del prompt
 MAX_CARACTERES_EVIDENCIA = 6000
-
-# Timeout de la solicitud HTTP (en segundos).
-# Un modelo 4B en RPi5 puede tardar 5-15 minutos para generar un informe largo.
-TIMEOUT_SOLICITUD = 900  # 15 minutos
 
 
 def imprimir_banner():
@@ -50,27 +49,28 @@ def imprimir_banner():
 
 def comprobar_ollama():
     """Verifica si el servidor de Ollama está encendido y el modelo existe."""
-    print(f"[*] Conectando con el motor de IA local ({MODELO_LLM}) en {OLLAMA_URL}...")
+    print(f"[*] Conectando con el motor de IA en {OLLAMA_BASE_URL} (modelo: {MODELO_LLM})...")
     try:
-        respuesta = requests.get("http://localhost:11434/", timeout=10)
+        respuesta = requests.get(OLLAMA_BASE_URL + "/", timeout=10)
         if respuesta.status_code == 200:
             print("[+] Servidor Ollama: EN LÍNEA")
             # Verificar que el modelo existe
             try:
-                modelos = requests.get("http://localhost:11434/api/tags", timeout=10).json()
+                modelos = requests.get(OLLAMA_BASE_URL + "/api/tags", timeout=10).json()
                 nombres = [m['name'] for m in modelos.get('models', [])]
                 if MODELO_LLM in nombres or any(MODELO_LLM.split(':')[0] in n for n in nombres):
                     print(f"[+] Modelo '{MODELO_LLM}': DISPONIBLE")
                 else:
-                    print(f"[!] Advertencia: Modelo '{MODELO_LLM}' no encontrado en la lista local.")
+                    print(f"[!] Advertencia: Modelo '{MODELO_LLM}' no encontrado.")
                     print(f"    Modelos disponibles: {', '.join(nombres) if nombres else 'Ninguno'}")
-                    print(f"    Ejecuta: ollama pull {MODELO_LLM}")
+                    print(f"    Ejecuta en el motor remoto: ollama pull {MODELO_LLM}")
             except Exception:
                 pass
             return True
     except requests.exceptions.ConnectionError:
-        print("[-] ERROR: No se pudo conectar a Ollama. ¿Está encendido el servicio?")
-        print("    Prueba ejecutar en otra terminal: sudo systemctl start ollama")
+        print(f"[-] ERROR: No se pudo conectar a Ollama en {OLLAMA_BASE_URL}.")
+        print("    • Motor local (RPi5): sudo systemctl start ollama")
+        print("    • Motor remoto (PC):  Asegúrate de que Ollama está corriendo con OLLAMA_HOST=0.0.0.0")
         return False
     return False
 
@@ -274,12 +274,11 @@ REGLAS: No inventes datos. Solo analiza lo proporcionado. Tono formal y pericial
     }
 
     print("[*] Transmitiendo datos a la IA (streaming activado)...")
-    print("[*] La respuesta aparecerá en tiempo real. Ctrl+C para cancelar.\n")
+    print(f"[*] Motor: {OLLAMA_BASE_URL} | Modelo: {MODELO_LLM} | ctx: {NUM_CTX} | threads: {NUM_THREAD}")
+    print("[*] La respuesta aparece en tiempo real. Ctrl+C para cancelar.\n")
     print("=" * 60)
     
     try:
-        # stream=True en requests = recibir la respuesta chunk por chunk
-        # Esto evita que requests acumule toda la respuesta en memoria
         respuesta = requests.post(OLLAMA_URL, json=carga_util, stream=True, timeout=TIMEOUT_SOLICITUD)
         respuesta.raise_for_status()
         
@@ -340,26 +339,82 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Analizador IA Forense (Ollama) — Foren-Sys")
-    parser.add_argument("--caso",  required=True,  help="ID del caso (Ej: TEST-123)")
-    parser.add_argument("--dest",  required=False, default=DIRECTORIO_DEFAULT,
+    parser.add_argument("--caso",   required=True,  help="ID del caso (Ej: TEST-123)")
+    parser.add_argument("--dest",   required=False, default=DIRECTORIO_DEFAULT,
                         help=f"Ruta base donde vive el caso (default: {DIRECTORIO_DEFAULT})")
+    parser.add_argument("--motor",  required=False, default="local",
+                        choices=["local", "remoto"],
+                        help="Motor Ollama: 'local' = RPi5, 'remoto' = PC Escritorio (default: local)")
+    parser.add_argument("--host",   required=False, default=None,
+                        help="URL del servidor Ollama remoto (Ej: http://192.168.1.50:11434). Sobreescribe --motor.")
+    parser.add_argument("--model",  required=False, default=None,
+                        help="Nombre del modelo a usar (Ej: gemma3:4b, llama3.2:3b, mistral:7b)")
+    parser.add_argument("--ctx",    required=False, type=int, default=None,
+                        help="Ventana de contexto en tokens (sobreescribe el perfil del motor)")
+    parser.add_argument("--threads",required=False, type=int, default=None,
+                        help="Número de hilos CPU (sobreescribe el perfil del motor)")
     args = parser.parse_args()
 
+    # ── Limpiar inputs ───────────────────────────────────────
     caso_id               = re.sub(r'[^a-zA-Z0-9_\-]', '', args.caso.strip())
     directorio_base_actual = args.dest.strip()
 
-    print(f"[PROGRESO:5] Iniciando Triaje IA para el caso: {caso_id}")
-    print(f"    Configuración RPi5: ctx={NUM_CTX} | threads={NUM_THREAD} | keep_alive={KEEP_ALIVE}")
-    print(f"    Límite evidencia: {MAX_CARACTERES_EVIDENCIA} caracteres")
+    # ── Aplicar perfil de motor ──────────────────────────────
+    if args.host:
+        # Host explícito — tiene precedencia total sobre --motor
+        OLLAMA_BASE_URL   = args.host.rstrip('/')
+        OLLAMA_URL        = OLLAMA_BASE_URL + "/api/generate"
+        NUM_CTX           = args.ctx     or PC_CTX      # Perfil desktop si no se especifica
+        NUM_THREAD        = args.threads or PC_THREAD
+        TIMEOUT_SOLICITUD = PC_TIMEOUT
+        perfil_nombre     = f"Personalizado ({OLLAMA_BASE_URL})"
+    elif args.motor == "remoto":
+        # El host remoto está guardado en la config; si no, error
+        config_path = os.path.join(directorio_base_actual, ".ia_config.json")
+        if not os.path.exists(config_path):
+            print("[-] ERROR: Motor remoto seleccionado pero no hay host configurado.")
+            print(f"    Crea {config_path} con la IP de tu PC de escritorio,")
+            print("    o usa: --host http://192.168.X.X:11434")
+            sys.exit(1)
+        with open(config_path, 'r') as f:
+            ia_cfg = json.load(f)
+        host_remoto = ia_cfg.get('remote_host', '').rstrip('/')
+        if not host_remoto:
+            print("[-] ERROR: 'remote_host' está vacío en la configuración.")
+            sys.exit(1)
+        OLLAMA_BASE_URL   = host_remoto
+        OLLAMA_URL        = OLLAMA_BASE_URL + "/api/generate"
+        NUM_CTX           = args.ctx     or ia_cfg.get('ctx',     PC_CTX)
+        NUM_THREAD        = args.threads or ia_cfg.get('threads', PC_THREAD)
+        TIMEOUT_SOLICITUD = ia_cfg.get('timeout', PC_TIMEOUT)
+        perfil_nombre     = f"PC Escritorio Remoto ({OLLAMA_BASE_URL})"
+    else:
+        # Motor local (RPi5) — default
+        OLLAMA_BASE_URL   = "http://localhost:11434"
+        OLLAMA_URL        = OLLAMA_BASE_URL + "/api/generate"
+        NUM_CTX           = args.ctx     or RPI_CTX
+        NUM_THREAD        = args.threads or RPI_THREAD
+        TIMEOUT_SOLICITUD = RPI_TIMEOUT
+        perfil_nombre     = "Raspberry Pi 5 (Local)"
 
-    # -- Verificar Ollama --
-    print(f"[PROGRESO:10] Verificando motor Ollama ({MODELO_LLM})...")
+    # Modelo: argumento explícito tiene precedencia
+    if args.model:
+        MODELO_LLM = args.model.strip()
+
+    print(f"[PROGRESO:5] Iniciando Triaje IA para el caso: {caso_id}")
+    print(f"    Motor:   {perfil_nombre}")
+    print(f"    Modelo:  {MODELO_LLM}")
+    print(f"    Config:  ctx={NUM_CTX} | threads={NUM_THREAD} | timeout={TIMEOUT_SOLICITUD}s")
+    print(f"    Evidencia máx.: {MAX_CARACTERES_EVIDENCIA} caracteres")
+
+    # ── Verificar Ollama ─────────────────────────────────────
+    print(f"[PROGRESO:10] Verificando motor Ollama...")
     if not comprobar_ollama():
-        print("[-] ERROR: Motor Ollama no disponible. Verifica que el servicio esté activo.")
+        print("[-] ERROR: Motor Ollama no disponible.")
         sys.exit(1)
 
+    # ── Localizar carpeta de resultados ───────────────────────
     carpeta_resultados = os.path.join(directorio_base_actual, caso_id, "03_Results_(Resultados_Extraidos)")
-
     if not os.path.exists(carpeta_resultados):
         print(f"[-] ERROR: No se encontró la carpeta de resultados en: {carpeta_resultados}")
         print("    Asegúrate de haber ejecutado el Módulo 7 (Normalización) primero.")
@@ -367,16 +422,15 @@ if __name__ == "__main__":
 
     ruta_informe_ia = os.path.join(carpeta_resultados, f"Dictamen_Pericial_IA_{caso_id}.md")
 
-    # -- Recopilar evidencia --
+    # ── Recopilar evidencia ─────────────────────────────────
     print("[PROGRESO:30] Recopilando y filtrando evidencia de los módulos anteriores...")
     evidencia_filtrada = recopilar_inteligencia(carpeta_resultados)
-
     if len(evidencia_filtrada) < 50:
-        print("[-] Advertencia: Se encontró muy poca evidencia. Asegúrate de que el Módulo 7 haya completado correctamente.")
-        print("[-] Continuando de todos modos con la evidencia disponible...")
+        print("[-] Advertencia: Poca evidencia disponible. ¿Ejecutaste el Módulo 7?")
+        print("[-] Continuando con la evidencia disponible...")
 
-    print("[PROGRESO:60] Transmitiendo evidencia al LLM local (streaming activado)...")
-    # -- Análisis con streaming --
+    # ── Análisis IA ─────────────────────────────────────────
+    print(f"[PROGRESO:60] Transmitiendo evidencia al LLM (motor: {perfil_nombre})...")
     analizar_con_ia(evidencia_filtrada, ruta_informe_ia)
 
     if os.path.exists(ruta_informe_ia):
