@@ -1550,9 +1550,11 @@
                                 <i class="bi bi-info-circle me-1"></i>
                                 <strong style="color:var(--text-main);">Estándar HDD/USB:</strong> Buffer auto-ajustado (4–16 MB) para máximo throughput secuencial. Buffer grande = menos overhead I/O.
                             </div>
-
-                            <div>
+                            
+                            <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                                 <button class="btn-primary" id="btn-run-wiping" style="background: var(--accent-red); border-color: var(--accent-red);"><i class="bi bi-play-fill me-2"></i>Ejecutar Wiping</button>
+                                <button class="btn-secondary" onclick="window.open('/api/logs/wiping', '_blank')"><i class="bi bi-journal-text me-2"></i>Log Forense (NIST)</button>
+                                <button class="btn-secondary" onclick="window.open('/api/logs/coc', '_blank')"><i class="bi bi-shield-check me-2"></i>Cadena de Custodia</button>
                             </div>
 
                             <!-- Progress Bar -->

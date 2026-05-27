@@ -20,6 +20,33 @@ import re
 import argparse
 import signal
 import shutil
+import logging
+import hashlib
+import getpass
+import socket
+import json
+from datetime import datetime
+
+# ── Logging Forense ────────────────────────────────────────────────
+logger = logging.getLogger('ForenSys_Wiping')
+logger.setLevel(logging.INFO)
+try:
+    handler = logging.FileHandler('/var/log/forensys_wiping.log')
+    formatter = logging.Formatter(
+        '%(asctime)s [%(levelname)s] [USER:%(user)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S.%f'
+    )
+    handler.setFormatter(formatter)
+    # Filter to inject the user dynamically
+    class UserFilter(logging.Filter):
+        def filter(self, record):
+            record.user = getpass.getuser()
+            return True
+    logger.addFilter(UserFilter())
+    logger.addHandler(handler)
+except PermissionError:
+    # Si no somos root al importar, ignorar (main() verificará root)
+    pass
 
 proc_hijo = None  # Referencia global al subproceso
 
@@ -44,9 +71,66 @@ signal.signal(signal.SIGINT,  handle_signal)
 
 def log(msg):
     print(msg, flush=True)
+    if hasattr(logger, 'info'):
+        # Quitar colores ANSI y tags si los hubiera para el log limpio
+        clean_msg = re.sub(r'\[.*?\]\s*', '', msg)
+        logger.info(clean_msg)
 
 def progress(pct, detail=""):
     print(f"[PROGRESO:{pct}] {detail}", flush=True)
+
+def log_chain_of_custody(disco, action):
+    """Documentar cadena de custodia forense"""
+    try:
+        current_hash = hashlib.sha256(open(__file__, 'rb').read()).hexdigest()
+        coc = {
+            'timestamp': datetime.now().isoformat(),
+            'usuario': getpass.getuser(),
+            'hostname': socket.gethostname(),
+            'dispositivo': disco,
+            'accion': action,
+            'pid': os.getpid(),
+            'hash_script': current_hash
+        }
+        with open('/var/log/forensys_coc.log', 'a') as f:
+            f.write(json.dumps(coc) + '\n')
+    except Exception as e:
+        logger.error(f"Error escribiendo cadena de custodia: {e}")
+
+def check_dependencies():
+    """Verificar herramientas forenses requeridas"""
+    required = ['dd', 'ionice', 'blockdev', 'parted', 'mkfs.ext4', 'dc3dd']
+    missing = []
+    for tool in required:
+        if not shutil.which(tool):
+            missing.append(tool)
+    if missing:
+        log(f"[X] Herramientas faltantes: {', '.join(missing)}")
+        log("[*] Instale con: sudo apt install dcfldd dc3dd")
+        sys.exit(1)
+
+def verify_wiping(disco, sample_size=1024*1024*100):
+    """Leer sectores aleatorios y verificar que sean ceros (NIST 800-88 §3)"""
+    import random
+    log("[*] Iniciando verificación post-wiping (NIST 800-88 §3)...")
+    progress(81, "Verificando sectores aleatorios...")
+    info = get_device_info(disco)
+    size = info['size_bytes']
+    if size <= sample_size:
+        return True
+        
+    for i in range(10):  # 10 samples
+        offset = random.randint(0, size - sample_size)
+        proc = subprocess.Popen(
+            ['dd', f'if={disco}', 'bs=4096', f'skip={offset//4096}', f'count={sample_size//4096}'],
+            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL
+        )
+        data = proc.stdout.read()
+        if data != b'\x00' * len(data):
+            log(f"[X] VERIFICACIÓN FALLIDA: Datos residuales detectados en offset {offset}!")
+            return False
+    log("[+] Verificación post-wiping exitosa. El disco es estéril.")
+    return True
 
 
 def get_device_info(disco):
@@ -355,6 +439,9 @@ def main():
         log(f"[X] El dispositivo {disco} no existe.")
         sys.exit(1)
 
+    check_dependencies()
+    log_chain_of_custody(disco, "START_WIPING")
+
     # Detectar dispositivo
     progress(2, "Analizando dispositivo...")
     dev_info = get_device_info(disco)
@@ -435,6 +522,12 @@ def main():
         velocidad = dev_info['size_bytes'] / t_total
         log(f"[*] Velocidad promedio: {_human(velocidad)}/s")
 
+    # Verificación post-wiping
+    if not verify_wiping(disco):
+        log("[X] ERROR CRÍTICO: El disco no es seguro para su uso forense.")
+        log_chain_of_custody(disco, "FAILED_VERIFICATION")
+        sys.exit(1)
+
     # PASO 2: Crear tabla de particiones y formatear
     progress(83, "Creando tabla de particiones GPT...")
     log("\n[*] PASO 2/3: Creando tabla GPT y formateando ext4...")
@@ -468,6 +561,8 @@ def main():
     log(f"[*] Tiempo total: {t_human}")
     log(f"[*] Montado en:   {punto_montaje}")
     log(f"[*] Norma:        NIST 800-88 / DoD 5220.22-M ({args.passes} pasada(s))")
+
+    log_chain_of_custody(disco, "SUCCESS_WIPING_COMPLETED")
 
 
 if __name__ == "__main__":

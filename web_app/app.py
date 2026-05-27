@@ -1019,6 +1019,30 @@ def run_command_api():
     return jsonify({'status': 'success', 'message': 'Comando enviado al ejecutor'})
 
 
+@app.route('/api/logs/wiping', methods=['GET'])
+def get_wiping_logs():
+    """Retorna el log estructurado forense de la limpieza de disco."""
+    try:
+        with open('/var/log/forensys_wiping.log', 'r') as f:
+            return f.read(), 200, {'Content-Type': 'text/plain'}
+    except FileNotFoundError:
+        return "Aún no hay logs de Wiping. El archivo /var/log/forensys_wiping.log no existe.", 404
+    except Exception as e:
+        return f"Error leyendo logs: {str(e)}", 500
+
+
+@app.route('/api/logs/coc', methods=['GET'])
+def get_coc_logs():
+    """Retorna la cadena de custodia (Chain of Custody)."""
+    try:
+        with open('/var/log/forensys_coc.log', 'r') as f:
+            return f.read(), 200, {'Content-Type': 'text/plain'}
+    except FileNotFoundError:
+        return "Aún no hay Cadena de Custodia. El archivo /var/log/forensys_coc.log no existe.", 404
+    except Exception as e:
+        return f"Error leyendo logs: {str(e)}", 500
+
+
 @app.route('/api/kill_command', methods=['POST'])
 def kill_command():
     """Termina el subproceso activo y TODOS sus hijos (sudo → python → dc3dd, etc.)."""
