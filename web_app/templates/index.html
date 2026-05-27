@@ -1602,8 +1602,10 @@
                                 </ul>
                             </div>
 
-                            <div style="margin-top: 20px;">
+                            <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                                 <button class="btn-primary" id="btn-run-disk" style="display:none;"><i class="bi bi-play-fill me-2"></i>Ejecutar Extracción Forense</button>
+                                <button class="btn-secondary" id="btn-view-report-deadbox" onclick="window.open('/api/deadbox/report/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-file-earmark-code me-2"></i>Ver Reporte JSON</button>
+                                <button class="btn-secondary" id="btn-view-sig-deadbox" onclick="window.open('/api/deadbox/signature/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-key me-2"></i>Descargar Firma RSA</button>
                             </div>
                         </div>
 

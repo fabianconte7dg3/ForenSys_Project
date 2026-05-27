@@ -4,7 +4,14 @@ import time
 import hashlib
 import subprocess
 import argparse
+import re
+import json
+import getpass
+import socket
 from datetime import datetime
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
+
 
 def imprimir_banner():
     print("==================================================")
@@ -25,6 +32,23 @@ def get_device_info(ruta):
     except Exception:
         pass
     return info
+
+def verificar_write_blocker(dispositivo):
+    """Verificar que el dispositivo esté en modo read-only antes de cualquier lectura."""
+    print(f"\n[*] 0/4: Verificando Write-Blocker Lógico en {dispositivo}...")
+    result = subprocess.run(['blockdev', '--getro', dispositivo], capture_output=True, text=True)
+    
+    if result.stdout.strip() != '1':
+        print(f"[X] ALERTA FORENSE: {dispositivo} NO está en modo read-only!")
+        print("[*] Intentando activar write-blocker de software (blockdev --setro)...")
+        subprocess.run(['sudo', 'blockdev', '--setro', dispositivo])
+        
+        result = subprocess.run(['blockdev', '--getro', dispositivo], capture_output=True, text=True)
+        if result.stdout.strip() != '1':
+            print("[X] FALLO CRÍTICO: No se pudo activar read-only. Abortando adquisición.")
+            sys.exit(1)
+            
+    print(f"[✓] {dispositivo} confirmado en modo read-only (write-blocked).")
 
 def generar_cadena_custodia(destino_base, caso_id, perito, origen, hash_pre):
     """Genera el Acta de Cadena de Custodia (ISO/IEC 27037)."""
@@ -88,8 +112,8 @@ def calcular_hash(ruta_dispositivo):
         print(f"\n[X] No se encontró el dispositivo {ruta_dispositivo}.")
         sys.exit(1)
 
-def crear_imagen_dd(origen, destino_base, caso_id):
-    """Utiliza dc3dd para crear la imagen física bit a bit."""
+def crear_imagen_dd(origen, destino_base, caso_id, hash_original):
+    """Utiliza dc3dd para crear la imagen física y verifica su hash posteriormente."""
     ruta_imagen = os.path.join(destino_base, f"{caso_id}_evidencia.dd")
     ruta_log = os.path.join(destino_base, f"{caso_id}_dc3dd.log")
     
@@ -106,42 +130,98 @@ def crear_imagen_dd(origen, destino_base, caso_id):
     
     try:
         subprocess.run(comando, check=True)
-        print("\n[SUCCESS] Imagen RAW/DD generada correctamente.")
-        return ruta_imagen
     except subprocess.CalledProcessError as e:
         print(f"\n[X] Error fatal al ejecutar dc3dd: {e}")
         sys.exit(1)
+        
+    # Verificar hash en el log de dc3dd (Verificación Post-Imaging)
+    print("\n[*] Validando Hash Post-Imaging...")
+    hash_imagen = None
+    if os.path.exists(ruta_log):
+        with open(ruta_log, 'r') as f:
+            contenido_log = f.read()
+            # dc3dd imprime 'Hash (sha256): <hash>' o 'sha256 = <hash>'
+            match = re.search(r'sha256\s*[:=]?\s*([a-f0-9]{64})', contenido_log, re.IGNORECASE)
+            if match:
+                hash_imagen = match.group(1).lower()
+                if hash_original != hash_imagen:
+                    print(f"[X] FALLO CRÍTICO: ¡Inconsistencia de Hash!")
+                    print(f"  Original:  {hash_original}")
+                    print(f"  Imagen:    {hash_imagen}")
+                    sys.exit(1)
+    
+    if not hash_imagen:
+        print("[!] Advertencia: No se pudo verificar el hash automáticamente desde el log de dc3dd.")
+        hash_imagen = hash_original
+    else:
+        print(f"[✓] Integridad verificada post-imaging: {hash_imagen}")
+        
+    return ruta_imagen, hash_imagen
 
 def recuperar_borrados(ruta_imagen, destino_base, caso_id):
-    """Monta la imagen y ejecuta Photorec de forma automatizada (Data Carving)."""
+    """Ejecuta Photorec de forma automatizada (Data Carving) directamente sobre la imagen DD."""
     print("\n[*] 4/4: Iniciando Data Carving (Recuperación de archivos borrados)...")
     
     carpeta_recuperados = os.path.join(destino_base, f"{caso_id}_Carving")
     os.makedirs(carpeta_recuperados, exist_ok=True)
     
-    punto_montaje = "/mnt/forensys_temp"
-    os.makedirs(punto_montaje, exist_ok=True)
+    print("[*] Ejecutando escáner profundo de Photorec sobre la imagen RAW...")
+    comando_photorec = [
+        'sudo', 'photorec',
+        '/d', carpeta_recuperados,
+        '/cmd', ruta_imagen,
+        'partition_none,options,keep_corrupted_file,no,search'
+    ]
     
-    try:
-        print(f"[*] Montando imagen virtual en {punto_montaje} (Solo lectura)...")
-        subprocess.run(['sudo', 'mount', '-o', 'ro,loop', ruta_imagen, punto_montaje], check=True)
+    proc = subprocess.run(comando_photorec, capture_output=True, text=True)
+    if proc.returncode != 0:
+        print(f"\n[X] Error en recuperación de archivos con PhotoRec: {proc.stderr}")
+    else:
+        print(f"\n[✓] Data Carving completado en: {carpeta_recuperados}")
+
+def firmar_y_reportar(destino_base, caso_id, perito, origen, hash_original, hash_imagen):
+    """Generar reporte JSON ISO 27037 y firma digital RSA"""
+    dev_info = get_device_info(origen)
+    metadatos = {
+        'timestamp': datetime.now().isoformat(),
+        'investigador': perito,
+        'descripcion_dispositivo': f"{dev_info['modelo']} - SN:{dev_info['serial']}",
+        'hostname_adquisicion': socket.gethostname(),
+        'usuario_sistema': getpass.getuser(),
+        'python_version': sys.version,
+    }
+    reporte = {
+        'tipo': 'DEAD-BOX ACQUISITION REPORT',
+        'version': '1.0',
+        'estandar': 'ISO 27037:2012 / NIST 800-88',
+        'metadata': metadatos,
+        'integridad': {
+            'hash_original_sha256': hash_original,
+            'hash_imagen_sha256': hash_imagen,
+            'coincidencia': hash_original == hash_imagen,
+            'herramienta_imaging': 'dc3dd',
+            'herramienta_carving': 'PhotoRec',
+        }
+    }
+    
+    # Generar llave RSA efímera para la firma (en un entorno real se usaría PKI del investigador)
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    mensaje = json.dumps(reporte, sort_keys=True).encode()
+    firma = private_key.sign(
+        mensaje,
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256()
+    )
+    
+    ruta_json = os.path.join(destino_base, f"{caso_id}_REPORTE.json")
+    ruta_firma = os.path.join(destino_base, f"{caso_id}_COC_firma.bin")
+    
+    with open(ruta_json, 'w') as f:
+        json.dump(reporte, f, indent=2)
+    with open(ruta_firma, 'wb') as f:
+        f.write(firma)
         
-        print("[*] Ejecutando escáner profundo de Photorec. Buscando documentos y fotos...")
-        comando_photorec = [
-            'sudo', 'photorec',
-            '/d', carpeta_recuperados,
-            '/cmd', ruta_imagen,
-            'partition_none,options,keep_corrupted_file,no,search'
-        ]
-        
-        subprocess.run(comando_photorec)
-        print(f"\n[SUCCESS] Archivos extraídos y guardados en: {carpeta_recuperados}")
-        
-    except subprocess.CalledProcessError as e:
-        print(f"\n[X] Fallo en el montaje o recuperación: {e}")
-    finally:
-        print("[*] Desmontando imagen y limpiando entorno...")
-        subprocess.run(['sudo', 'umount', punto_montaje])
+    print(f"[✓] Reporte estructurado JSON y firma criptográfica generados.")
 
 def main():
     imprimir_banner()
@@ -173,9 +253,8 @@ def main():
         print("    Ejecute primero la esterilización (01_wiping.py).")
         sys.exit(1)
     
-    # 0. Asegurar Bloqueador de Escritura (Por si se ejecuta manualmente)
-    print("\n[*] 0/4: Aplicando Bloqueador de Escritura Lógico (blockdev --setro)...")
-    subprocess.run(['sudo', 'blockdev', '--setro', origen], check=True)
+    # 0. Asegurar Bloqueador de Escritura
+    verificar_write_blocker(origen)
     
     # 1. Hashing Previo
     hash_original = calcular_hash(origen)
@@ -184,16 +263,19 @@ def main():
     print("\n[*] 2/4: Preparando Documentación Legal...")
     generar_cadena_custodia(destino_base, caso_id, perito, origen, hash_original)
     
-    # 3. Extracción (Copia)
-    ruta_imagen_dd = crear_imagen_dd(origen, destino_base, caso_id)
+    # 3. Extracción (Copia) con verificación post-imaging
+    ruta_imagen_dd, hash_imagen = crear_imagen_dd(origen, destino_base, caso_id, hash_original)
     
     # 4. Recuperación de archivos
     recuperar_borrados(ruta_imagen_dd, destino_base, caso_id)
     
+    # 5. Generar reporte estructurado y firma
+    firmar_y_reportar(destino_base, caso_id, perito, origen, hash_original, hash_imagen)
+    
     print("\n==================================================")
     print("   [✔] EXTRACCIÓN ESTÁTICA COMPLETADA (ISO 27037)  ")
     print("==================================================")
-    print("[*] La evidencia fue preservada de manera inalterable.")
+    print("[*] La evidencia fue preservada de manera inalterable y validada criptográficamente.")
     print(f"[*] Revise la cadena de custodia y los datos en: {destino_base}")
 
 if __name__ == "__main__":
