@@ -1,16 +1,20 @@
+import argparse
+import csv
+import hashlib
+import json
 import os
 import re
-import json
 import sys
-import requests
 from datetime import datetime
+
+import requests
 
 # ==========================================
 # CONFIGURACIÓN DEL LLM (Valores default — sobreescribibles por args)
 # ==========================================
-OLLAMA_BASE_URL   = "http://localhost:11434"   # Host Ollama (local o remoto)
-OLLAMA_URL        = OLLAMA_BASE_URL + "/api/generate"
-MODELO_LLM        = "gemma3:4b"               # Modelo por defecto (RPi5)
+OLLAMA_BASE_URL    = "http://localhost:11434"   # Host Ollama (local o remoto)
+OLLAMA_URL         = OLLAMA_BASE_URL + "/api/generate"
+MODELO_LLM         = "gemma3:4b"                # Modelo por defecto (RPi5)
 DIRECTORIO_DEFAULT = "/mnt/Destino_ForenSys"
 
 # --- PERFIL: Raspberry Pi 5 (8 GB RAM) ---
@@ -32,6 +36,105 @@ TIMEOUT_SOLICITUD = RPI_TIMEOUT
 # Presupuesto de caracteres del prompt
 MAX_CARACTERES_EVIDENCIA = 6000
 
+# ==========================================
+# WHITELIST DE MODELOS AUDITADOS (CRÍTICA 5)
+# Solo estos modelos están validados para uso forense.
+# ==========================================
+MODELOS_AUDITADOS = {
+    'gemma3:4b',
+    'gemma3:1b',
+    'llama3.2:3b',
+    'llama3.2:1b',
+    'mistral:7b',
+    'mistral:latest',
+    'llama3:8b',
+    'llama3:latest',
+}
+
+# ==========================================
+# DISCLAIMER LEGAL — CRÍTICA 3
+# Visible al inicio de cada síntesis generada.
+# ==========================================
+DISCLAIMER_LEGAL = """
+╔══════════════════════════════════════════════════════════════════════════════╗
+║              ⚠️  AVISO LEGAL — DOCUMENTO DE ASISTENCIA ⚠️                  ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  ESTE DOCUMENTO ES UNA SÍNTESIS AUTOMÁTICA GENERADA POR INTELIGENCIA        ║
+║  ARTIFICIAL. NO ES UN DICTAMEN PERICIAL CERTIFICADO.                        ║
+║                                                                              ║
+║  LIMITACIONES CRÍTICAS:                                                      ║
+║  • Basado en algoritmos de machine learning (LLM). Puede contener errores.  ║
+║  • Puede generar "alucinaciones" — afirmaciones plausibles pero falsas.      ║
+║  • NO es admisible como evidencia directa en procedimientos legales.         ║
+║  • REQUIERE validación y firma de un perito forense certificado.             ║
+║                                                                              ║
+║  USO PERMITIDO:                                                              ║
+║  ✓ Apoyo en investigación preliminar                                         ║
+║  ✓ Síntesis y organización de múltiples fuentes de datos                    ║
+║  ✓ Identificación de áreas que requieren análisis forense profundo           ║
+║                                                                              ║
+║  USO PROHIBIDO:                                                              ║
+║  ✗ Dictamen pericial sin revisión y firma de perito                         ║
+║  ✗ Evidencia directa en procedimientos judiciales                           ║
+║  ✗ Conclusiones definitivas sin análisis técnico independiente               ║
+║                                                                              ║
+║  RESPONSABILIDAD: El operador es responsable de verificar cada hallazgo.    ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+"""
+
+# Prompt del asistente — rol honesto, sin fingir ser perito (CRÍTICA 1 y 8)
+PROMPT_ASISTENTE = """Eres un ASISTENTE DE ANÁLISIS FORENSE (no un perito certificado).
+
+Tu rol es sintetizar y organizar la evidencia digital para facilitar el trabajo \
+del perito humano. NO emites conclusiones legales ni reemplazas el análisis de un perito.
+
+Cada hallazgo debe indicar:
+1. Fuente de datos exacta
+2. Nivel de confianza: BAJO / MEDIO / ALTO
+3. Si requiere validación manual por el perito
+
+EVIDENCIA RECOPILADA:
+{evidencia_cruda}
+
+INSTRUCCIONES (máximo 1000 palabras, formato Markdown):
+
+## 1. Identificación del Equipo
+- Nombre del equipo, zona horaria, sistema operativo detectado.
+- Dispositivos USB que fueron conectados (marca, serial).
+
+## 2. Usuarios del Sistema
+- Lista de usuarios detectados con su nivel de actividad.
+- Documentos recientes, comandos ejecutados, programas usados por cada uno.
+
+## 3. Perfil de Uso
+- Descripción del perfil del usuario principal basándose en: programas instalados, \
+historial web, tipos de archivos. (Nivel de confianza a indicar)
+
+## 4. Cronología de Actividad Relevante
+- Las 5-10 acciones más relevantes en orden cronológico.
+- Incluye: URLs visitadas, programas ejecutados, archivos descargados.
+
+## 5. Alertas de Seguridad
+- Archivos con alta entropía (posible ransomware/cifrado).
+- Mecanismos de persistencia sospechosos (auto-arranque fuera de rutas confiables).
+- Extensiones falsas o técnicas antiforenses detectadas.
+
+## 6. Evidencia Multimedia
+- Archivos con coordenadas GPS embebidas.
+- Cámaras/dispositivos detectados en metadatos EXIF.
+
+## 7. Síntesis Final (NO es conclusión pericial)
+- Párrafo final resumiendo hallazgos y señalando qué áreas requieren \
+investigación adicional por parte del perito. Incluir nivel de confianza global.
+
+REGLAS CRÍTICAS:
+- NO inventes datos. Solo analiza lo proporcionado.
+- Si no hay información suficiente sobre un punto, indicar "Sin datos disponibles".
+- Tono formal y técnico. Indicar fuente de cada afirmación.
+- Esta síntesis DEBE ser revisada y firmada por un perito antes de uso legal."""
+
 
 def imprimir_banner():
     print("""
@@ -42,10 +145,11 @@ def imprimir_banner():
       ██╔══╝  ██╔══╝  ██╔══╝     ██║   ██╔══╝  ██║╚██╔╝██║
       ██║     ███████╗███████╗   ██║   ███████╗██║ ╚═╝ ██║
       ╚═╝     ╚══════╝╚══════╝   ╚═╝   ╚══════╝╚═╝     ╚═╝
-     FOREN-SYS: CEREBRO DE INTELIGENCIA ARTIFICIAL (V3.0)
-    * LLM Triage | Ollama Engine | Optimizado Raspberry Pi 5 *
+     FOREN-SYS: ASISTENTE DE INTELIGENCIA ARTIFICIAL (V3.1)
+    * LLM Synthesis | Ollama Engine | Optimizado Raspberry Pi 5 *
     ========================================================
     """)
+
 
 def comprobar_ollama():
     """Verifica si el servidor de Ollama está encendido y el modelo existe."""
@@ -54,7 +158,6 @@ def comprobar_ollama():
         respuesta = requests.get(OLLAMA_BASE_URL + "/", timeout=10)
         if respuesta.status_code == 200:
             print("[+] Servidor Ollama: EN LÍNEA")
-            # Verificar que el modelo existe
             try:
                 modelos = requests.get(OLLAMA_BASE_URL + "/api/tags", timeout=10).json()
                 nombres = [m['name'] for m in modelos.get('models', [])]
@@ -74,12 +177,92 @@ def comprobar_ollama():
         return False
     return False
 
+
+def validar_modelo_ollama(modelo_nombre):
+    """
+    Valida que el modelo esté en la whitelist de modelos auditados. (CRÍTICA 5)
+    Si no está, advierte pero permite continuar (el perito debe tomar la decisión).
+    """
+    if modelo_nombre in MODELOS_AUDITADOS:
+        print(f"[+] Modelo '{modelo_nombre}' validado en whitelist de modelos auditados.")
+        return True
+    else:
+        print(f"[!] ADVERTENCIA: Modelo '{modelo_nombre}' no está en la whitelist de modelos auditados.")
+        print(f"    Modelos validados: {', '.join(sorted(MODELOS_AUDITADOS))}")
+        print("    Continúa bajo responsabilidad del operador. Los resultados deben")
+        print("    ser verificados especialmente antes de cualquier uso legal.")
+        return False  # No bloquea, solo advierte
+
+
+def sanitizar_prompt_injection(texto):
+    """
+    Previene inyección de prompts maliciosos en la evidencia. (CRÍTICA 6)
+    Reemplaza patrones de jailbreak por marcadores inofensivos.
+    """
+    patrones_peligrosos = [
+        (r'\[IGNORAR[^\]]*\]',         '[PATRÓN_BLOQUEADO]'),
+        (r'\[IGNORE[^\]]*\]',          '[PATRÓN_BLOQUEADO]'),
+        (r'(?i)ignore\s+previous',     '[PATRÓN_BLOQUEADO]'),
+        (r'(?i)forget\s+previous',     '[PATRÓN_BLOQUEADO]'),
+        (r'(?i)jailbreak',             '[PATRÓN_BLOQUEADO]'),
+        (r'(?i)roleplay\s+as',         '[PATRÓN_BLOQUEADO]'),
+        (r'(?i)act\s+as\s+if',        '[PATRÓN_BLOQUEADO]'),
+        (r'(?i)--IgnoreInstructions',  '[PATRÓN_BLOQUEADO]'),
+        (r'(?i)DAN\s+mode',            '[PATRÓN_BLOQUEADO]'),
+    ]
+    detecciones = []
+    for patron, reemplazo in patrones_peligrosos:
+        nuevas = re.findall(patron, texto)
+        if nuevas:
+            detecciones.extend(nuevas)
+            texto = re.sub(patron, reemplazo, texto)
+    if detecciones:
+        print(f"[!] ALERTA: {len(detecciones)} patrones de prompt-injection detectados y neutralizados.")
+        print(f"    Patrones: {detecciones[:5]}")
+    return texto
+
+
+def detectar_alucinaciones(respuesta_ia, evidencia_original):
+    """
+    Detecta posibles alucinaciones comparando nombres de archivo y años
+    mencionados por la IA contra la evidencia original. (CRÍTICA 7)
+    Retorna dict con métricas de confianza.
+    """
+    # Comparar años de 4 dígitos (2000-2030)
+    años_evidencia = set(re.findall(r'\b(20[0-2]\d)\b', evidencia_original))
+    años_ia        = set(re.findall(r'\b(20[0-2]\d)\b', respuesta_ia))
+    años_nuevos    = años_ia - años_evidencia
+
+    # Comparar nombres de archivo con extensión
+    files_evidencia = set(f.lower() for f in re.findall(r'[a-zA-Z0-9_\-]{2,40}\.\w{2,5}', evidencia_original))
+    files_ia        = set(f.lower() for f in re.findall(r'[a-zA-Z0-9_\-]{2,40}\.\w{2,5}', respuesta_ia))
+    files_nuevos    = files_ia - files_evidencia - {'md', 'csv', 'txt', 'json', 'log'}
+
+    total_anomalias = len(años_nuevos) + len(files_nuevos)
+
+    if años_nuevos:
+        print(f"[!] POSIBLE ALUCINACIÓN: IA mencionó años no en evidencia: {sorted(años_nuevos)}")
+    if files_nuevos and len(files_nuevos) < 20:
+        print(f"[!] POSIBLE ALUCINACIÓN: IA mencionó archivos no en evidencia: {sorted(files_nuevos)[:10]}")
+
+    confianza = 'ALTA' if total_anomalias == 0 else ('MEDIA' if total_anomalias <= 3 else 'BAJA')
+    if total_anomalias > 0:
+        print(f"[!] Confianza en síntesis IA: {confianza} ({total_anomalias} anomalías detectadas)")
+        print("    La síntesis REQUIERE revisión manual por el perito forense.")
+
+    return {
+        'años_nuevos':    sorted(años_nuevos),
+        'archivos_nuevos': sorted(files_nuevos)[:20],
+        'total_anomalias': total_anomalias,
+        'confianza':       confianza,
+    }
+
+
 def _leer_csv_resumido(ruta, max_filas=20):
     """Lee un CSV y devuelve un resumen textual de sus primeras filas."""
     if not os.path.exists(ruta):
         return ""
     try:
-        import csv
         with open(ruta, 'r', encoding='utf-8', errors='ignore') as f:
             reader = csv.reader(f)
             header = next(reader, None)
@@ -99,6 +282,7 @@ def _leer_csv_resumido(ruta, max_filas=20):
     except Exception:
         return ""
 
+
 def _agregar_bloque(evidencia, presupuesto, titulo, contenido):
     """Agrega un bloque de evidencia respetando el presupuesto de caracteres."""
     if not contenido or not contenido.strip():
@@ -111,6 +295,7 @@ def _agregar_bloque(evidencia, presupuesto, titulo, contenido):
         return evidencia + bloque_truncado, 0
     return evidencia, presupuesto
 
+
 def recopilar_inteligencia(carpeta_resultados):
     """Filtra y empaqueta TODA la evidencia V11.0 para la ventana de contexto de la IA."""
     print("[*] Recopilando evidencia V11.0 (9 fuentes de datos)...")
@@ -119,35 +304,34 @@ def recopilar_inteligencia(carpeta_resultados):
     presupuesto = MAX_CARACTERES_EVIDENCIA
     fuentes_cargadas = []
 
-    # 1. REPORTE MAESTRO (Prioridad MÁXIMA - contiene resumen ejecutivo)
+    # 1. REPORTE MAESTRO (Prioridad MÁXIMA)
     ruta_maestro = os.path.join(carpeta_resultados, "Reporte_Forense_Maestro.txt")
     if os.path.exists(ruta_maestro):
         with open(ruta_maestro, 'r', encoding='utf-8', errors='ignore') as f:
             contenido = f.read()
         idx = contenido.find("RESUMEN EJECUTIVO")
         fragmento = contenido[idx:][:1500] if idx != -1 else contenido[-1500:]
-        # Incluir también sección de REGISTRY si existe
         idx_reg = contenido.find("[REGISTRY]")
         if idx_reg != -1:
             fragmento += "\n" + contenido[idx_reg:][:800]
         evidencia_texto, presupuesto = _agregar_bloque(evidencia_texto, presupuesto, "RESUMEN MAESTRO", fragmento)
         fuentes_cargadas.append("Reporte Maestro")
 
-    # 2. USUARIOS DEL EQUIPO (Prioridad ALTA - identifica quién usaba la máquina)
+    # 2. USUARIOS DEL EQUIPO
     ruta_usuarios = os.path.join(carpeta_resultados, "Usuarios_Equipo.csv")
     texto_usuarios = _leer_csv_resumido(ruta_usuarios, 15)
     if texto_usuarios:
         evidencia_texto, presupuesto = _agregar_bloque(evidencia_texto, presupuesto, "USUARIOS DEL EQUIPO", texto_usuarios)
         fuentes_cargadas.append("Usuarios")
 
-    # 3. HARDWARE Y USB (Prioridad ALTA - dispositivos conectados)
+    # 3. HARDWARE Y USB
     ruta_hw = os.path.join(carpeta_resultados, "Hardware_y_USB.csv")
     texto_hw = _leer_csv_resumido(ruta_hw, 25)
     if texto_hw:
         evidencia_texto, presupuesto = _agregar_bloque(evidencia_texto, presupuesto, "HARDWARE Y DISPOSITIVOS USB", texto_hw)
         fuentes_cargadas.append("Hardware/USB")
 
-    # 4. PERSISTENCIA (Prioridad ALTA - mecanismos de auto-arranque sospechosos)
+    # 4. PERSISTENCIA
     ruta_persist = os.path.join(carpeta_resultados, "Mecanismos_Persistencia.csv")
     texto_persist = _leer_csv_resumido(ruta_persist, 15)
     if texto_persist:
@@ -221,155 +405,191 @@ def recopilar_inteligencia(carpeta_resultados):
     print(f"    [+] Evidencia empaquetada: {caracteres_total} caracteres (límite: {MAX_CARACTERES_EVIDENCIA})")
     return evidencia_texto
 
-def analizar_con_ia(evidencia_cruda, ruta_salida):
-    """Envía el prompt y evidencia al LLM con streaming para evitar congelamiento."""
 
-    prompt_maestro = f"""Eres un Perito Informático Forense certificado. Analiza la siguiente evidencia digital extraída de un equipo y redacta un Dictamen Pericial en ESPAÑOL.
+def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria):
+    """
+    Envía el prompt y evidencia al LLM con streaming.
+    Genera:
+      - Síntesis de inteligencia (ruta_salida) con DISCLAIMER visible
+      - Registro de auditoría JSON firmado con SHA-256 (ruta_auditoria)  [CRÍTICA 4]
+    Aplica sanitización anti-prompt-injection antes de construir el prompt.  [CRÍTICA 6]
+    Detecta posibles alucinaciones al finalizar.                             [CRÍTICA 7]
+    """
+    # Sanitizar evidencia antes de inyectarla en el prompt
+    evidencia_sanitizada = sanitizar_prompt_injection(evidencia_cruda)
 
-EVIDENCIA RECOPILADA:
-{evidencia_cruda}
-
-INSTRUCCIONES (máximo 1000 palabras, formato Markdown):
-
-## 1. Identificación del Equipo
-- Nombre del equipo, zona horaria, sistema operativo detectado.
-- Dispositivos USB que fueron conectados (marca, serial).
-
-## 2. Usuarios del Sistema
-- Lista de usuarios detectados con su nivel de actividad.
-- Documentos recientes, comandos ejecutados, programas usados por cada uno.
-
-## 3. Perfil de Uso
-- Deduce el perfil del usuario principal (programador, oficinista, gamer, etc.).
-- Basado en: programas instalados, historial web, tipos de archivos.
-
-## 4. Cronología de Actividad Sospechosa
-- Las 5-10 acciones más relevantes en orden cronológico.
-- Incluye: URLs visitadas, programas ejecutados, archivos descargados.
-
-## 5. Alertas de Seguridad
-- Archivos con alta entropía (posible ransomware/cifrado).
-- Mecanismos de persistencia sospechosos (auto-arranque fuera de rutas confiables).
-- Extensiones falsas o técnicas antiforenses detectadas.
-
-## 6. Evidencia Multimedia
-- Archivos con coordenadas GPS embebidas.
-- Cámaras/dispositivos detectados en metadatos EXIF.
-
-## 7. Conclusión Pericial
-- Párrafo final indicando hallazgos principales y nivel de riesgo.
-
-REGLAS: No inventes datos. Solo analiza lo proporcionado. Tono formal y pericial."""
+    prompt_final = PROMPT_ASISTENTE.format(evidencia_cruda=evidencia_sanitizada)
 
     carga_util = {
         "model": MODELO_LLM,
-        "prompt": prompt_maestro,
-        "stream": True,  # CRÍTICO: streaming evita que la RPi acumule toda la respuesta en RAM
+        "prompt": prompt_final,
+        "stream": True,
         "options": {
-            "temperature": 0.2,      # Baja para análisis preciso
-            "num_ctx": NUM_CTX,      # Ventana de contexto reducida para ahorrar RAM
-            "num_thread": NUM_THREAD # Hilos limitados a los cores físicos del RPi5
+            "temperature": 0.2,
+            "num_ctx": NUM_CTX,
+            "num_thread": NUM_THREAD
         },
-        "keep_alive": KEEP_ALIVE    # Descargar modelo tras responder para liberar RAM
+        "keep_alive": KEEP_ALIVE
+    }
+
+    # Registro de auditoría inicial [CRÍTICA 4]
+    auditoria = {
+        "timestamp_inicio_utc": datetime.utcnow().isoformat(),
+        "modelo": MODELO_LLM,
+        "motor_url": OLLAMA_BASE_URL,
+        "parametros": {
+            "temperature": 0.2,
+            "num_ctx": NUM_CTX,
+            "num_thread": NUM_THREAD,
+        },
+        "evidencia_sha256": hashlib.sha256(evidencia_cruda.encode('utf-8', errors='replace')).hexdigest(),
+        "prompt_sha256":    hashlib.sha256(prompt_final.encode('utf-8', errors='replace')).hexdigest(),
+        "tokens_count":     0,
+        "sintesis_sha256":  None,
+        "alucinaciones":    {},
+        "timestamp_fin_utc": None,
+        "estado": "EN_PROGRESO",
     }
 
     print("[*] Transmitiendo datos a la IA (streaming activado)...")
     print(f"[*] Motor: {OLLAMA_BASE_URL} | Modelo: {MODELO_LLM} | ctx: {NUM_CTX} | threads: {NUM_THREAD}")
     print("[*] La respuesta aparece en tiempo real. Ctrl+C para cancelar.\n")
     print("=" * 60)
-    
+
+    texto_completo = []
+
     try:
         respuesta = requests.post(OLLAMA_URL, json=carga_util, stream=True, timeout=TIMEOUT_SOLICITUD)
         respuesta.raise_for_status()
-        
-        texto_completo = []
-        
+
         for linea in respuesta.iter_lines():
             if linea:
                 try:
                     fragmento = json.loads(linea)
                     token = fragmento.get("response", "")
                     texto_completo.append(token)
-                    # Imprimir cada token en tiempo real (sin salto de línea)
+                    auditoria["tokens_count"] += 1
                     sys.stdout.write(token)
                     sys.stdout.flush()
-                    
-                    # Si el modelo indica que terminó
                     if fragmento.get("done", False):
                         break
                 except json.JSONDecodeError:
                     continue
-        
+
         print("\n" + "=" * 60)
-        
-        # Guardar el informe completo
-        informe_final = "".join(texto_completo)
-        
-        if informe_final.strip():
+
+        sintesis_final = "".join(texto_completo)
+
+        if sintesis_final.strip():
+            # Detectar alucinaciones antes de guardar [CRÍTICA 7]
+            resultado_alucinaciones = detectar_alucinaciones(sintesis_final, evidencia_cruda)
+            auditoria["alucinaciones"] = resultado_alucinaciones
+
+            # Construir cabecera del documento con DISCLAIMER visible [CRÍTICA 3]
+            ts_gen = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            nivel_confianza = resultado_alucinaciones.get('confianza', 'MEDIA')
+            cabecera = (
+                f"{DISCLAIMER_LEGAL}\n\n"
+                f"---\n"
+                f"**Generado:** {ts_gen} | **Modelo:** {MODELO_LLM} | "
+                f"**Confianza IA:** {nivel_confianza}\n\n"
+                f"**ESTADO:** BORRADOR — REQUIERE REVISIÓN Y FIRMA DE PERITO CERTIFICADO\n\n"
+                f"---\n\n"
+                f"# SÍNTESIS DE INTELIGENCIA FORENSE\n\n"
+                f"> ⚠️ Este documento es una síntesis automática. "
+                f"No es un Dictamen Pericial. Requiere validación por perito.\n\n"
+            )
+
             with open(ruta_salida, 'w', encoding='utf-8') as f:
-                f.write(f"<!-- Generado por Foren-Sys IA | Modelo: {MODELO_LLM} | {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} -->\n\n")
-                f.write(informe_final)
-            print(f"\n[+] ¡Análisis completado! Informe guardado en:")
+                f.write(cabecera)
+                f.write(sintesis_final)
+
+            # Calcular hash de la síntesis y finalizar auditoría
+            auditoria["sintesis_sha256"] = hashlib.sha256(
+                sintesis_final.encode('utf-8', errors='replace')
+            ).hexdigest()
+            auditoria["timestamp_fin_utc"] = datetime.utcnow().isoformat()
+            auditoria["estado"] = "COMPLETADO"
+
+            print(f"\n[+] Síntesis completada. Guardada en:")
             print(f"    -> {ruta_salida}")
+            print(f"[+] Confianza de síntesis: {nivel_confianza}")
+
         else:
             print("[-] La IA no generó contenido. Verifica que el modelo esté correctamente instalado.")
-        
+            auditoria["estado"] = "SIN_CONTENIDO"
+
     except requests.exceptions.Timeout:
-        print(f"\n[-] TIMEOUT: La IA tardó más de {TIMEOUT_SOLICITUD // 60} minutos. Intenta con un modelo más pequeño.")
+        print(f"\n[-] TIMEOUT: La IA tardó más de {TIMEOUT_SOLICITUD // 60} minutos.")
+        auditoria["estado"] = "TIMEOUT"
     except requests.exceptions.ConnectionError:
         print("\n[-] Se perdió la conexión con Ollama durante la generación.")
-        print("    Posible causa: Ollama se quedó sin memoria RAM y fue terminado por el kernel (OOM Killer).")
+        print("    Posible causa: Ollama se quedó sin memoria RAM (OOM Killer).")
         print("    Solución: Reduce NUM_CTX o usa un modelo más pequeño (Ej. gemma3:1b)")
+        auditoria["estado"] = "ERROR_CONEXION"
     except KeyboardInterrupt:
         print("\n\n[!] Generación cancelada por el usuario.")
-        # Guardar lo que se haya generado hasta ahora
         parcial = "".join(texto_completo)
         if parcial.strip():
             ruta_parcial = ruta_salida.replace(".md", "_PARCIAL.md")
             with open(ruta_parcial, 'w', encoding='utf-8') as f:
-                f.write(f"<!-- INFORME PARCIAL - Cancelado por usuario -->\n\n{parcial}")
-            print(f"    Informe parcial guardado en: {ruta_parcial}")
+                f.write(f"{DISCLAIMER_LEGAL}\n\n<!-- INFORME PARCIAL - Cancelado por usuario -->\n\n{parcial}")
+            print(f"    Síntesis parcial guardada en: {ruta_parcial}")
+        auditoria["estado"] = "CANCELADO"
     except requests.exceptions.RequestException as e:
         print(f"[-] Error de comunicación con la IA: {e}")
+        auditoria["estado"] = f"ERROR: {e}"
+    finally:
+        # Siempre guardar la auditoría, independientemente del resultado [CRÍTICA 4]
+        try:
+            with open(ruta_auditoria, 'w', encoding='utf-8') as f:
+                json.dump(auditoria, f, indent=2, ensure_ascii=False)
+            os.chmod(ruta_auditoria, 0o600)
+            print(f"[+] Registro de auditoría guardado en:\n    -> {ruta_auditoria}")
+        except Exception as e:
+            print(f"[!] No se pudo guardar la auditoría: {e}")
+
 
 # ==========================================
 # INICIO — Modo no interactivo (para Web o CLI)
 # ==========================================
 if __name__ == "__main__":
-    import argparse
 
-    parser = argparse.ArgumentParser(description="Analizador IA Forense (Ollama) — Foren-Sys")
-    parser.add_argument("--caso",   required=True,  help="ID del caso (Ej: TEST-123)")
-    parser.add_argument("--dest",   required=False, default=DIRECTORIO_DEFAULT,
+    parser = argparse.ArgumentParser(description="Asistente IA Forense (Ollama) — Foren-Sys")
+    parser.add_argument("--caso",    required=True,  help="ID del caso (Ej: TEST-123)")
+    parser.add_argument("--dest",    required=False, default=DIRECTORIO_DEFAULT,
                         help=f"Ruta base donde vive el caso (default: {DIRECTORIO_DEFAULT})")
-    parser.add_argument("--motor",  required=False, default="local",
+    parser.add_argument("--motor",   required=False, default="local",
                         choices=["local", "remoto"],
                         help="Motor Ollama: 'local' = RPi5, 'remoto' = PC Escritorio (default: local)")
-    parser.add_argument("--host",   required=False, default=None,
+    parser.add_argument("--host",    required=False, default=None,
                         help="URL del servidor Ollama remoto (Ej: http://192.168.1.50:11434). Sobreescribe --motor.")
-    parser.add_argument("--model",  required=False, default=None,
+    parser.add_argument("--model",   required=False, default=None,
                         help="Nombre del modelo a usar (Ej: gemma3:4b, llama3.2:3b, mistral:7b)")
-    parser.add_argument("--ctx",    required=False, type=int, default=None,
+    parser.add_argument("--ctx",     required=False, type=int, default=None,
                         help="Ventana de contexto en tokens (sobreescribe el perfil del motor)")
-    parser.add_argument("--threads",required=False, type=int, default=None,
+    parser.add_argument("--threads", required=False, type=int, default=None,
                         help="Número de hilos CPU (sobreescribe el perfil del motor)")
     args = parser.parse_args()
 
-    # ── Limpiar inputs ───────────────────────────────────────
-    caso_id               = re.sub(r'[^a-zA-Z0-9_\-]', '', args.caso.strip())
+    # Validar y limpiar ID de caso (anti path-traversal)
+    caso_id = re.sub(r'[^a-zA-Z0-9_\-]', '', args.caso.strip())
+    if not caso_id or caso_id != args.caso.strip():
+        print(f"[X] ID de caso inválido o contiene caracteres no permitidos: '{args.caso}'")
+        print("    Permitido: alfanuméricos, guiones, guiones_bajos")
+        sys.exit(1)
+
     directorio_base_actual = args.dest.strip()
 
-    # ── Aplicar perfil de motor ──────────────────────────────
+    # Aplicar perfil de motor
     if args.host:
-        # Host explícito — tiene precedencia total sobre --motor
         OLLAMA_BASE_URL   = args.host.rstrip('/')
         OLLAMA_URL        = OLLAMA_BASE_URL + "/api/generate"
-        NUM_CTX           = args.ctx     or PC_CTX      # Perfil desktop si no se especifica
+        NUM_CTX           = args.ctx     or PC_CTX
         NUM_THREAD        = args.threads or PC_THREAD
         TIMEOUT_SOLICITUD = PC_TIMEOUT
         perfil_nombre     = f"Personalizado ({OLLAMA_BASE_URL})"
     elif args.motor == "remoto":
-        # El host remoto está guardado en la config; si no, error
         config_path = os.path.join(directorio_base_actual, ".ia_config.json")
         if not os.path.exists(config_path):
             print("[-] ERROR: Motor remoto seleccionado pero no hay host configurado.")
@@ -389,7 +609,6 @@ if __name__ == "__main__":
         TIMEOUT_SOLICITUD = ia_cfg.get('timeout', PC_TIMEOUT)
         perfil_nombre     = f"PC Escritorio Remoto ({OLLAMA_BASE_URL})"
     else:
-        # Motor local (RPi5) — default
         OLLAMA_BASE_URL   = "http://localhost:11434"
         OLLAMA_URL        = OLLAMA_BASE_URL + "/api/generate"
         NUM_CTX           = args.ctx     or RPI_CTX
@@ -397,44 +616,55 @@ if __name__ == "__main__":
         TIMEOUT_SOLICITUD = RPI_TIMEOUT
         perfil_nombre     = "Raspberry Pi 5 (Local)"
 
-    # Modelo: argumento explícito tiene precedencia
     if args.model:
         MODELO_LLM = args.model.strip()
 
-    print(f"[PROGRESO:5] Iniciando Triaje IA para el caso: {caso_id}")
+    imprimir_banner()
+    print(f"[PROGRESO:5] Iniciando Análisis Asistido por IA para el caso: {caso_id}")
     print(f"    Motor:   {perfil_nombre}")
     print(f"    Modelo:  {MODELO_LLM}")
     print(f"    Config:  ctx={NUM_CTX} | threads={NUM_THREAD} | timeout={TIMEOUT_SOLICITUD}s")
     print(f"    Evidencia máx.: {MAX_CARACTERES_EVIDENCIA} caracteres")
 
-    # ── Verificar Ollama ─────────────────────────────────────
+    # Validar modelo contra whitelist [CRÍTICA 5]
+    print(f"[PROGRESO:8] Validando modelo contra whitelist de modelos auditados...")
+    validar_modelo_ollama(MODELO_LLM)  # Advierte pero no bloquea
+
+    # Verificar Ollama
     print(f"[PROGRESO:10] Verificando motor Ollama...")
     if not comprobar_ollama():
         print("[-] ERROR: Motor Ollama no disponible.")
         sys.exit(1)
 
-    # ── Localizar carpeta de resultados ───────────────────────
+    # Localizar carpeta de resultados
     carpeta_resultados = os.path.join(directorio_base_actual, caso_id, "03_Results_(Resultados_Extraidos)")
     if not os.path.exists(carpeta_resultados):
         print(f"[-] ERROR: No se encontró la carpeta de resultados en: {carpeta_resultados}")
         print("    Asegúrate de haber ejecutado el Módulo 7 (Normalización) primero.")
         sys.exit(1)
 
-    ruta_informe_ia = os.path.join(carpeta_resultados, f"Dictamen_Pericial_IA_{caso_id}.md")
+    # Rutas de salida: síntesis + auditoría [CRÍTICA 4]
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    ruta_sintesis  = os.path.join(carpeta_resultados, f"Sintesis_IA_{caso_id}.md")
+    ruta_auditoria = os.path.join(carpeta_resultados, f"Auditoria_IA_{caso_id}_{ts}.json")
 
-    # ── Recopilar evidencia ─────────────────────────────────
+    # Recopilar evidencia
     print("[PROGRESO:30] Recopilando y filtrando evidencia de los módulos anteriores...")
     evidencia_filtrada = recopilar_inteligencia(carpeta_resultados)
     if len(evidencia_filtrada) < 50:
         print("[-] Advertencia: Poca evidencia disponible. ¿Ejecutaste el Módulo 7?")
         print("[-] Continuando con la evidencia disponible...")
 
-    # ── Análisis IA ─────────────────────────────────────────
+    # Análisis IA
     print(f"[PROGRESO:60] Transmitiendo evidencia al LLM (motor: {perfil_nombre})...")
-    analizar_con_ia(evidencia_filtrada, ruta_informe_ia)
+    analizar_con_ia(evidencia_filtrada, ruta_sintesis, ruta_auditoria)
 
-    if os.path.exists(ruta_informe_ia):
-        print(f"[PROGRESO:100] Dictamen Pericial guardado en: {ruta_informe_ia}")
+    if os.path.exists(ruta_sintesis):
+        print(f"[PROGRESO:100] Síntesis de inteligencia guardada en: {ruta_sintesis}")
+        print(f"               Auditoría guardada en: {ruta_auditoria}")
+        print()
+        print("  ⚠️  RECUERDE: Esta síntesis requiere revisión y firma de perito certificado")
+        print("     antes de ser usada en procedimientos legales.")
     else:
-        print("[-] ERROR: No se generó el informe final.")
+        print("[-] ERROR: No se generó la síntesis final.")
         sys.exit(1)

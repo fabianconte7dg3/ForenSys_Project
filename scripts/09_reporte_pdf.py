@@ -36,7 +36,7 @@ def main():
 
     # Rutas de origen
     ruta_maestro = os.path.join(carpeta_resultados, "Reporte_Forense_Maestro.txt")
-    ruta_ia = os.path.join(carpeta_resultados, f"Dictamen_Pericial_IA_{caso_id}.md")
+    ruta_ia = os.path.join(carpeta_resultados, f"Sintesis_IA_{caso_id}.md")
     ruta_pdf = os.path.join(carpeta_resultados, f"Reporte_Legal_Final_{caso_id}.pdf")
 
     print(f"[PROGRESO:30] Compilando datos de reportes existentes...")
@@ -48,7 +48,7 @@ def main():
             texto_maestro = f.read()
 
     # Leer IA
-    texto_ia = "No se encontró el Dictamen Pericial de IA (Módulo 8 no ejecutado)."
+    texto_ia = "No se encontró la Síntesis IA (Módulo 8 no ejecutado)."
     if os.path.exists(ruta_ia):
         with open(ruta_ia, 'r', encoding='utf-8', errors='ignore') as f:
             texto_ia = f.read()
@@ -99,7 +99,7 @@ def main():
     story.append(PageBreak())
 
     # SECCIÓN 2: DICTAMEN IA
-    story.append(Paragraph("2. Dictamen Pericial de IA", h1_style))
+    story.append(Paragraph("2. Síntesis de Inteligencia Forense (IA Asistida)", h1_style))
     story.append(Spacer(1, 0.2 * inch))
     
     if len(texto_ia) > 100000:

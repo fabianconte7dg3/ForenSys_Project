@@ -300,7 +300,7 @@ def list_case_results(raw_caso_id):
         {"key": "mecanismos_persistencia", "filename": "Mecanismos_Persistencia.csv",          "tipo": "csv",  "categoria": "Sistema y Persistencia","icono": "bi-exclamation-triangle-fill","color": "#fcd34d"},
         {"key": "archivos_borrados",       "filename": "Archivos_Borrados_Recuperados.jsonl", "tipo": "jsonl","categoria": "Recuperación y Anomalías","icono": "bi-trash3-fill",            "color": "#fcd34d"},
         {"key": "metadatos_multimedia",    "filename": "Metadatos_Multimedia.csv",             "tipo": "csv",  "categoria": "Recuperación y Anomalías","icono": "bi-camera-fill",            "color": "#fcd34d"},
-        {"key": "dictamen_ia",             "filename": f"Dictamen_Pericial_IA_{caso_id}.md", "tipo": "md",   "categoria": "Dictamen IA",           "icono": "bi-robot",                  "color": "#fca5a5"},
+        {"key": "sintesis_ia",              "filename": f"Sintesis_IA_{caso_id}.md",         "tipo": "md",   "categoria": "Síntesis IA",           "icono": "bi-robot",                  "color": "#fca5a5"},
     ]
 
     resultado = []
@@ -369,7 +369,7 @@ def get_file_content(raw_caso_id):
 
 @app.route('/api/case/<raw_caso_id>/ai_report', methods=['GET'])
 def get_ai_report(raw_caso_id):
-    """Devuelve el contenido del Dictamen Pericial IA (Markdown) del caso."""
+    """Devuelve el contenido de la Síntesis IA (Markdown) del caso."""
     caso_id = sanitize_case_id(raw_caso_id)
     if not caso_id:
         return jsonify({"status": "error", "message": "caso_id inválido."}), 400
@@ -378,12 +378,12 @@ def get_ai_report(raw_caso_id):
     if not ruta_results:
         return jsonify({"status": "not_found", "exists": False})
 
-    nombre_informe = f"Dictamen_Pericial_IA_{caso_id}.md"
+    nombre_informe = f"Sintesis_IA_{caso_id}.md"
     ruta_informe = os.path.join(ruta_results, nombre_informe)
 
     if not os.path.exists(ruta_informe):
         return jsonify({"status": "not_found", "exists": False,
-                        "message": "El Dictamen IA aún no ha sido generado."})
+                        "message": "La Síntesis IA aún no ha sido generada."})
 
     try:
         with open(ruta_informe, 'r', encoding='utf-8', errors='replace') as f:
