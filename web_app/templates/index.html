@@ -4275,6 +4275,7 @@ if (btnBrowseTimeline) {
 // ── Populate AI Table ─────────────────────────────────────────────
 function populateAITable() {
     const tbody = document.getElementById('ai-tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
 
     aiFindings.forEach(f => {
