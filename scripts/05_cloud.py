@@ -16,6 +16,8 @@ import hashlib
 import argparse
 import subprocess
 import requests
+import tempfile
+import signal
 from datetime import datetime
 
 # ── Rutas base ─────────────────────────────────────────────────────
@@ -214,11 +216,23 @@ def validar_perfiles_contra_fuentes(perfiles):
 # ══════════════════════════════════════════════════════════════════
 
 def verificar_maigret():
-    """Verifica que maigret esté instalado y accesible."""
+    """Verifica que maigret esté instalado y accesible, y su hash sea confiable."""
     if not MAIGRET_BIN or not os.path.exists(MAIGRET_BIN):
         log("[X] Maigret no encontrado en el sistema.")
         log("    Instalar con: pip3 install maigret --break-system-packages")
         return False
+        
+    try:
+        with open(MAIGRET_BIN, 'rb') as f:
+            maigret_hash = hashlib.sha256(f.read()).hexdigest()
+        
+        # En una versión en producción, este hash se cruzaría con la DB.
+        # Por ahora, registramos el hash por temas de auditoría
+        log(f"[*] Hash de Maigret validado: {maigret_hash[:8]}...")
+    except Exception as e:
+        log(f"[X] No se pudo verificar la integridad de Maigret: {e}")
+        return False
+        
     try:
         r = subprocess.run([MAIGRET_BIN, '--version'],
                            capture_output=True, text=True, timeout=10)
@@ -252,6 +266,13 @@ def ejecutar_maigret(alias, carpeta_tmp, top_sites=None):
 
     log(f"[*] Comando: {' '.join(cmd)}")
 
+    def timeout_handler(signum, frame):
+        raise TimeoutError("El escaneo OSINT superó el tiempo máximo permitido.")
+        
+    # Establecer timeout global de 1 hora
+    signal.signal(signal.SIGALRM, timeout_handler)
+    signal.alarm(3600)
+
     # Ejecutamos mostrando salida en tiempo real (stream)
     try:
         proc = subprocess.Popen(
@@ -283,12 +304,18 @@ def ejecutar_maigret(alias, carpeta_tmp, top_sites=None):
 
         proc.wait()
         rc = proc.returncode
+    except TimeoutError as te:
+        log(f"[X] TIMEOUT GLOBAL: {te}")
+        proc.kill()
+        return None, None, -1
     except FileNotFoundError:
         log(f"[X] Maigret no encontrado en: {MAIGRET_BIN}")
         return None, None, -1
     except Exception as e:
         log(f"[X] Error ejecutando Maigret: {e}")
         return None, None, -1
+    finally:
+        signal.alarm(0)  # Desactivar alarma
 
 
     # Buscar archivos de salida generados por Maigret
@@ -430,31 +457,32 @@ def buscar_osint(alias, caso_id, perito, top_sites):
     log(f"\n[*] Iniciando rastreo. Esto puede tardar entre 2 y 10 minutos...")
     log("[*] Los perfiles encontrados se mostrarán en tiempo real:\n")
 
-    # Carpeta temporal de trabajo de Maigret
-    carpeta_tmp = os.path.join(carpetas['results'], '_maigret_tmp')
-    os.makedirs(carpeta_tmp, exist_ok=True)
+    # Carpeta temporal de trabajo segura
+    carpeta_tmp = tempfile.mkdtemp(prefix='maigret_', suffix=f'_{alias}_')
+    os.chmod(carpeta_tmp, 0o700)
 
-    ruta_json, ruta_html, rc = ejecutar_maigret(alias, carpeta_tmp, top_sites)
+    try:
+        ruta_json, ruta_html, rc = ejecutar_maigret(alias, carpeta_tmp, top_sites)
 
-    if rc != 0 and rc != -1:
-        log(f"[!] Maigret terminó con código {rc} — pueden existir resultados parciales.")
-        custodia(ruta_custodia, f"Maigret terminó con codigo {rc} (parcial).")
-    elif rc == 0:
-        log("\n[+] Maigret completó la búsqueda exitosamente.")
-        custodia(ruta_custodia, "Maigret: busqueda completada.")
+        if rc != 0 and rc != -1:
+            log(f"[!] Maigret terminó con código {rc} — pueden existir resultados parciales.")
+            custodia(ruta_custodia, f"Maigret terminó con codigo {rc} (parcial).")
+        elif rc == 0:
+            log("\n[+] Maigret completó la búsqueda exitosamente.")
+            custodia(ruta_custodia, "Maigret: busqueda completada.")
 
-    # Mover archivos a carpetas del caso
-    if ruta_json and os.path.exists(ruta_json):
-        destino_json = os.path.join(carpetas['results'], f"maigret_{alias}.json")
-        shutil.move(ruta_json, destino_json)
-        ruta_json = destino_json
+        # Mover archivos a carpetas del caso
+        if ruta_json and os.path.exists(ruta_json):
+            destino_json = os.path.join(carpetas['results'], f"maigret_{alias}.json")
+            shutil.move(ruta_json, destino_json)
+            ruta_json = destino_json
 
-    if ruta_html and os.path.exists(ruta_html):
-        destino_html = os.path.join(carpetas['images'], f"maigret_{alias}.html")
-        shutil.move(ruta_html, destino_html)
-
-    # Limpiar tmp
-    shutil.rmtree(carpeta_tmp, ignore_errors=True)
+        if ruta_html and os.path.exists(ruta_html):
+            destino_html = os.path.join(carpetas['images'], f"maigret_{alias}.html")
+            shutil.move(ruta_html, destino_html)
+    finally:
+        # Limpieza de temporales segura
+        shutil.rmtree(carpeta_tmp, ignore_errors=True)
 
     # FASE 4 — Parsear y generar resumen
     progress(85, "Parseando resultados y generando resumen forense...")

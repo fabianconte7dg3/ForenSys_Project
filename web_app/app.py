@@ -1092,6 +1092,14 @@ def get_mobile_signature(caso_id):
     if not os.path.exists(ruta): return f"Firma no encontrada para el caso {caso_id}", 404
     return send_file(ruta, as_attachment=True, download_name=f"{caso_id}_mobile_firma.bin")
 
+@app.route('/api/osint/index/<caso_id>', methods=['GET'])
+def get_osint_index(caso_id):
+    """Retorna el índice de búsquedas OSINT realizadas para un caso dado."""
+    ruta = f"{app_config['cases_base_dir']}/{caso_id}/03_Results_(Resultados_Extraidos)/OSINT/osint_index.json"
+    if not os.path.exists(ruta): 
+        return jsonify({'busquedas': []})
+    return send_file(ruta, mimetype='application/json')
+
 @app.route('/api/kill_command', methods=['POST'])
 def kill_command():
     """Termina el subproceso activo y TODOS sus hijos (sudo → python → dc3dd, etc.)."""
