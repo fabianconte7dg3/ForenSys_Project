@@ -164,6 +164,7 @@ def recuperar_borrados(ruta_imagen, destino_base, caso_id):
     
     carpeta_recuperados = os.path.join(destino_base, f"{caso_id}_Carving")
     os.makedirs(carpeta_recuperados, exist_ok=True)
+    os.chmod(carpeta_recuperados, 0o700)  # Seguridad: Permisos restrictivos solo para root
     
     print("[*] Ejecutando escáner profundo de Photorec sobre la imagen RAW...")
     comando_photorec = [
@@ -236,6 +237,10 @@ def main():
     origen = args.target
     caso_id = args.case
     perito = args.perito
+    
+    if not origen.startswith('/dev/'):
+        print("[X] ERROR DE SEGURIDAD: Ruta de origen inválida. Debe ser un dispositivo en /dev/")
+        sys.exit(1)
     
     if not os.path.exists(origen):
         print(f"[X] El dispositivo {origen} no existe.")
