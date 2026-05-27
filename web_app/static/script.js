@@ -1,47 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
 
-    // --- TELEMETRY LOGIC ---
-    function actualizarTelemetria() {
-        const pathInput = document.getElementById('telemetry-storage-path');
-        const storagePath = pathInput ? pathInput.value.trim() : '/';
-        
-        fetch('/api/telemetry', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ storage_path: storagePath })
-        })
-        .then(res => res.json())
-        .then(data => {
-            if(data.status === 'success') {
-                // Update CPU
-                const cpuVal = document.getElementById('telemetry-cpu-val');
-                const cpuBar = document.getElementById('telemetry-cpu-bar');
-                if(cpuVal) cpuVal.textContent = data.cpu.percent;
-                if(cpuBar) cpuBar.style.width = data.cpu.percent + '%';
-                
-                // Update RAM
-                const ramFree = document.getElementById('telemetry-ram-free');
-                const ramBar = document.getElementById('telemetry-ram-bar');
-                const ramSub = document.getElementById('telemetry-ram-sub');
-                if(ramFree) ramFree.textContent = data.ram.free_gb;
-                if(ramBar) ramBar.style.width = data.ram.percent + '%';
-                if(ramSub) ramSub.textContent = `${data.ram.total_gb} GB total — ${data.ram.free_gb} GB disponibles (${data.ram.percent}%)`;
-                
-                // Update Storage
-                const diskFree = document.getElementById('telemetry-disk-free');
-                const diskBar = document.getElementById('telemetry-disk-bar');
-                const diskSub = document.getElementById('telemetry-disk-sub');
-                if(diskFree) diskFree.textContent = data.storage.free_gb;
-                if(diskBar) diskBar.style.width = data.storage.percent + '%';
-                if(diskSub) diskSub.textContent = `${data.storage.total_gb} GB total — ${data.storage.used_gb} GB utilizados (${data.storage.percent}%)`;
-            }
-        })
-        .catch(err => console.error("Error fetching telemetry:", err));
-    }
-    // Start polling every 2 seconds
-    setInterval(actualizarTelemetria, 2000);
-    // Initial fetch
-    actualizarTelemetria();
+    // Telemetry logic has been moved to index.html
 
     // --- SPA Navigation Logic ---
     const navLinks = document.querySelectorAll('.nav-link');
