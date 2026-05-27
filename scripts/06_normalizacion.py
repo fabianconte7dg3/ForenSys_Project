@@ -1,26 +1,31 @@
-import os
-import sys
+# =============================================================
+# STDLIB — Librería Estándar de Python (PEP 8 §Imports)
+# =============================================================
 import argparse
-import subprocess
-import sqlite3
-import shutil
-import re
+import atexit
+import csv
+import email
 import glob
 import hashlib
-import csv
 import json
-import email
-import math
-import tempfile
 import logging
-import atexit
-from email import policy
-from collections import Counter
-from zipfile import ZipFile
+import math
+import os
+import re
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
 import xml.etree.ElementTree as ET
+from collections import Counter
 from datetime import datetime
+from email import policy
+from zipfile import ZipFile
 
-# Librerías de terceros (Requieren pip install)
+# =============================================================
+# THIRD-PARTY — Dependencias externas (pip)
+# =============================================================
 try:
     from PIL import Image
     from PIL.ExifTags import TAGS, GPSTAGS
@@ -30,7 +35,7 @@ try:
 except ImportError as e:
     print(f"[!] Faltan dependencias. Ejecuta: sudo pip install Pillow PyMuPDF regipy pefile --break-system-packages")
     print(f"[!] Error exacto: {e}")
-    exit()
+    sys.exit(1)
 
 # python-evtx es opcional (para Event Logs de Windows)
 try:
