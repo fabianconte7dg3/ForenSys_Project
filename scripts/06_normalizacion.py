@@ -1,4 +1,5 @@
 import os
+import sys
 import argparse
 import subprocess
 import sqlite3
@@ -11,6 +12,8 @@ import json
 import email
 import math
 import tempfile
+import logging
+import atexit
 from email import policy
 from collections import Counter
 from zipfile import ZipFile
@@ -43,6 +46,14 @@ except ImportError:
 DIRECTORIO_DEFAULT = "/mnt/Destino_ForenSys"
 UMBRAL_ENTROPIA_SOSPECHOSA = 7.2
 
+# Rutas base permitidas para imágenes forenses (path traversal prevention)
+RUTAS_IMAGEN_PERMITIDAS = [
+    '/mnt/',
+    '/media/',
+    '/home/ciber-admin/ForenSys_Project',
+    '/opt/',
+]
+
 CATEGORIAS_ARCHIVOS = {
     'Images': ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp', '.ico'],
     'Videos': ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv'],
@@ -57,22 +68,194 @@ NAVEGADORES = {
     "Chrome": {
         "archivo_historial": "history",
         "ruta_pista": "google/chrome",
-        "sql_historial": "SELECT urls.url, urls.title, datetime(visits.visit_time/1000000-11644473600,'unixepoch','localtime'), CAST((visits.visit_time/1000000-11644473600) AS INTEGER) FROM urls JOIN visits ON urls.id=visits.url",
-        "sql_descargas": "SELECT target_path, tab_url, datetime(start_time/1000000-11644473600,'unixepoch','localtime'), total_bytes FROM downloads",
+        "sql_historial": (
+            "SELECT urls.url, urls.title, "
+            "datetime(visits.visit_time/1000000-11644473600,'unixepoch','localtime'), "
+            "CAST((visits.visit_time/1000000-11644473600) AS INTEGER) "
+            "FROM urls JOIN visits ON urls.id = visits.url "
+            "ORDER BY visits.visit_time DESC"
+        ),
+        "sql_descargas": (
+            "SELECT target_path, tab_url, "
+            "datetime(start_time/1000000-11644473600,'unixepoch','localtime'), "
+            "total_bytes FROM downloads"
+        ),
     },
     "Edge": {
         "archivo_historial": "history",
         "ruta_pista": "microsoft/edge",
-        "sql_historial": "SELECT urls.url, urls.title, datetime(visits.visit_time/1000000-11644473600,'unixepoch','localtime'), CAST((visits.visit_time/1000000-11644473600) AS INTEGER) FROM urls JOIN visits ON urls.id=visits.url",
-        "sql_descargas": "SELECT target_path, tab_url, datetime(start_time/1000000-11644473600,'unixepoch','localtime'), total_bytes FROM downloads",
+        "sql_historial": (
+            "SELECT urls.url, urls.title, "
+            "datetime(visits.visit_time/1000000-11644473600,'unixepoch','localtime'), "
+            "CAST((visits.visit_time/1000000-11644473600) AS INTEGER) "
+            "FROM urls JOIN visits ON urls.id = visits.url "
+            "ORDER BY visits.visit_time DESC"
+        ),
+        "sql_descargas": (
+            "SELECT target_path, tab_url, "
+            "datetime(start_time/1000000-11644473600,'unixepoch','localtime'), "
+            "total_bytes FROM downloads"
+        ),
     },
     "Firefox": {
         "archivo_historial": "places.sqlite",
         "ruta_pista": "mozilla/firefox",
-        "sql_historial": "SELECT url, title, datetime(last_visit_date/1000000,'unixepoch','localtime'), CAST(last_visit_date/1000000 AS INTEGER) FROM moz_places WHERE last_visit_date IS NOT NULL",
-        "sql_descargas": "SELECT content, source, datetime(dateAdded/1000000,'unixepoch','localtime'), 0 FROM moz_annos WHERE anno_attribute_id=1",
+        "sql_historial": (
+            "SELECT url, title, "
+            "datetime(last_visit_date/1000000,'unixepoch','localtime'), "
+            "CAST(last_visit_date/1000000 AS INTEGER) "
+            "FROM moz_places WHERE last_visit_date IS NOT NULL"
+        ),
+        "sql_descargas": (
+            "SELECT content, source, "
+            "datetime(dateAdded/1000000,'unixepoch','localtime'), 0 "
+            "FROM moz_annos WHERE anno_attribute_id=1"
+        ),
     }
 }
+
+# Módulo de logging forense centralizado
+_forensic_logger = None
+
+def setup_forensic_logging(caso_id):
+    """Configura logging forense con timestmaps UTC. NIST 800-88 §4.3."""
+    global _forensic_logger
+    log_dir = '/var/log'
+    if not os.access(log_dir, os.W_OK):
+        log_dir = tempfile.gettempdir()
+    log_file = os.path.join(log_dir, f'forensys_normalizacion_{caso_id}_{datetime.utcnow().strftime("%Y%m%d_%H%M%S")}.log')
+    logging.basicConfig(
+        level=logging.DEBUG,
+        format='%(asctime)s UTC [%(levelname)s] [%(funcName)s:%(lineno)d] %(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S',
+        handlers=[
+            logging.FileHandler(log_file, encoding='utf-8'),
+            logging.StreamHandler(sys.stdout),
+        ]
+    )
+    _forensic_logger = logging.getLogger('ForenSys.Normalizacion')
+    _forensic_logger.info("=== INICIO DE NORMALIZACIÓN FORENSE ===")
+    _forensic_logger.info(f"Caso ID : {caso_id}")
+    _forensic_logger.info(f"PID     : {os.getpid()}")
+    _forensic_logger.info(f"Python  : {sys.version.split()[0]}")
+    _forensic_logger.info(f"Log     : {log_file}")
+    return _forensic_logger
+
+def flog(msg, level='info'):
+    """Helper de logging. Si el logger no está inicializado, imprime a stdout."""
+    if _forensic_logger:
+        getattr(_forensic_logger, level, _forensic_logger.info)(msg)
+    else:
+        print(msg)
+
+# Archivo temporal seguro: mkstemp + registro atexit para limpieza garantizada
+def get_secure_tempfile(suffix='', prefix='forensys_'):
+    """Crea un archivo temporal seguro (sin race condition). NIST SP 800-88."""
+    fd, path = tempfile.mkstemp(suffix=suffix, prefix=prefix)
+    os.close(fd)  # Cerrar descriptor; shutil.copy2 lo abrirá él mismo
+    os.chmod(path, 0o600)
+    atexit.register(lambda p=path: os.unlink(p) if os.path.exists(p) else None)
+    return path
+
+# Gestor de checkpoints para recuperación de análisis largos
+class CheckpointManager:
+    """Persiste el progreso de análisis para poder retomar sin rehacer pasos completados."""
+    def __init__(self, caso_id, ruta_resultados):
+        self.ruta = os.path.join(ruta_resultados, f'_checkpoint_{caso_id}.json')
+        self.data = self._cargar()
+
+    def _cargar(self):
+        if os.path.exists(self.ruta):
+            try:
+                with open(self.ruta, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {'completados': [], 'timestamps': {}}
+
+    def completado(self, paso):
+        return paso in self.data['completados']
+
+    def marcar(self, paso):
+        if paso not in self.data['completados']:
+            self.data['completados'].append(paso)
+        self.data['timestamps'][paso] = datetime.utcnow().isoformat()
+        self._guardar()
+
+    def _guardar(self):
+        try:
+            with open(self.ruta, 'w', encoding='utf-8') as f:
+                json.dump(self.data, f, indent=2)
+            os.chmod(self.ruta, 0o600)
+        except Exception as e:
+            flog(f'[!] No se pudo guardar checkpoint: {e}', 'warning')
+
+# Validaciones de entrada
+def validar_caso_id(caso_id):
+    """Valida formato ID de caso. Previene path traversal."""
+    if not re.match(r'^[A-Za-z0-9_-]{1,80}$', caso_id):
+        print(f"[X] ID de caso inválido: '{caso_id}'")
+        print("    Permitido: alfanuméricos, guiones, guiones_bajos (máx. 80 chars)")
+        sys.exit(1)
+    return caso_id
+
+def validar_ruta_imagen(ruta_imagen):
+    """Valida que la imagen forense sea segura para procesar."""
+    if not os.path.exists(ruta_imagen):
+        print(f"[X] Ruta no encontrada: {ruta_imagen}")
+        sys.exit(1)
+    # Rechazar symlinks
+    if os.path.islink(ruta_imagen):
+        print(f"[X] Symlinks no permitidos por seguridad forense: {ruta_imagen}")
+        sys.exit(1)
+    # Rechazar directorios
+    if not os.path.isfile(ruta_imagen):
+        print(f"[X] La ruta debe apuntar a un archivo, no a un directorio: {ruta_imagen}")
+        sys.exit(1)
+    # Rechazar path traversal y rutas fuera de las permitidas
+    ruta_abs = os.path.realpath(ruta_imagen)
+    if not any(ruta_abs.startswith(p) for p in RUTAS_IMAGEN_PERMITIDAS):
+        print(f"[X] Ruta fuera de directorios forenses permitidos: {ruta_abs}")
+        print(f"    Permitidos: {RUTAS_IMAGEN_PERMITIDAS}")
+        sys.exit(1)
+    # Rechazar argumentos disfrazados de flags
+    if ruta_imagen.strip().startswith('-'):
+        print(f"[X] Ruta no puede comenzar con '-': {ruta_imagen}")
+        sys.exit(1)
+    if not os.access(ruta_imagen, os.R_OK):
+        print(f"[X] Sin permisos de lectura: {ruta_imagen}")
+        sys.exit(1)
+    return ruta_abs
+
+def verificar_integridad_normalizacion(ruta_resultados):
+    """
+    Calcula y registra SHA-256 de los archivos críticos de la normalización.
+    NIST 800-88 §4.7: Verificación de integridad post-proceso.
+    Retorna dict {archivo: hash} para auditoría.
+    """
+    archivos_criticos = [
+        'Master_Timeline.jsonl',
+        'SuperTimeline.sqlite',
+        'Reporte_Forense_Maestro.txt',
+    ]
+    hashes_finales = {}
+    flog("\n[*] Verificando integridad de archivos críticos generados...")
+    for nombre in archivos_criticos:
+        ruta = os.path.join(ruta_resultados, nombre)
+        if not os.path.exists(ruta):
+            flog(f"    [!] Archivo no generado (puede ser normal): {nombre}", 'warning')
+            continue
+        try:
+            sha256 = hashlib.sha256()
+            with open(ruta, 'rb') as f:
+                for bloque in iter(lambda: f.read(65536), b''):
+                    sha256.update(bloque)
+            h = sha256.hexdigest()
+            hashes_finales[nombre] = h
+            flog(f"    [+] {nombre}: SHA-256 = {h}")
+        except Exception as e:
+            flog(f"    [X] Error calculando hash de {nombre}: {e}", 'error')
+    return hashes_finales
 
 def imprimir_banner():
     print("""
@@ -601,7 +784,7 @@ def extraer_programas_instalados(ruta_fuente, ruta_resultados, f_jsonl, eventos_
     print(f"    [+] Hive encontrado: {ruta_hive}")
 
     # Copiar a temporal para no bloquear
-    temp_hive = tempfile.mktemp(suffix="_SOFTWARE")
+    temp_hive = get_secure_tempfile(suffix="_SOFTWARE")
     shutil.copy2(ruta_hive, temp_hive)
 
     csv_path = os.path.join(ruta_resultados, "Lista_Programas_Instalados.csv")
@@ -693,7 +876,7 @@ def motor_web_inteligente(ruta_completa, archivo, raiz, f_web, f_jsonl, eventos_
 
     print(f"    [+] Navegador detectado: {navegador_detectado} en {raiz}")
 
-    temp_db = tempfile.mktemp(suffix=f"_{navegador_detectado}.sqlite")
+    temp_db = get_secure_tempfile(suffix=f"_{navegador_detectado}.sqlite")
     try:
         shutil.copy2(ruta_completa, temp_db)
         conn_web = sqlite3.connect(temp_db)
@@ -797,7 +980,7 @@ def auditar_event_logs(ruta_fuente, ruta_resultados, f_jsonl, eventos_lote):
         writer.writerow(["Archivo_Log", "EventID", "Descripcion_Forense", "Timestamp", "Datos_XML"])
 
         for archivo_evtx in archivos_evtx:
-            temp_evtx = tempfile.mktemp(suffix=".evtx")
+            temp_evtx = get_secure_tempfile(suffix=".evtx")
             try:
                 shutil.copy2(archivo_evtx, temp_evtx)
                 with evtx.Evtx(temp_evtx) as log:
@@ -860,7 +1043,7 @@ def detectar_persistencia(ruta_fuente, ruta_resultados, f_jsonl):
         for arch in archivos_dir:
             if arch.lower() == "ntuser.dat":
                 ruta_ntuser = os.path.join(raiz, arch)
-                temp_reg = tempfile.mktemp(suffix="_NTUSER")
+                temp_reg = get_secure_tempfile(suffix="_NTUSER")
                 try:
                     shutil.copy2(ruta_ntuser, temp_reg)
                     try:
@@ -903,7 +1086,7 @@ def detectar_persistencia(ruta_fuente, ruta_resultados, f_jsonl):
             ruta_test = f"{ruta_relativa}/{arch}".lower()
             if ruta_test.endswith("windows/system32/config/software") and arch.lower() == "software":
                 ruta_hive = os.path.join(raiz, arch)
-                temp_sw = tempfile.mktemp(suffix="_SOFTWARE_PERSIST")
+                temp_sw = get_secure_tempfile(suffix="_SOFTWARE_PERSIST")
                 try:
                     shutil.copy2(ruta_hive, temp_sw)
                     try:
@@ -981,7 +1164,7 @@ def extraer_info_hardware(ruta_fuente, ruta_resultados, f_jsonl):
         return 0
 
     print(f"    [+] Hive SYSTEM encontrado: {ruta_system}")
-    temp_sys = tempfile.mktemp(suffix="_SYSTEM")
+    temp_sys = get_secure_tempfile(suffix="_SYSTEM")
 
     try:
         shutil.copy2(ruta_system, temp_sys)
@@ -1163,7 +1346,7 @@ def detectar_usuarios_equipo(ruta_fuente, ruta_resultados, f_jsonl):
 
     if ruta_sam:
         print(f"    [+] Hive SAM encontrado: {ruta_sam}")
-        temp_sam = tempfile.mktemp(suffix="_SAM")
+        temp_sam = get_secure_tempfile(suffix="_SAM")
         try:
             shutil.copy2(ruta_sam, temp_sam)
             try:
@@ -1489,7 +1672,7 @@ def organizar_estilo_autopsy(ruta_fuente, ruta_vistas, ruta_resultados, carpeta_
 
                 # --- 3. REGISTRY (NTUSER.DAT) ---
                 elif archivo.lower() == 'ntuser.dat':
-                    temp_reg = tempfile.mktemp(suffix="_NTUSER")
+                    temp_reg = get_secure_tempfile(suffix="_NTUSER")
                     # Extraer nombre de usuario de la ruta del perfil
                     partes_ruta = raiz.replace("\\", "/").split("/")
                     nombre_usr = partes_ruta[-1] if partes_ruta else "Desconocido"
@@ -1551,109 +1734,149 @@ def organizar_estilo_autopsy(ruta_fuente, ruta_vistas, ruta_resultados, carpeta_
         integrar_fuentes_externas(carpeta_caso, caso_id, f_maestro)
         generar_resumen(estadisticas, f_maestro)
 
-    print(f"\n[+] Base de Datos Timeline: Guardada en {db_timeline_path}")
-    print(f"[+] Dashboard Interactivo: Generado en {html_timeline_path}")
-    print(f"[+] Timeline JSONL para IA: Guardado en {jsonl_path}")
-    print(f"[+] Reporte Maestro: Guardado en {reporte_maestro}")
+    # --- VERIFICACIÓN DE INTEGRIDAD FINAL (NIST 800-88) ---
+    hashes_finales = verificar_integridad_normalizacion(ruta_resultados)
+    if hashes_finales:
+        hashes_path = os.path.join(ruta_resultados, 'hashes_integridad.json')
+        with open(hashes_path, 'w', encoding='utf-8') as hf:
+            json.dump({
+                'caso_id': caso_id,
+                'generado_utc': datetime.utcnow().isoformat(),
+                'hashes': hashes_finales
+            }, hf, indent=2)
+        os.chmod(hashes_path, 0o600)
+        flog(f"[+] Hashes de integridad guardados en: {hashes_path}")
+
+    flog(f"\n[+] Base de Datos Timeline: Guardada en {db_timeline_path}")
+    flog(f"[+] Dashboard Interactivo: Generado en {html_timeline_path}")
+    flog(f"[+] Timeline JSONL para IA: Guardado en {jsonl_path}")
+    flog(f"[+] Reporte Maestro: Guardado en {reporte_maestro}")
     if estadisticas['alta_entropia'] > 0:
-        print(f"    [!] ALERTA: {estadisticas['alta_entropia']} archivos con alta entropía detectados")
+        flog(f"    [!] ALERTA: {estadisticas['alta_entropia']} archivos con alta entropía detectados", 'warning')
     if estadisticas['navegadores_detectados']:
-        print(f"    [+] Navegadores encontrados: {', '.join(estadisticas['navegadores_detectados'])}")
+        flog(f"    [+] Navegadores encontrados: {', '.join(estadisticas['navegadores_detectados'])}")
     if estadisticas['programas'] > 0:
-        print(f"    [+] Programas instalados extraídos: {estadisticas['programas']}")
+        flog(f"    [+] Programas instalados extraídos: {estadisticas['programas']}")
     if estadisticas['persistencia'] > 0:
-        print(f"    [!] Mecanismos de persistencia: {estadisticas['persistencia']}")
+        flog(f"    [!] Mecanismos de persistencia: {estadisticas['persistencia']}", 'warning')
 
 # ==========================================
 # INICIO
 # ==========================================
 if __name__ == "__main__":
     imprimir_banner()
-    
+
+    # --- VERIFICACIÓN DE PRIVILEGIOS (TSK requiere root) ---
+    if os.geteuid() != 0:
+        print("[X] Este módulo requiere permisos de root para acceder a imágenes forenses.")
+        print("[*] Ejecute: sudo python3 06_normalizacion.py --caso CASO_001 --ruta /mnt/imagen.dd")
+        sys.exit(1)
+
+    # --- VERIFICAR HERRAMIENTAS REQUERIDAS ---
+    herramientas_requeridas = ['tsk_recover', 'fls', 'icat', 'blkls', 'mactime', 'mmls']
+    herramientas_faltantes = [h for h in herramientas_requeridas if not shutil.which(h)]
+    if herramientas_faltantes:
+        print(f"[X] Herramientas requeridas no encontradas: {', '.join(herramientas_faltantes)}")
+        print("[*] Instalar con: sudo apt install sleuthkit")
+        sys.exit(1)
+
     # NUEVO SISTEMA DE ARGUMENTOS (Para control desde Interfaz Web)
     parser = argparse.ArgumentParser(description="Normalización Forense y Super Timeline")
     parser.add_argument("--caso", required=True, help="ID del Caso Forense (Ej. CASO_001)")
     parser.add_argument("--ruta", required=True, help="Ruta absoluta de la imagen o evidencia")
     parser.add_argument("--dest", required=False, help="Directorio destino (Opcional, usa default si no se provee)")
-    parser.add_argument("--recuperar", required=False, default="n", choices=["1", "2", "3", "n"], help="Método de rec. borrados: 1=MFT, 2=PhotoRec, 3=Ambos, n=Ninguno")
-    
-    # Leer los argumentos enviados por la consola o por el servidor Flask
-    args = parser.parse_args()
-    
-    caso_id = args.caso.strip()
-    ruta_inicial = args.ruta.strip()
-    ruta_dd = ruta_inicial  # Mapeo para no romper las funciones originales
-    
-    directorio_base_actual = args.dest.strip() if args.dest else DIRECTORIO_DEFAULT
-    opcion_borrados = args.recuperar.lower()
-    
-    print(f"[PROGRESO:5] Iniciando normalización para el caso: {caso_id}")
-    print(f"[*] Leyendo evidencia desde: {ruta_inicial}")
-    print(f"[*] Método de recuperación: {opcion_borrados.upper()}")
+    parser.add_argument("--recuperar", required=False, default="n", choices=["1", "2", "3", "n"],
+                        help="Método de rec. borrados: 1=MFT, 2=PhotoRec, 3=Ambos, n=Ninguno")
 
-    if not os.path.isfile(ruta_dd):
-        print(f"[-] ERROR: La ruta indicada no existe o es un directorio: {ruta_dd}")
-        exit(1)
+    args = parser.parse_args()
+
+    # --- VALIDACIÓN ESTRICTA DE ENTRADAS ---
+    caso_id          = validar_caso_id(args.caso.strip())
+    ruta_dd          = validar_ruta_imagen(args.ruta.strip())
+    directorio_base_actual = args.dest.strip() if args.dest else DIRECTORIO_DEFAULT
+    opcion_borrados  = args.recuperar.lower()
+
+    # Inicializar logging forense ANTES de cualquier operación
+    setup_forensic_logging(caso_id)
+
+    flog(f"[PROGRESO:5] Iniciando normalización para el caso: {caso_id}")
+    flog(f"[*] Leyendo evidencia desde: {ruta_dd}")
+    flog(f"[*] Método de recuperación: {opcion_borrados.upper()}")
+
     os.makedirs(directorio_base_actual, exist_ok=True)
+    os.chmod(directorio_base_actual, 0o700)
     lista_imagenes_completas = detectar_imagenes_segmentadas(ruta_dd)
 
-    carpeta_caso = os.path.join(directorio_base_actual, caso_id)
-    ruta_images = os.path.join(carpeta_caso, "01_Images_(Fuentes_de_datos)")
-    ruta_vol_ntfs = os.path.join(ruta_images, "vol2_NTFS")
-    ruta_vol_unalloc = os.path.join(ruta_images, "vol1_Unallocated")
-    ruta_vistas = os.path.join(carpeta_caso, "02_Views_(Vistas)")
-    ruta_resultados = os.path.join(carpeta_caso, "03_Results_(Resultados_Extraidos)")
-    ruta_borrados_mft = os.path.join(carpeta_caso, "04_Archivos_Borrados_Recuperados")
+    # Rechazar flags disfrazados de rutas en la lista de imágenes
+    for img in lista_imagenes_completas:
+        if img.strip().startswith('-'):
+            flog(f"[X] Ruta de imagen no puede comenzar con '-': {img}", 'error')
+            sys.exit(1)
 
-    os.makedirs(ruta_vol_ntfs, exist_ok=True)
-    os.makedirs(ruta_vol_unalloc, exist_ok=True)
-    os.makedirs(ruta_vistas, exist_ok=True)
-    os.makedirs(ruta_resultados, exist_ok=True)
+    carpeta_caso     = os.path.join(directorio_base_actual, caso_id)
+    ruta_images      = os.path.join(carpeta_caso, "01_Images_(Fuentes_de_datos)")
+    ruta_vol_ntfs    = os.path.join(carpeta_caso, "01_Images_(Fuentes_de_datos)", "vol2_NTFS")
+    ruta_vol_unalloc = os.path.join(carpeta_caso, "01_Images_(Fuentes_de_datos)", "vol1_Unallocated")
+    ruta_vistas      = os.path.join(carpeta_caso, "02_Views_(Vistas)")
+    ruta_resultados  = os.path.join(carpeta_caso, "03_Results_(Resultados_Extraidos)")
+    ruta_borrados_mft= os.path.join(carpeta_caso, "04_Archivos_Borrados_Recuperados")
 
-    print("[PROGRESO:10] Calculando offset y particiones...")
+    for d in [ruta_vol_ntfs, ruta_vol_unalloc, ruta_vistas, ruta_resultados]:
+        os.makedirs(d, exist_ok=True)
+        os.chmod(d, 0o700)
+
+    # Inicializar gestor de checkpoints
+    checkpoint = CheckpointManager(caso_id, ruta_resultados)
+
+    flog("[PROGRESO:10] Calculando offset y particiones...")
     offset, tipo_fs, os_detectado = encontrar_offset_y_so(lista_imagenes_completas)
-    
+
     if offset is None:
-        print("[-] ERROR: No se pudo detectar un offset NTFS válido automáticamente.")
-        print("[-] Asegúrese de que la imagen contenga una partición NTFS de Windows.")
-        exit(1)
+        flog("[-] ERROR: No se pudo detectar un offset NTFS válido automáticamente.", 'error')
+        flog("[-] Asegúrese de que la imagen contenga una partición NTFS de Windows.", 'error')
+        sys.exit(1)
 
-    print("\n========================================================")
-    print("  [PROGRESO:15] INICIANDO ORQUESTADOR FORENSE V11.0 NECROMANTE")
-    print("========================================================")
+    flog("\n========================================================")
+    flog("  [PROGRESO:15] INICIANDO ORQUESTADOR FORENSE V11.0 NECROMANTE")
+    flog("========================================================")
 
-        if extraer_todo_el_disco(lista_imagenes_completas, offset, ruta_vol_ntfs):
+    if extraer_todo_el_disco(lista_imagenes_completas, offset, ruta_vol_ntfs):
+        checkpoint.marcar('extract_disk')
 
-            # --- NECROMANTE DE ARCHIVOS (MFT) ---
-            if opcion_borrados in ['1', '3']:
-                print("[PROGRESO:25] Iniciando recuperación rápida MFT...")
-                jsonl_mft_path = os.path.join(ruta_resultados, "Master_Timeline.jsonl")
-                with open(jsonl_mft_path, 'a', encoding='utf-8') as f_jsonl_mft:
-                    total_borrados = recuperar_borrados_mft(lista_imagenes_completas, offset, ruta_borrados_mft, f_jsonl_mft)
+        # --- NECROMANTE DE ARCHIVOS (MFT) ---
+        if opcion_borrados in ['1', '3'] and not checkpoint.completado('mft_recovery'):
+            flog("[PROGRESO:25] Iniciando recuperación rápida MFT...")
+            jsonl_mft_path = os.path.join(ruta_resultados, "Master_Timeline.jsonl")
+            with open(jsonl_mft_path, 'a', encoding='utf-8') as f_jsonl_mft:
+                total_borrados = recuperar_borrados_mft(lista_imagenes_completas, offset, ruta_borrados_mft, f_jsonl_mft)
+            checkpoint.marcar('mft_recovery')
 
-            # --- CARVING CON PHOTOREC ---
-            if opcion_borrados in ['2', '3']:
-                recuperar_archivos_borrados(lista_imagenes_completas, offset, ruta_vol_unalloc)
+        # --- CARVING CON PHOTOREC ---
+        if opcion_borrados in ['2', '3'] and not checkpoint.completado('photorec'):
+            recuperar_archivos_borrados(lista_imagenes_completas, offset, ruta_vol_unalloc)
+            checkpoint.marcar('photorec')
 
-            if opcion_borrados == 'n':
-                print("[PROGRESO:35] Saltando recuperación de archivos borrados por solicitud del usuario.")
+        if opcion_borrados == 'n':
+            flog("[PROGRESO:35] Saltando recuperación de archivos borrados por solicitud del usuario.")
 
-            # --- EXTRACCIÓN MAC TSK ---
-            print("[PROGRESO:50] Generando línea de tiempo MAC (fls / mactime)...")
+        # --- EXTRACCIÓN MAC TSK ---
+        if not checkpoint.completado('timeline_tsk'):
+            flog("[PROGRESO:50] Generando línea de tiempo MAC (fls / mactime)...")
             generar_timeline_tsk(ruta_dd, offset, ruta_resultados)
+            checkpoint.marcar('timeline_tsk')
 
-            # --- ESTRUCTURA AUTOPSY, SQLITE, JSONL & HTML ---
-            print("[PROGRESO:75] Organizando datos y generando bases de datos SQLite / JSONL...")
-            organizar_estilo_autopsy(ruta_vol_ntfs, ruta_vistas, ruta_resultados, carpeta_caso, caso_id)
+        # --- ESTRUCTURA AUTOPSY, SQLITE, JSONL & HTML ---
+        flog("[PROGRESO:75] Organizando datos y generando bases de datos SQLite / JSONL...")
+        organizar_estilo_autopsy(ruta_vol_ntfs, ruta_vistas, ruta_resultados, carpeta_caso, caso_id)
+        checkpoint.marcar('deep_inspection')
 
-            print("\n========================================================")
-            print("[+] [ÉXITO] ESTRUCTURA PERICIAL V11.0 COMPLETADA")
-            print(f"    [1] Evidencia Cruda:            {ruta_images}")
-            print(f"    [2] Dashboard Web (GUI):        {ruta_vistas}/Dashboard_SuperTimeline.html")
-            print(f"    [3] Base SQLite & Eventos IA:   {ruta_resultados}")
-            print(f"    [4] Archivos Borrados (MFT):    {ruta_borrados_mft}")
-            print(f"    [5] Programas Instalados:       {ruta_resultados}/Lista_Programas_Instalados.csv")
-            print(f"    [6] Mecanismos Persistencia:    {ruta_resultados}/Mecanismos_Persistencia.csv")
-            print("========================================================")
-            print("[PROGRESO:100] Normalización y Triaje finalizados.")
-
+        flog("\n========================================================")
+        flog("[+] [ÉXITO] ESTRUCTURA PERICIAL V11.0 COMPLETADA")
+        flog(f"    [1] Evidencia Cruda:            {ruta_images}")
+        flog(f"    [2] Dashboard Web (GUI):        {ruta_vistas}/Dashboard_SuperTimeline.html")
+        flog(f"    [3] Base SQLite & Eventos IA:   {ruta_resultados}")
+        flog(f"    [4] Archivos Borrados (MFT):    {ruta_borrados_mft}")
+        flog(f"    [5] Programas Instalados:       {ruta_resultados}/Lista_Programas_Instalados.csv")
+        flog(f"    [6] Mecanismos Persistencia:    {ruta_resultados}/Mecanismos_Persistencia.csv")
+        flog("========================================================")
+        flog("[PROGRESO:100] Normalización y Triaje finalizados.")
