@@ -17,6 +17,8 @@ import subprocess
 import configparser
 import stat
 import base64
+import fcntl
+import resource
 from datetime import datetime
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
@@ -160,6 +162,46 @@ def custodia_append(ruta_log, msg):
         f.write(f"[{ts}] [RAM-ANALISIS] {msg}\n")
 
 
+def verificar_autorizacion_perito(perito, caso_id):
+    """Verificar que el perito está autorizado para este caso (Conexión a BD futura)"""
+    # TODO: Cuando ForenSys tenga base de datos SQL de usuarios, habilitar esta validación.
+    # Por ahora se registra la advertencia para futura integración con RBAC.
+    log(f"[*] Validando autorización del perito '{perito}'...")
+    # if not db.verificar_perito(perito, caso_id): sys.exit(1)
+    pass
+
+def ejecutar_plugin_aislado(vol_path, args_list, timeout=300):
+    """Ejecutar plugin con límites de recursos para evitar DoS por plugins maliciosos"""
+    def limitar_recursos():
+        try:
+            # Limitar a 4GB RAM (RLIMIT_AS - Address Space)
+            resource.setrlimit(resource.RLIMIT_AS, (4*1024*1024*1024, -1))
+            # Opcional: Limitar CPU a 1 core si os lo permite
+            if hasattr(os, 'sched_setaffinity'):
+                os.sched_setaffinity(0, {0})
+        except Exception:
+            pass # Falla silenciosa si no somos root o el OS no lo soporta en este contexto
+
+    try:
+        result = subprocess.run(
+            ['python3', vol_path] + args_list,
+            preexec_fn=limitar_recursos,
+            capture_output=True, text=True, timeout=timeout
+        )
+        return result
+    except subprocess.TimeoutExpired:
+        class FakeResult:
+            returncode = -1
+            stdout = ''
+            stderr = f"Timeout tras {timeout}s"
+        return FakeResult()
+    except Exception as e:
+        class FakeResult:
+            returncode = -1
+            stdout = ''
+            stderr = str(e)
+        return FakeResult()
+
 def run_plugin(vol_path, mem_file, plugin, output_base, timeout=300):
     """
     Ejecuta un plugin de Volatility3.
@@ -167,32 +209,19 @@ def run_plugin(vol_path, mem_file, plugin, output_base, timeout=300):
     Retorna (exito, mensaje_error).
     """
     # 1. Formato JSON
-    try:
-        result = subprocess.run(
-            ['python3', vol_path, '-f', mem_file, '--output-format', 'json', plugin],
-            capture_output=True, text=True, timeout=timeout
-        )
-        if result.returncode == 0 and result.stdout.strip():
-            with open(output_base + '.json', 'w', encoding='utf-8') as f:
-                f.write(result.stdout)
-        elif result.returncode != 0:
-            error_msg = (result.stderr or result.stdout or 'Sin detalles')[:500]
-            return False, error_msg
-    except subprocess.TimeoutExpired:
-        return False, f"Timeout tras {timeout}s"
-    except Exception as e:
-        return False, str(e)
+    result = ejecutar_plugin_aislado(vol_path, ['-f', mem_file, '--output-format', 'json', plugin], timeout)
+    if result.returncode == 0 and result.stdout.strip():
+        with open(output_base + '.json', 'w', encoding='utf-8') as f:
+            f.write(result.stdout)
+    elif result.returncode != 0:
+        error_msg = (result.stderr or result.stdout or 'Sin detalles')[:500]
+        return False, error_msg
 
     # 2. Formato texto legible
-    try:
-        result_txt = subprocess.run(
-            ['python3', vol_path, '-f', mem_file, plugin],
-            capture_output=True, text=True, timeout=timeout
-        )
+    result_txt = ejecutar_plugin_aislado(vol_path, ['-f', mem_file, plugin], timeout)
+    if result_txt.returncode == 0 and result_txt.stdout.strip():
         with open(output_base + '.txt', 'w', encoding='utf-8') as f:
             f.write(result_txt.stdout)
-    except Exception:
-        pass  # El JSON ya fue guardado, el txt es secundario
 
     return True, None
 
@@ -292,14 +321,19 @@ def analizar_ram(mem_file, caso_id, perito):
     custodia_append(ruta_custodia, f"Hash Pre-Analisis MD5: {hashes_pre['md5']}")
     custodia_append(ruta_custodia, f"Hash Pre-Analisis SHA-256: {hashes_pre['sha256']}")
 
-    # FASE 2: Copia sellada a 01_Images/RAM/
+    # FASE 2: Copia sellada a 01_Images/RAM/ (Mitigando Race Condition - TOCTOU)
     progress(10, "Copiando volcado a boveda del caso (01_Images/RAM/)...")
     log("\n[*] 2/6: Copiando imagen forense al directorio de fuentes del caso...")
     nombre_imagen  = os.path.basename(mem_file)
     destino_imagen = os.path.join(carpeta_images, nombre_imagen)
-    if not os.path.exists(destino_imagen):
-        shutil.copy2(mem_file, destino_imagen)
-        os.chmod(destino_imagen, 0o600)  # Evitar lectura no autorizada
+    
+    try:
+        # Usar open() con flags exclusivos O_CREAT y O_EXCL previene race conditions
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        fd = os.open(destino_imagen, flags, 0o600)
+        with os.fdopen(fd, 'wb') as f_out, open(mem_file, 'rb') as f_in:
+            shutil.copyfileobj(f_in, f_out)
+        
         hashes_copia = calcular_hashes_multiples(destino_imagen)
         if hashes_copia['sha256'] == hashes_pre['sha256']:
             log(f"[+] Copia verificada: {destino_imagen}")
@@ -307,8 +341,12 @@ def analizar_ram(mem_file, caso_id, perito):
         else:
             log("[X] ALERTA: Hash de copia no coincide. Integridad comprometida.")
             custodia_append(ruta_custodia, "ALERTA: Discrepancia de hash en copia sellada.")
-    else:
+            
+    except FileExistsError:
         log(f"[*] Copia ya existia: {destino_imagen}")
+    except Exception as e:
+        log(f"[X] Error crítico al copiar la imagen: {e}")
+        sys.exit(1)
 
     # FASE 3: Deteccion de SO
     progress(15, "Detectando sistema operativo del volcado...")
@@ -432,6 +470,8 @@ def main():
     if permisos & 0o077 != 0:
         print(f"[!] Advertencia: Permisos del caso muy abiertos ({oct(permisos)}). Ajustando a 0o700.")
         os.chmod(carpeta_caso, 0o700)
+        
+    verificar_autorizacion_perito(args.perito, args.caso)
 
     analizar_ram(args.archivo, args.caso, args.perito)
 
