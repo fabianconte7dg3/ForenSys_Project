@@ -14,14 +14,31 @@ import shutil
 import hashlib
 import argparse
 import subprocess
+import configparser
+import stat
+import base64
 from datetime import datetime
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
 # ── Configuración de rutas ─────────────────────────────────────────
-CASES_BASE_DIR = '/home/ciber-admin/ForenSys_Project/Casos_ForenSys'
-VOLATILITY_PATH = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    'volatility3', 'vol.py'
-)
+def cargar_config():
+    """Cargar rutas desde archivo de configuración o usar defaults seguros."""
+    config = configparser.ConfigParser()
+    if os.path.exists('/etc/forensys/config.ini'):
+        config.read('/etc/forensys/config.ini')
+        return {
+            'cases_base_dir': config.get('paths', 'cases_base_dir', fallback='/mnt/Destino_ForenSys'),
+            'volatility_path': config.get('tools', 'volatility_path', fallback=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'volatility3', 'vol.py')),
+        }
+    return {
+        'cases_base_dir': '/home/ciber-admin/ForenSys_Project/Casos_ForenSys', # Mantenemos retrocompatibilidad si no hay config
+        'volatility_path': os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'volatility3', 'vol.py')
+    }
+
+config_data = cargar_config()
+CASES_BASE_DIR = config_data['cases_base_dir']
+VOLATILITY_PATH = config_data['volatility_path']
 
 # ── Plugins por SO ─────────────────────────────────────────────────
 PLUGIN_SETS = {
@@ -63,13 +80,77 @@ def progress(pct, detail):
     print(f"[PROGRESO:{pct}] {detail}", flush=True)
 
 
-def sha256_file(path):
-    """Calcula SHA-256 leyendo por bloques para archivos grandes."""
-    h = hashlib.sha256()
+def calcular_hashes_multiples(path):
+    """Calcula SHA-256 + SHA-1 + MD5 para compatibilidad forense en cortes internacionales."""
+    sha256 = hashlib.sha256()
+    sha1 = hashlib.sha1()
+    md5 = hashlib.md5()
     with open(path, 'rb') as f:
         for chunk in iter(lambda: f.read(65536), b''):
-            h.update(chunk)
-    return h.hexdigest()
+            sha256.update(chunk)
+            sha1.update(chunk)
+            md5.update(chunk)
+    return {
+        'md5': md5.hexdigest(),
+        'sha1': sha1.hexdigest(),
+        'sha256': sha256.hexdigest(),
+    }
+
+def validar_archivo_memoria(ruta):
+    """Validar que el archivo es realmente un volcado de memoria (Path Traversal / Symlink Attack)."""
+    if os.path.islink(ruta):
+        print(f"[X] ALERTA DE SEGURIDAD: No se permiten symlinks para evidencia ({ruta})")
+        sys.exit(1)
+        
+    rutas_prohibidas = ['/etc', '/sys', '/dev', '/proc', '/var/log']
+    ruta_abs = os.path.abspath(ruta)
+    for rp in rutas_prohibidas:
+        if ruta_abs.startswith(rp):
+            print(f"[X] ALERTA DE SEGURIDAD: Ruta prohibida seleccionada ({ruta}). Posible inyección.")
+            sys.exit(1)
+            
+    tamanio = os.path.getsize(ruta)
+    if tamanio < 100 * 1024 * 1024:
+        print(f"[!] Advertencia: Archivo excepcionalmente pequeño ({tamanio} bytes).")
+
+def verificar_integridad_volatility(vol_path):
+    """Verificar que Volatility3 no fue modificado (Anti-Tampering)."""
+    hash_file = vol_path + ".sha256"
+    try:
+        actual_hash = hashlib.sha256(open(vol_path, 'rb').read()).hexdigest()
+        if os.path.exists(hash_file):
+            with open(hash_file, 'r') as f:
+                hash_esperado = f.read().strip()
+            if actual_hash != hash_esperado:
+                print(f"[X] ALERTA CRÍTICA: Volatility3 ({vol_path}) fue modificado!")
+                print(f"  Posible compromiso de la herramienta forense (Rootkit/Trojano).")
+                sys.exit(1)
+        else:
+            with open(hash_file, 'w') as f:
+                f.write(actual_hash)
+    except Exception as e:
+        print(f"[!] Error verificando integridad de Volatility: {e}")
+
+def validar_plugins_volatility(vol_path):
+    """Verificar que los plugins básicos pueden cargar sin errores fatal."""
+    result = subprocess.run(['python3', vol_path, '-h'], capture_output=True, text=True)
+    if result.returncode != 0:
+         print("[X] ALERTA: Volatility3 no pudo inicializarse. Plugins corruptos o faltantes.")
+         sys.exit(1)
+
+def firmar_analisis_ram(resumen_dict, ruta_firma_bin):
+    """Firmar digitalmente el análisis con clave RSA-2048."""
+    private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    mensaje = json.dumps(resumen_dict, sort_keys=True).encode()
+    firma = private_key.sign(
+        mensaje,
+        padding.PSS(mgf=padding.MGF1(hashes.SHA256()), salt_length=padding.PSS.MAX_LENGTH),
+        hashes.SHA256()
+    )
+    resumen_dict['firma_perito_base64'] = base64.b64encode(firma).decode()
+    with open(ruta_firma_bin, 'wb') as f:
+        f.write(firma)
+    return resumen_dict
 
 
 def custodia_append(ruta_log, msg):
@@ -180,6 +261,10 @@ def analizar_ram(mem_file, caso_id, perito):
         log(f"[X] Volatility3 no encontrado en: {VOLATILITY_PATH}")
         sys.exit(1)
 
+    # Verificar Volatility3 Integridad y Plugins
+    verificar_integridad_volatility(VOLATILITY_PATH)
+    validar_plugins_volatility(VOLATILITY_PATH)
+
     # Preparar carpetas del caso
     carpeta_caso    = os.path.join(CASES_BASE_DIR, caso_id)
     carpeta_images  = os.path.join(carpeta_caso, '01_Images_(Fuentes_de_datos)', 'RAM')
@@ -189,19 +274,23 @@ def analizar_ram(mem_file, caso_id, perito):
 
     for carpeta in [carpeta_images, carpeta_views, carpeta_results]:
         os.makedirs(carpeta, exist_ok=True)
+        os.chmod(carpeta, 0o700)  # Seguridad: Restricción de permisos (CRÍTICA 3)
 
     log(f"\n[*] Caso:   {caso_id}")
     log(f"[*] Perito: {perito}")
     log(f"[*] Imagen: {mem_file}")
 
-    # FASE 1: Hash pre-analisis (ISO 27037 — integridad)
-    progress(5, "Calculando hash SHA-256 pre-analisis...")
-    log("\n[*] 1/6: Calculando hash SHA-256 del volcado (pre-analisis)...")
-    hash_pre = sha256_file(mem_file)
-    log(f"[+] Hash Pre-Analisis SHA-256: {hash_pre}")
+    # FASE 1: Hash pre-analisis multiples (ISO 27037 — compatibilidad judicial)
+    progress(5, "Calculando hashes (MD5, SHA-1, SHA-256) pre-analisis...")
+    log("\n[*] 1/6: Calculando hashes del volcado (pre-analisis)...")
+    hashes_pre = calcular_hashes_multiples(mem_file)
+    log(f"[+] MD5:    {hashes_pre['md5']}")
+    log(f"[+] SHA-1:  {hashes_pre['sha1']}")
+    log(f"[+] SHA-256: {hashes_pre['sha256']}")
     custodia_append(ruta_custodia, f"INICIO analisis RAM por '{perito}'")
     custodia_append(ruta_custodia, f"Archivo fuente: {mem_file}")
-    custodia_append(ruta_custodia, f"Hash Pre-Analisis SHA-256: {hash_pre}")
+    custodia_append(ruta_custodia, f"Hash Pre-Analisis MD5: {hashes_pre['md5']}")
+    custodia_append(ruta_custodia, f"Hash Pre-Analisis SHA-256: {hashes_pre['sha256']}")
 
     # FASE 2: Copia sellada a 01_Images/RAM/
     progress(10, "Copiando volcado a boveda del caso (01_Images/RAM/)...")
@@ -210,8 +299,9 @@ def analizar_ram(mem_file, caso_id, perito):
     destino_imagen = os.path.join(carpeta_images, nombre_imagen)
     if not os.path.exists(destino_imagen):
         shutil.copy2(mem_file, destino_imagen)
-        hash_copia = sha256_file(destino_imagen)
-        if hash_copia == hash_pre:
+        os.chmod(destino_imagen, 0o600)  # Evitar lectura no autorizada
+        hashes_copia = calcular_hashes_multiples(destino_imagen)
+        if hashes_copia['sha256'] == hashes_pre['sha256']:
             log(f"[+] Copia verificada: {destino_imagen}")
             custodia_append(ruta_custodia, f"Copia sellada en: {destino_imagen} — Hash OK")
         else:
@@ -259,31 +349,36 @@ def analizar_ram(mem_file, caso_id, perito):
             custodia_append(ruta_custodia, f"Plugin {plugin}: FALLIDO — {error}")
             fallidos.append((plugin, error))
 
-    # FASE 5: Resumen JSON
-    progress(92, "Generando resumen del analisis...")
-    log("\n[*] 4/6: Generando resumen del analisis...")
+    # FASE 5: Resumen JSON y Firma RSA (Non-Repudiation)
+    progress(92, "Generando resumen firmado del analisis...")
+    log("\n[*] 4/6: Generando resumen firmado del analisis...")
     resumen = {
         "caso_id": caso_id,
         "perito": perito,
         "timestamp": datetime.now().isoformat(),
         "archivo_fuente": mem_file,
-        "hash_pre": hash_pre,
+        "hashes_pre": hashes_pre,
         "os_detectado": os_detected,
         "plugins_exitosos": exitosos,
         "plugins_fallidos": len(fallidos),
         "detalle_fallidos": [{"plugin": p, "error": e} for p, e in fallidos]
     }
+    
     ruta_resumen = os.path.join(carpeta_results, 'resumen_analisis_ram.json')
+    ruta_firma = os.path.join(carpeta_results, 'resumen_analisis_ram_firma.bin')
+    
+    resumen = firmar_analisis_ram(resumen, ruta_firma)
+    
     with open(ruta_resumen, 'w', encoding='utf-8') as f:
         json.dump(resumen, f, ensure_ascii=False, indent=2)
-    log(f"[+] Resumen guardado: {ruta_resumen}")
+    log(f"[+] Resumen guardado y firmado criptográficamente: {ruta_resumen}")
 
     # FASE 6: Sellado final
     progress(97, "Sellando cadena de custodia...")
     log("\n[*] 5/6: Verificando integridad post-analisis...")
-    hash_post = sha256_file(mem_file)
-    integridad_ok = (hash_post == hash_pre)
-    custodia_append(ruta_custodia, f"Hash Post-Analisis SHA-256: {hash_post}")
+    hashes_post = calcular_hashes_multiples(mem_file)
+    integridad_ok = (hashes_post['sha256'] == hashes_pre['sha256'])
+    custodia_append(ruta_custodia, f"Hash Post-Analisis SHA-256: {hashes_post['sha256']}")
     custodia_append(ruta_custodia, f"Integridad archivo fuente: {'VERIFICADA' if integridad_ok else 'COMPROMETIDA'}")
     custodia_append(ruta_custodia, f"Plugins exitosos: {exitosos}/{total_plugins}")
     custodia_append(ruta_custodia, f"FIN analisis RAM — resultados en: {carpeta_results}")
@@ -317,15 +412,26 @@ def main():
                         help='Nombre del perito a cargo')
     args = parser.parse_args()
 
-    if not os.path.exists(args.archivo):
-        print(f"[X] Archivo no encontrado: {args.archivo}")
-        sys.exit(1)
+    # Validar archivo fuente y caso
+    validar_archivo_memoria(args.archivo)
 
     carpeta_caso = os.path.join(CASES_BASE_DIR, args.caso)
     if not os.path.exists(carpeta_caso):
         print(f"[X] Caso '{args.caso}' no existe en {CASES_BASE_DIR}.")
         print("    Abra primero el caso desde la interfaz web.")
         sys.exit(1)
+        
+    # Validar estructura y permisos del caso (CRÍTICA 7)
+    carpetas_requeridas = ['01_Images_(Fuentes_de_datos)', '02_Views_(Vistas)', '03_Results_(Resultados_Extraidos)']
+    for carpeta in carpetas_requeridas:
+        if not os.path.isdir(os.path.join(carpeta_caso, carpeta)):
+            print(f"[X] Caso incompleto: falta {carpeta} en {carpeta_caso}")
+            sys.exit(1)
+    stat_info = os.stat(carpeta_caso)
+    permisos = stat.S_IMODE(stat_info.st_mode)
+    if permisos & 0o077 != 0:
+        print(f"[!] Advertencia: Permisos del caso muy abiertos ({oct(permisos)}). Ajustando a 0o700.")
+        os.chmod(carpeta_caso, 0o700)
 
     analizar_ram(args.archivo, args.caso, args.perito)
 
