@@ -2200,16 +2200,19 @@
                                 </div>
                             </div>
                             
-                            <!-- Dictamen IA -->
+                            <!-- Síntesis IA -->
                             <div class="tree-category" id="cat-ia">
                                 <div class="tree-category-label" onclick="toggleCategory('cat-ia')">
                                     <i class="bi bi-robot" style="color:var(--accent-red);"></i>
-                                    Dictamen IA
+                                    Síntesis IA
                                     <i class="bi bi-chevron-right caret"></i>
                                 </div>
                                 <div class="tree-children">
                                     <div class="tree-file" onclick="selectFile('dictamen_ia')">
                                         <i class="bi bi-markdown-fill tree-file-icon" style="color:#fca5a5;"></i>Sintesis_IA.md
+                                    </div>
+                                    <div class="tree-file" onclick="selectFile('auditoria_ia')">
+                                        <i class="bi bi-filetype-json tree-file-icon" style="color:#fb923c;"></i>Auditoria_IA.json
                                     </div>
                                 </div>
                             </div>
@@ -2273,20 +2276,22 @@
                  ============================================================ -->
             <section class="page-section" id="section-ia">
                 <div class="section-header">
-                    <div class="section-title">Resultados IA (Dictamen Pericial)</div>
-                    <div class="section-subtitle">Informe técnico-legal generado automáticamente por el motor LLM (Módulo 8).</div>
+                    <div class="section-title">Resultados IA — Síntesis de Inteligencia</div>
+                    <div class="section-subtitle">⚠️ Síntesis automática de asistencia (NO Dictamen Pericial). Requiere revisión y firma de perito certificado (Módulo 8).</div>
                 </div>
 
                 <div class="fs-card">
                     <div class="fs-card-header">
-                        <i class="bi bi-file-text fs-card-header-icon"></i>
-                        Dictamen Pericial
+                        <i class="bi bi-robot fs-card-header-icon"></i>
+                        Síntesis de Inteligencia Forense (IA Asistida)
                         <button class="btn-secondary ms-auto" onclick="loadRealIaReport(activeCaseNumber)" style="padding:4px 8px; font-size:0.75rem;">
                             <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
                         </button>
                     </div>
                     <div style="padding:15px;">
-                        <pre id="ia-real-report-content" style="white-space: pre-wrap; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-main); background: var(--bg-body); padding: 15px; border-radius: 6px; border: 1px solid var(--border-dim); min-height: 200px;">El dictamen aún no ha sido generado o no se ha cargado un caso.</pre>
+                        <pre id="ia-real-report-content" style="white-space: pre-wrap; font-family: var(--font-mono); font-size: 0.85rem; color: var(--text-main); background: var(--bg-body); padding: 15px; border-radius: 6px; border: 1px solid var(--border-dim); min-height: 200px;">La síntesis IA aún no ha sido generada o no se ha cargado un caso.
+
+⚠️ Recuerda: Este documento NO es un Dictamen Pericial. Requiere revisión de perito.</pre>
                     </div>
                 </div>
             </section>
@@ -4368,7 +4373,16 @@ const evidenceFiles = {
         type: 'Markdown / Texto',
         hash: fakeHash('dictamen_ia'),
         viewType: 'text',
-        text: '# DICTAMEN PERICIAL GENERADO POR IA\n\n## 1. RESUMEN EJECUTIVO\nSe detectó acceso no autorizado a través de SSH con escalada de privilegios y uso de herramientas maliciosas. El atacante estableció persistencia y exfiltró datos.\n\n## 2. LÍNEA DE TIEMPO CRÍTICA\n- **2026-04-09T22:15:00Z**: Descarga de herramientas maliciosas (mimikatz.zip).\n- **2026-04-10T02:31:53Z**: Acceso exitoso por fuerza bruta (Logon Event 4624).\n- **2026-04-10T02:34:02Z**: Creación de script oculto /tmp/.hidden/run.sh para persistencia.\n\n## 3. ARTEFACTOS CLAVE\n- `C:\\\\Users\\\\Public\\\\Music\\\\svchost.exe` (Entropía alta, posible malware empaquetado).\n- `C:\\\\Users\\\\Public\\\\Videos\\\\update.vbs` (Llave RUN de persistencia).',
+        text: '# SÍNTESIS DE INTELIGENCIA FORENSE\n\n> ⚠️ BORRADOR — Requiere revisión y firma de perito certificado.\n\n## 1. Identificación del Equipo\nEquipo: WORKSTATION-001 | TZ: UTC+2 | OS: Windows 10 Pro\n\n## 2. Usuarios del Sistema\n- Admin (perfil activo, última actividad: 2026-04-10)\n- Usuario invitado detectado\n\n## 3. Alertas de Seguridad\n- svchost.exe fuera de ruta de sistema (Entropía: 7.98) — Confianza: ALTA\n- Clave Run sospechosa: C:\\\\Users\\\\Public\\\\Videos\\\\update.vbs — Confianza: ALTA\n\n## 7. Síntesis Final (NO es conclusión pericial)\nSe identificaron indicadores de compromiso que requieren análisis forense profundo. Confianza global: MEDIA.',
+        hex: false
+    },
+    'auditoria_ia': {
+        name: 'Auditoria_IA.json',
+        size: '4 KB',
+        type: 'JSON',
+        hash: fakeHash('auditoria_ia'),
+        viewType: 'text',
+        text: '{\n  "timestamp_inicio_utc": "2026-05-27T04:00:00.000000",\n  "modelo": "gemma3:4b",\n  "parametros": {"temperature": 0.2, "num_ctx": 4096},\n  "evidencia_sha256": "a1b2c3d4...",\n  "sintesis_sha256": "e5f6a7b8...",\n  "alucinaciones": {"total_anomalias": 0, "confianza": "ALTA"},\n  "estado": "COMPLETADO"\n}',
         hex: false
     }
 };

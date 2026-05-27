@@ -301,24 +301,38 @@ def list_case_results(raw_caso_id):
         {"key": "archivos_borrados",       "filename": "Archivos_Borrados_Recuperados.jsonl", "tipo": "jsonl","categoria": "Recuperación y Anomalías","icono": "bi-trash3-fill",            "color": "#fcd34d"},
         {"key": "metadatos_multimedia",    "filename": "Metadatos_Multimedia.csv",             "tipo": "csv",  "categoria": "Recuperación y Anomalías","icono": "bi-camera-fill",            "color": "#fcd34d"},
         {"key": "sintesis_ia",              "filename": f"Sintesis_IA_{caso_id}.md",         "tipo": "md",   "categoria": "Síntesis IA",           "icono": "bi-robot",                  "color": "#fca5a5"},
+        {"key": "auditoria_ia",             "filename": f"Auditoria_IA_{caso_id}_*.json",    "tipo": "json", "categoria": "Síntesis IA",           "icono": "bi-filetype-json",          "color": "#fb923c"},
     ]
 
     resultado = []
     for arch in archivos_clave:
-        ruta_archivo = os.path.join(ruta_results, arch["filename"])
-        if os.path.exists(ruta_archivo):
-            stat = os.stat(ruta_archivo)
-            size_kb = round(stat.st_size / 1024, 1)
-            resultado.append({
-                "key":      arch["key"],
-                "filename": arch["filename"],
-                "tipo":     arch["tipo"],
-                "categoria":arch["categoria"],
-                "icono":    arch["icono"],
-                "color":    arch["color"],
-                "size_kb":  size_kb,
-                "ruta_abs": ruta_archivo,
-            })
+        patron = arch["filename"]
+        if '*' in patron:
+            # Archivo con timestamp en el nombre — buscar el más reciente
+            import glob as _glob
+            matches = sorted(_glob.glob(os.path.join(ruta_results, patron)))
+            if not matches:
+                continue
+            ruta_archivo = matches[-1]  # Tomar el más reciente
+            filename_real = os.path.basename(ruta_archivo)
+        else:
+            ruta_archivo  = os.path.join(ruta_results, patron)
+            filename_real = patron
+            if not os.path.exists(ruta_archivo):
+                continue
+
+        stat = os.stat(ruta_archivo)
+        size_kb = round(stat.st_size / 1024, 1)
+        resultado.append({
+            "key":      arch["key"],
+            "filename": filename_real,
+            "tipo":     arch["tipo"],
+            "categoria":arch["categoria"],
+            "icono":    arch["icono"],
+            "color":    arch["color"],
+            "size_kb":  size_kb,
+            "ruta_abs": ruta_archivo,
+        })
 
     return jsonify({"status": "ok", "archivos": resultado, "ruta_base": ruta_results})
 
