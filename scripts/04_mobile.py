@@ -20,12 +20,20 @@ import csv
 import io
 import stat
 import base64
+import re
+import fcntl
 from datetime import datetime
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
 # ── Rutas base ─────────────────────────────────────────────────────
 CASES_BASE_DIR = '/home/ciber-admin/ForenSys_Project/Casos_ForenSys'
+
+# ── Configuracion de Timeouts ──────────────────────────────────────
+TIMEOUT_DEFAULT = 120
+TIMEOUT_QUICK = 60
+TIMEOUT_PULL = 600
+TIMEOUT_BACKUP = 1800
 
 # ── Disclaimer legal (se escribe en cadena de custodia) ────────────
 def documentar_limitaciones_extraccion():
@@ -79,7 +87,7 @@ def custodia(ruta_log, msg):
         f.write(f"[{ts}] [MOBILE] {msg}\n")
 
 
-def run_cmd(args, timeout=120):
+def run_cmd(args, timeout=TIMEOUT_DEFAULT):
     """Ejecuta un comando y retorna (stdout, stderr, returncode)."""
     try:
         r = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
@@ -97,20 +105,41 @@ def guardar_json(ruta, datos):
         json.dump(datos, f, ensure_ascii=False, indent=2)
 
 
+def validar_caso_id(caso_id):
+    """Validar formato de ID de caso para prevenir Path Traversal."""
+    if not re.match(r'^[A-Za-z0-9_-]{3,50}$', caso_id):
+        print(f"[X] ID de caso inválido: {caso_id}")
+        print("    Permitido: caracteres alfanuméricos, guiones, guiones bajos (3-50 chars)")
+        sys.exit(1)
+    if '..' in caso_id or '/' in caso_id:
+        print(f"[X] ID de caso contiene path traversal: {caso_id}")
+        sys.exit(1)
+    return caso_id
+
 def preparar_carpetas_seguras(caso_id):
-    """Crea la estructura de carpetas del caso para Mobile con permisos restrictivos."""
+    """Crea la estructura de carpetas de forma atómica con locks."""
     base = os.path.join(CASES_BASE_DIR, caso_id)
+    if not os.path.exists(base):
+        print(f"[X] Caso no existe en base: {base}")
+        sys.exit(1)
+
     carpetas = {
         'images':   os.path.join(base, '01_Images_(Fuentes_de_datos)', 'Mobile'),
         'views':    os.path.join(base, '02_Views_(Vistas)', 'Mobile'),
         'results':  os.path.join(base, '03_Results_(Resultados_Extraidos)', 'Mobile'),
         'custodia': os.path.join(base, 'cadena_custodia.log'),
     }
-    for k, v in carpetas.items():
-        if k != 'custodia':
-            os.makedirs(v, exist_ok=True, mode=0o700)
-            os.chmod(v, 0o700)
-            os.chmod(v, 0o700 | stat.S_ISVTX)  # Sticky bit para evitar borrado
+    
+    lock_file = os.path.join(base, '.forensys_mobile.lock')
+    with open(lock_file, 'a') as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        for k, v in carpetas.items():
+            if k != 'custodia':
+                os.makedirs(v, exist_ok=True, mode=0o700)
+                os.chmod(v, 0o700)
+                os.chmod(v, 0o700 | stat.S_ISVTX)  # Sticky bit para evitar borrado
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        
     return carpetas
 
 def verificar_integridad_adb():
@@ -242,7 +271,7 @@ def extraer_sms_robusto(serial):
         ['adb', '-s', serial, 'shell', 'content', 'query',
          '--uri', 'content://sms',
          '--projection', 'address:body:date:type:read', '--format', 'csv'],
-        timeout=60
+        timeout=TIMEOUT_QUICK
     )
     if rc != 0 or not stdout.strip():
         return {'timestamp': datetime.now().isoformat(), 'total_sms': 0, 'mensajes': [], 'error': stderr}
@@ -281,7 +310,7 @@ def android_llamadas(serial):
         ['adb', '-s', serial, 'shell', 'content', 'query',
          '--uri', 'content://call_log/calls',
          '--projection', 'number:date:duration:type:name'],
-        timeout=60
+        timeout=TIMEOUT_QUICK
     )
     registros = []
     tipos = {'1': 'entrante', '2': 'saliente', '3': 'perdida', '4': 'voicemail', '5': 'rechazada'}
@@ -315,7 +344,7 @@ def android_contactos(serial):
         ['adb', '-s', serial, 'shell', 'content', 'query',
          '--uri', 'content://contacts/phones',
          '--projection', 'display_name:number'],
-        timeout=60
+        timeout=TIMEOUT_QUICK
     )
     contactos = []
     if rc == 0 and stdout.strip():
@@ -349,7 +378,7 @@ def android_pull_media(serial, carpeta_images):
         log(f"    [*] Extrayendo {nombre} ({ruta_src})...")
         stdout, stderr, rc = run_cmd(
             ['adb', '-s', serial, 'pull', ruta_src, destino],
-            timeout=600
+            timeout=TIMEOUT_PULL
         )
         if rc == 0:
             n = sum(len(files) for _, _, files in os.walk(destino))
@@ -522,7 +551,7 @@ def ios_backup(carpeta_images):
     log("    [!] Esto puede tardar varios minutos...")
     stdout, stderr, rc = run_cmd(
         ['idevicebackup2', 'backup', '--full', backup_dir],
-        timeout=1800
+        timeout=TIMEOUT_BACKUP
     )
     if rc == 0:
         n = sum(len(files) for _, _, files in os.walk(backup_dir))
@@ -657,6 +686,8 @@ def main():
                         choices=['android', 'ios', 'auto'],
                         help='Plataforma del dispositivo: android | ios | auto')
     args = parser.parse_args()
+
+    validar_caso_id(args.caso)
 
     # Verificar caso
     carpeta_caso = os.path.join(CASES_BASE_DIR, args.caso)
