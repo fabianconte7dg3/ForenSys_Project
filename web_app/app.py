@@ -901,34 +901,36 @@ def get_telemetry():
         disk_used_gb = disk.used / (1024**3)
         disk_percent = (disk.used / disk.total) * 100 if disk.total > 0 else 0
 
-        # Temperatura — Raspberry Pi (vcgencmd) y fallback genérico (psutil)
+        # Temperatura — Raspberry Pi (vcgencmd) y genérico (psutil)
         temp_data = []
+        
+        # 1. Intentar psutil (más completo, detecta NVMe, placa, etc.)
         try:
-            # Try vcgencmd first (Raspberry Pi native)
-            vc_result = subprocess.run(
-                ['vcgencmd', 'measure_temp'],
-                capture_output=True, text=True, timeout=2
-            )
-            if vc_result.returncode == 0:
-                # Output: temp=52.0'C
-                import re as _re
-                m = _re.search(r'temp=([\d.]+)', vc_result.stdout)
-                if m:
-                    temp_data.append({'label': 'CPU (Raspberry Pi)', 'celsius': float(m.group(1))})
+            sensors = psutil.sensors_temperatures()
+            for chip, entries in sensors.items():
+                for i, entry in enumerate(entries):
+                    if entry.current and entry.current > 0:
+                        # Limpiar etiqueta vacía
+                        label = entry.label if entry.label else f"Sensor {i+1}"
+                        temp_data.append({
+                            'label': f'{chip} — {label}',
+                            'celsius': round(entry.current, 1)
+                        })
         except Exception:
             pass
 
-        if not temp_data:
-            # Fallback: psutil sensors_temperatures
+        # 2. Si no hay CPU reportado o fallback Raspberry Pi via vcgencmd
+        if not any('cpu' in t['label'].lower() for t in temp_data):
             try:
-                sensors = psutil.sensors_temperatures()
-                for chip, entries in sensors.items():
-                    for entry in entries:
-                        if entry.current and entry.current > 0:
-                            temp_data.append({
-                                'label': f'{chip} — {entry.label or "temp"}',
-                                'celsius': round(entry.current, 1)
-                            })
+                vc_result = subprocess.run(
+                    ['vcgencmd', 'measure_temp'],
+                    capture_output=True, text=True, timeout=2
+                )
+                if vc_result.returncode == 0:
+                    import re as _re
+                    m = _re.search(r'temp=([\d.]+)', vc_result.stdout)
+                    if m:
+                        temp_data.append({'label': 'CPU (vcgencmd)', 'celsius': float(m.group(1))})
             except Exception:
                 pass
 
