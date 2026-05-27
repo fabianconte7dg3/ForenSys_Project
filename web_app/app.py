@@ -1064,6 +1064,34 @@ def get_deadbox_signature(caso_id):
             return f"Firma no encontrada para el caso {caso_id}", 404
     return send_file(ruta, as_attachment=True, download_name=f"{caso_id}_COC_firma.bin")
 
+@app.route('/api/ram/report/<caso_id>', methods=['GET'])
+def get_ram_report(caso_id):
+    """Retorna el reporte estructurado JSON generado por Análisis RAM."""
+    ruta = f"{app_config['cases_base_dir']}/{caso_id}/03_Results_(Resultados_Extraidos)/RAM/resumen_analisis_ram.json"
+    if not os.path.exists(ruta): return f"Reporte no encontrado para el caso {caso_id}", 404
+    return send_file(ruta, mimetype='application/json')
+
+@app.route('/api/ram/signature/<caso_id>', methods=['GET'])
+def get_ram_signature(caso_id):
+    """Retorna la firma criptográfica RSA generada por Análisis RAM."""
+    ruta = f"{app_config['cases_base_dir']}/{caso_id}/03_Results_(Resultados_Extraidos)/RAM/resumen_analisis_ram_firma.bin"
+    if not os.path.exists(ruta): return f"Firma no encontrada para el caso {caso_id}", 404
+    return send_file(ruta, as_attachment=True, download_name=f"{caso_id}_ram_firma.bin")
+
+@app.route('/api/mobile/report/<caso_id>', methods=['GET'])
+def get_mobile_report(caso_id):
+    """Retorna el reporte estructurado JSON generado por Extracción Móvil."""
+    ruta = f"{app_config['cases_base_dir']}/{caso_id}/03_Results_(Resultados_Extraidos)/Mobile/resumen_extraccion_mobile.json"
+    if not os.path.exists(ruta): return f"Reporte no encontrado para el caso {caso_id}", 404
+    return send_file(ruta, mimetype='application/json')
+
+@app.route('/api/mobile/signature/<caso_id>', methods=['GET'])
+def get_mobile_signature(caso_id):
+    """Retorna la firma criptográfica RSA generada por Extracción Móvil."""
+    ruta = f"{app_config['cases_base_dir']}/{caso_id}/03_Results_(Resultados_Extraidos)/Mobile/resumen_extraccion_mobile_firma.bin"
+    if not os.path.exists(ruta): return f"Firma no encontrada para el caso {caso_id}", 404
+    return send_file(ruta, as_attachment=True, download_name=f"{caso_id}_mobile_firma.bin")
+
 @app.route('/api/kill_command', methods=['POST'])
 def kill_command():
     """Termina el subproceso activo y TODOS sus hijos (sudo → python → dc3dd, etc.)."""
