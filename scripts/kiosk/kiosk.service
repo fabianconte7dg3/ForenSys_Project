@@ -1,6 +1,5 @@
 [Unit]
 Description=Kiosk Browser (ForenSys Dashboard)
-# Arranca despues de la red y del gestor de seat (seatd)
 After=network.target seatd.service forensys.service
 Wants=network.target seatd.service
 Requires=forensys.service
@@ -9,23 +8,23 @@ Requires=forensys.service
 User=ciber-admin
 WorkingDirectory=/home/ciber-admin
 
-# seatd crea el directorio /run/user/<uid> para el runtime de Wayland
 RuntimeDirectory=kiosk
 RuntimeDirectoryMode=0700
-Environment="XDG_RUNTIME_DIR=/run/kiosk"
+Environment="XDG_RUNTIME_DIR=/run/user/1000"
 
-# Decirle a libseat que use seatd en lugar de logind
-# (evita el error "Interactive authentication required")
+# Forzar card1 = RP1 que maneja HDMI en Raspberry Pi 5
+Environment="WLR_DRM_DEVICES=/dev/dri/card1"
+
+# Usar seatd en lugar de logind
 Environment="LIBSEAT_BACKEND=seatd"
 
-# Deshabilitar dispositivos de entrada virtuales que causan problemas
+# Sin dispositivos de entrada virtuales
 Environment="WLR_LIBINPUT_NO_DEVICES=1"
 
-# NO usar StandardInput=tty ni TTYPath para no bloquear la consola
 StandardOutput=journal
 StandardError=journal
 
-ExecStart=/usr/bin/cage -d -s -- \
+ExecStart=/usr/bin/cage -s -- \
   /usr/bin/chromium \
     --kiosk \
     --noerrdialogs \
@@ -34,9 +33,12 @@ ExecStart=/usr/bin/cage -d -s -- \
     --no-sandbox \
     --disable-dev-shm-usage \
     --ozone-platform=wayland \
+    --disable-gpu \
+    --disable-software-rasterizer \
+    --ignore-gpu-blocklist \
+    --use-gl=egl \
     http://127.0.0.1:5000
 
-# Si falla, esperar 10s antes de reintentar (evita loops rapidisimos)
 Restart=on-failure
 RestartSec=10s
 
