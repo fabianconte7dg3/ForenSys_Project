@@ -1185,6 +1185,11 @@
         <div class="sidebar-footer">
             <i class="bi bi-terminal"></i>
             <span>Modo local &mdash; Sin conexión externa</span>
+            <div class="mt-3">
+                <button id="btn-exit-kiosk" class="btn btn-outline-danger w-100 btn-sm" onclick="exitKiosk()">
+                    <i class="bi bi-power me-2"></i>Salir a Terminal
+                </button>
+            </div>
         </div>
 
     </aside>
@@ -4784,6 +4789,22 @@ function saveIaConfig() {
 
 // Inicializar configuración IA
 loadIaConfig();
+
+// ── SALIDA MODO KIOSKO ──────────────────────────────────────────
+function exitKiosk() {
+    if (confirm("¿Estás seguro de que deseas cerrar el Dashboard y salir a la terminal de Linux?")) {
+        fetch('/api/exit_kiosk', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if(data.status === 'success') {
+                document.body.innerHTML = "<h2 style='color:white;text-align:center;margin-top:20%;'>Kiosko finalizado.<br>Cerrando sesión gráfica...</h2>";
+            } else {
+                alert("Error al intentar cerrar el Kiosko: " + data.message);
+            }
+        })
+        .catch(err => alert("Error de red al intentar salir: " + err));
+    }
+}
 
 </script>
 

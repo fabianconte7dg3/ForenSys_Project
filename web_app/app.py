@@ -1143,6 +1143,19 @@ def kill_command():
     return jsonify({'status': 'error', 'message': 'No hay proceso activo'})
 
 
+@app.route('/api/exit_kiosk', methods=['POST'])
+def exit_kiosk():
+    """Cancela el auto-arranque y cierra el kiosko actual (cage/chromium)."""
+    try:
+        # Tocar bandera para cancelar auto-loop
+        subprocess.run(['touch', '/tmp/kiosk_exit'], check=True)
+        # Matar cage (esto terminará todo el stack gráfico y chromium)
+        subprocess.run(['pkill', '-x', 'cage'], check=False)
+        return jsonify({'status': 'success', 'message': 'Kiosko detenido. Terminal lista.'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 if __name__ == '__main__':
     # Escucha en todas las interfaces de red de la Raspberry Pi
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
