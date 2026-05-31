@@ -8,6 +8,7 @@ import argparse
 import json
 import os
 import time
+import sys
 import subprocess
 
 try:
@@ -111,7 +112,7 @@ def monitor_process(pid, module_name, case_dir):
     # Llamar al generador de PDF automáticamente
     pdf_script = os.path.join(os.path.dirname(__file__), '10_reporte_telemetria.py')
     if os.path.exists(pdf_script):
-        subprocess.Popen(['python3', pdf_script, '--caso_dir', case_dir])
+        subprocess.Popen([sys.executable, pdf_script, '--caso_dir', case_dir])
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -509,7 +509,7 @@ def run_ia():
             
             if telemetry:
                 logger_script = os.path.join(SCRIPTS_DIR, '10_telemetry_logger.py')
-                subprocess.Popen(['python3', logger_script, '--pid', str(proc.pid), '--module', 'Modulo_8_IA', '--case_dir', base_dest], start_new_session=True)
+                subprocess.Popen([sys.executable, logger_script, '--pid', str(proc.pid), '--module', 'Modulo_8_IA', '--case_dir', base_dest], start_new_session=True)
                 
             for line in iter(proc.stdout.readline, ''):
                 line = line.rstrip('\n')
@@ -1168,7 +1168,7 @@ def run_command_api():
                 elif "09_" in command: module_name = "Modulo_9_Reporte"
                 
                 logger_script = os.path.join(SCRIPTS_DIR, '10_telemetry_logger.py')
-                subprocess.Popen(['python3', logger_script, '--pid', str(proc.pid), '--module', module_name, '--case_dir', base_dest], start_new_session=True)
+                subprocess.Popen([sys.executable, logger_script, '--pid', str(proc.pid), '--module', module_name, '--case_dir', case_dir], start_new_session=True)
 
             # readline() es más eficiente que iterar char a char
             for line in iter(proc.stdout.readline, ''):
