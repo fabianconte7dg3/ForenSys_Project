@@ -2043,6 +2043,11 @@
                             <span id="sse-label">Conectando…</span>
                         </span>
                         <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
+                            <!-- Telemetry Mode toggle -->
+                            <div class="form-check form-switch" style="display: flex; align-items: center; gap: 5px; margin-right: 10px;" title="Monitoreo de Recursos Físicos y Cumplimiento Normativo">
+                                <input class="form-check-input" type="checkbox" id="toggle-telemetry" style="cursor: pointer; margin-top: 0;">
+                                <label class="form-check-label" for="toggle-telemetry" style="color: var(--text-muted); font-size: 0.72rem; cursor: pointer; margin-bottom: 0;">Modo Telemetría</label>
+                            </div>
                             <!-- Manual Command Mode toggle -->
                             <button id="btn-cmd-mode" title="Activar Modo Comandos Manual"
                                 style="background:none; border:1px solid var(--border-dim); color:var(--text-muted); border-radius:6px; padding:3px 12px; font-size:0.72rem; cursor:pointer; display:flex; align-items:center; gap:5px; transition: all 0.2s;">
@@ -2900,7 +2905,7 @@ function sendCommand() {
     fetch('/api/run_command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: cmd, caso_id: casoId })
+        body: JSON.stringify({ command: cmd, caso_id: casoId, telemetry: document.getElementById('toggle-telemetry')?.checked || false })
     })
     .then(r => r.json())
     .then(data => {
@@ -3776,7 +3781,7 @@ function runOperation(btnId) {
         fetch('/api/run/ia', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ caso_id: activeCaseNumber, motor: motorSel, modelo: modelVal })
+            body: JSON.stringify({ caso_id: activeCaseNumber, motor: motorSel, modelo: modelVal, telemetry: document.getElementById('toggle-telemetry')?.checked || false })
         })
 
         .then(r => r.json())
@@ -3826,7 +3831,7 @@ function runOperation(btnId) {
     fetch('/api/run_command', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: command, caso_id: activeCaseNumber })
+        body: JSON.stringify({ command: command, caso_id: activeCaseNumber, telemetry: document.getElementById('toggle-telemetry')?.checked || false })
     })
     .then(r => r.json())
     .then(data => {

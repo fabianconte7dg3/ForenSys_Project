@@ -487,6 +487,7 @@ def run_ia():
     # Opciones de IA enviadas desde el frontend
     motor = data.get('motor', 'local').strip()
     modelo = data.get('modelo', '').strip()
+    telemetry = data.get('telemetry', False)
 
     def run_in_thread():
         global running_proc
@@ -505,6 +506,11 @@ def run_ia():
             )
             with running_proc_lock:
                 running_proc = proc
+            
+            if telemetry:
+                logger_script = os.path.join(SCRIPTS_DIR, '10_telemetry_logger.py')
+                subprocess.Popen(['python3', logger_script, '--pid', str(proc.pid), '--module', 'Modulo_8_IA', '--case_dir', base_dest], start_new_session=True)
+                
             for line in iter(proc.stdout.readline, ''):
                 line = line.rstrip('\n')
                 if line:
@@ -1080,6 +1086,10 @@ def run_command_api():
     data = request.json or {}
     cmd = data.get('command', '').strip()
     caso_id = data.get('caso_id', 'MANUAL')
+    telemetry = data.get('telemetry', False)
+    
+    # Determinar destino
+    base_dest = get_case_base_from_registry(caso_id) or DESTINO_FORENSYS
 
     if not cmd:
         return jsonify({'status': 'error', 'message': 'Comando vacío'}), 400
@@ -1102,6 +1112,15 @@ def run_command_api():
             )
             with running_proc_lock:
                 running_proc = proc
+
+            if telemetry:
+                module_name = "Comando_Manual"
+                if "02_" in command: module_name = "Modulo_2_Hashes"
+                elif "07_" in command: module_name = "Modulo_7_Normalizacion"
+                elif "09_" in command: module_name = "Modulo_9_Reporte"
+                
+                logger_script = os.path.join(SCRIPTS_DIR, '10_telemetry_logger.py')
+                subprocess.Popen(['python3', logger_script, '--pid', str(proc.pid), '--module', module_name, '--case_dir', base_dest], start_new_session=True)
 
             # readline() es más eficiente que iterar char a char
             for line in iter(proc.stdout.readline, ''):
