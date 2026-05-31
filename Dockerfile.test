@@ -1,0 +1,42 @@
+# Dockerfile.test para entorno de pruebas ForenSys
+# Garantiza un entorno de ejecución estandarizado para la suite de pruebas (124+ tests).
+
+FROM python:3.12-slim
+
+# Evitar que Python genere archivos .pyc y forzar stdout sin buffer
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# 1. Instalar dependencias del sistema requeridas para mocks y herramientas (opcional si son mocks, pero buenas prácticas)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libssl-dev \
+    libffi-dev \
+    git \
+    curl \
+    # Dependencias teóricas forenses (aunque usemos mocks, validan el entorno)
+    lsblk \
+    dc3dd \
+    adb \
+    libimobiledevice-utils \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Copiar requerimientos y paquetes
+COPY requirements.txt .
+COPY requirements-test.txt .
+
+# 3. Instalar dependencias
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-test.txt
+
+# 4. Copiar todo el código de la aplicación (incluye /tests, /web_app, /scripts)
+COPY . .
+
+# 5. Dar permisos de ejecución a los scripts
+RUN chmod +x scripts/*.py
+
+# 6. Ejecutar la suite de pruebas ignorando rendimiento (que requiere hardware real) 
+# y generar el reporte de cobertura en terminal
+CMD ["pytest", "tests/", "--ignore=tests/performance", "--cov=web_app", "--cov=scripts", "--cov-report=term-missing", "-v"]

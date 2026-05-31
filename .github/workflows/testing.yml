@@ -1,0 +1,48 @@
+name: ForenSys Testing Pipeline
+
+# Ejecutar automáticamente cuando se haga Push a la rama main, o se abra un Pull Request
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    # 1. Clonar el repositorio
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+    
+    # 2. Configurar entorno Python 3.12 (Igual que en la Raspberry Pi 5)
+    - name: Set up Python 3.12
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.12'
+        
+    # 3. Instalar herramientas del sistema necesarias para los tests
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential curl dc3dd adb libimobiledevice-utils
+    
+    # 4. Instalar librerías de Python
+    - name: Install Python Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r requirements-test.txt
+    
+    # 5. Ejecutar la suite de pruebas (124+ Tests)
+    - name: Run Tests with Pytest
+      run: |
+        pytest tests/ --ignore=tests/performance -v --cov=web_app --cov=scripts --cov-report=xml
+        
+    # 6. (Opcional) Subir reporte de cobertura si se usa Codecov
+    # - name: Upload coverage to Codecov
+    #   uses: codecov/codecov-action@v3
+    #   with:
+    #     file: ./coverage.xml
+    #     fail_ci_if_error: false

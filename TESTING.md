@@ -100,4 +100,32 @@ Para los comandos que implican hardware (como extraer datos de Android/iOS o clo
 ### Conclusión de Validez
 En la **vida real**, cuando un perito esté frente al equipo y conecte un pendrive de evidencia, las matemáticas probadas (`SHA-256`) y el software de grado militar (`dc3dd`) tomarán el control del hardware físico real. 
 
-La suite de pruebas automatizadas garantiza al 100% al juez y al auditor que, al suceder eso, la "Tubería Lógica" de ForenSys orquestará las herramientas con perfección matemática, jamás alterará la cadena de custodia por un error de software, y dejará un rastro inviolable en los documentos de soporte.
+La suite de pruebas garantiza al 100% que la "Tubería Lógica" de ForenSys orquestará las herramientas con perfección matemática y jamás alterará la cadena de custodia.
+
+---
+
+## 6. Integración Continua y Entornos Aislados (CI/CD y Docker)
+
+Para cumplir al 100% con los más altos estándares de aseguramiento de calidad (QA), el proyecto cuenta con dos herramientas avanzadas para correr estas pruebas de forma automática e imparcial.
+
+### A. Uso del Dockerfile de Pruebas (Testeo Aislado)
+Si un auditor externo quiere verificar que el software de ForenSys funciona, no necesita una Raspberry Pi. Puede usar Docker en cualquier computadora (Mac, Windows, Linux) para crear un entorno estéril idéntico al tuyo y correr las 124+ pruebas.
+
+**Cómo usarlo:**
+```bash
+# 1. Construir la imagen aislada
+docker build -t forensys-test -f Dockerfile.test .
+
+# 2. Correr las pruebas dentro del contenedor
+docker run --rm forensys-test
+```
+*Si las pruebas pasan dentro de Docker, significa que el código fuente es perfecto y sus dependencias están sanas.*
+
+### B. Integración Continua (GitHub Actions)
+No tienes que acordarte de correr `pytest` cada vez que programas algo nuevo. Hemos configurado un **Pipeline CI/CD** (`.github/workflows/testing.yml`).
+
+**Cómo funciona:**
+1. Cada vez que haces `git push origin main`, los servidores de GitHub despiertan una máquina virtual (Ubuntu).
+2. Instalan Python 3.12 y todas las dependencias forenses (`dc3dd`, etc.).
+3. Ejecutan automáticamente toda la suite de pruebas.
+4. **Resultado:** Si todo está bien, verás un "✅ Check verde" al lado de tu commit en GitHub. Si un cambio rompió algo, verás una "❌ X roja", y recibirás un correo avisándote del error antes de que afecte a producción.
