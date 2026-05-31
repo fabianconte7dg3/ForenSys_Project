@@ -21,8 +21,14 @@ Environment="LIBSEAT_BACKEND=seatd"
 # Sin dispositivos de entrada virtuales
 Environment="WLR_LIBINPUT_NO_DEVICES=1"
 
+# Forzar renderizado por software (pixman) — evita pantalla azul por crash EGL/GPU en RPi5
+Environment="WLR_RENDERER=pixman"
+
 StandardOutput=journal
 StandardError=journal
+
+# Esperar a que la web app esté lista antes de lanzar el navegador
+ExecStartPre=/bin/sleep 5
 
 ExecStart=/usr/bin/cage -s -- \
   chromium-browser \
