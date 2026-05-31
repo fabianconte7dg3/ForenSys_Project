@@ -46,6 +46,7 @@ MODELOS_AUDITADOS = {
     'gemma:4b',
     'gemma2:4b',
     'gemma4:4b',
+    'gemma4:e4b',
     'gemma:2b',
     'llama3.2:3b',
     'llama3.2:1b',
