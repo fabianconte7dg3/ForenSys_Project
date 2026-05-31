@@ -541,18 +541,21 @@ def main():
     else:
         particion = f"{disco}1"
 
+    print("") # Asegurar newline después de mkfs u otros comandos
     progress(90, f"Formateando {particion} como ext4...")
     log(f"[*] Formateando {particion}...")
     subprocess.run(['mkfs.ext4', '-F', particion], check=True)
     log("[SUCCESS] Formato ext4 aplicado.")
 
     # PASO 3: Montaje
+    print("") # Asegurar newline antes del progreso final
     progress(96, "Montando disco...")
     log("\n[*] PASO 3/3: Montando disco en /mnt/Destino_ForenSys...")
     punto_montaje = "/mnt/Destino_ForenSys"
     os.makedirs(punto_montaje, exist_ok=True)
     subprocess.run(['mount', particion, punto_montaje], check=True)
 
+    print("")
     progress(100, "Wiping completado.")
     log("\n==================================================")
     log("   [SUCCESS] WIPING COMPLETADO — SISTEMA LISTO   ")
