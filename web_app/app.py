@@ -533,6 +533,43 @@ def run_ia():
 
 
 @app.route('/api/config/ia', methods=['GET', 'POST'])
+
+@app.route('/api/config/ia/models', methods=['GET'])
+def get_ia_models():
+    import requests
+    local_models = []
+    remote_models = []
+    
+    # Local Models
+    try:
+        resp = requests.get('http://localhost:11434/api/tags', timeout=2)
+        if resp.status_code == 200:
+            local_models = [m['name'] for m in resp.json().get('models', [])]
+    except Exception:
+        pass
+        
+    # Remote Models
+    config_path = os.path.join(DESTINO_FORENSYS, ".ia_config.json")
+    if os.path.exists(config_path):
+        try:
+            with open(config_path, 'r') as f:
+                conf = json.load(f)
+                remote_host = conf.get('remote_host', '').rstrip('/')
+                if remote_host:
+                    resp = requests.get(f'{remote_host}/api/tags', timeout=2)
+                    if resp.status_code == 200:
+                        remote_models = [m['name'] for m in resp.json().get('models', [])]
+        except Exception:
+            pass
+            
+    return jsonify({
+        "status": "success",
+        "local": local_models,
+        "remote": remote_models
+    })
+
+
+@app.route('/api/config/ia', methods=['GET', 'POST'])
 def manage_ia_config():
     """Gestiona la configuración del motor de IA."""
     config_path = os.path.join(DESTINO_FORENSYS, ".ia_config.json")

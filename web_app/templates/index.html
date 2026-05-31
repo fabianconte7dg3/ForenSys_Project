@@ -1980,7 +1980,9 @@
                                     </div>
                                     <div style="flex:1; min-width:200px;">
                                         <label class="form-label-custom">Modelo LLM</label>
-                                        <input type="text" id="ia-model-input" class="form-control-custom" value="gemma3:4b" placeholder="Ej: gemma3:4b, mistral:7b">
+                                        <select id="ia-model-input" class="form-control-custom">
+                                            <option value="gemma3:4b">Cargando modelos...</option>
+                                        </select>
                                     </div>
                                 </div>
                                 <div id="ia-remote-host-container" style="display:none;">
@@ -4758,10 +4760,47 @@ setInterval(actualizarTelemetria, 3000);
 actualizarTelemetria();  // Primera lectura inmediata
 
 // ── CONFIGURACIÓN IA (MÓDULO 8) ──────────────────────────────────
+let iaModels = { local: [], remote: [] };
+
+function loadIaModels() {
+    fetch('/api/config/ia/models')
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                iaModels.local = data.local;
+                iaModels.remote = data.remote;
+                updateIaModelDropdown();
+            }
+        })
+        .catch(err => console.error("Error loading IA models:", err));
+}
+
+function updateIaModelDropdown() {
+    const motor = document.getElementById('ia-motor-select').value;
+    const select = document.getElementById('ia-model-input');
+    const models = motor === 'local' ? iaModels.local : iaModels.remote;
+    
+    select.innerHTML = '';
+    if (models.length === 0) {
+        select.innerHTML = '<option value="">(No se detectaron modelos)</option>';
+        return;
+    }
+    
+    models.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.textContent = m;
+        // Seleccionar gemma:4b o similares por defecto si existe
+        if(m.includes('gemma4:e4b') || m.includes('gemma3:4b')) opt.selected = true;
+        select.appendChild(opt);
+    });
+}
+
 function toggleIaRemoteHost() {
     const motor = document.getElementById('ia-motor-select').value;
     const container = document.getElementById('ia-remote-host-container');
     container.style.display = (motor === 'remoto') ? 'block' : 'none';
+    updateIaModelDropdown();
 }
 
 function loadIaConfig() {
@@ -4790,6 +4829,7 @@ function saveIaConfig() {
     .then(data => {
         if (data.status === 'success') {
             addLogEntry('[OK] Configuración IA remota guardada en el disco externo.', 'log-success');
+            loadIaModels(); // Refrescar modelos del nuevo host
         } else {
             addLogEntry('[ERROR] ' + data.message, 'log-error');
         }
@@ -4799,6 +4839,7 @@ function saveIaConfig() {
 
 // Inicializar configuración IA
 loadIaConfig();
+loadIaModels();
 
 // ── SALIDA MODO KIOSKO ──────────────────────────────────────────
 function exitKiosk() {
