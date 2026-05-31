@@ -2044,10 +2044,15 @@
                         </span>
                         <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
                             <!-- Telemetry Mode toggle -->
-                            <div class="form-check form-switch" style="display: flex; align-items: center; gap: 5px; margin-right: 10px;" title="Monitoreo de Recursos Físicos y Cumplimiento Normativo">
+                            <div class="form-check form-switch" style="display: flex; align-items: center; gap: 5px; margin-right: 5px;" title="Monitoreo de Recursos Físicos y Cumplimiento Normativo">
                                 <input class="form-check-input" type="checkbox" id="toggle-telemetry" style="cursor: pointer; margin-top: 0;">
                                 <label class="form-check-label" for="toggle-telemetry" style="color: var(--text-muted); font-size: 0.72rem; cursor: pointer; margin-bottom: 0;">Modo Telemetría</label>
                             </div>
+                            <!-- View Telemetry PDF button -->
+                            <button id="btn-view-telemetry" title="Ver Reporte PDF de Rendimiento" onclick="if(activeCaseNumber) { window.open(`/api/case/${activeCaseNumber}/telemetry_pdf`, '_blank'); } else { alert('Abre un caso primero'); }"
+                                style="background:none; border:1px solid var(--accent-purple); color:var(--accent-purple); border-radius:6px; padding:3px 12px; font-size:0.72rem; cursor:pointer; display:flex; align-items:center; gap:5px; transition: all 0.2s; margin-right: 10px;">
+                                <i class="bi bi-file-earmark-pdf"></i> Ver Reporte
+                            </button>
                             <!-- Manual Command Mode toggle -->
                             <button id="btn-cmd-mode" title="Activar Modo Comandos Manual"
                                 style="background:none; border:1px solid var(--border-dim); color:var(--text-muted); border-radius:6px; padding:3px 12px; font-size:0.72rem; cursor:pointer; display:flex; align-items:center; gap:5px; transition: all 0.2s;">

@@ -1269,3 +1269,16 @@ def exit_kiosk():
 if __name__ == '__main__':
     # Escucha en todas las interfaces de red de la Raspberry Pi
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)
+
+@app.route('/api/case/<raw_caso_id>/telemetry_pdf', methods=['GET'])
+def get_telemetry_pdf(raw_caso_id):
+    from flask import send_file
+    caso_id = sanitize_case_id(raw_caso_id)
+    if not caso_id:
+        return "caso_id inválido.", 400
+    base_dest = get_case_base_from_registry(caso_id) or DESTINO_FORENSYS
+    pdf_path = os.path.join(base_dest, caso_id, "Reporte_Rendimiento_Hardware.pdf")
+    if os.path.exists(pdf_path):
+        return send_file(pdf_path, mimetype='application/pdf')
+    else:
+        return "El reporte de telemetría aún no ha sido generado para este caso.", 404
