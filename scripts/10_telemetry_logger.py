@@ -99,6 +99,22 @@ def monitor_process(pid, module_name, case_dir):
     except Exception:
         pass
 
+    # Extraer velocidad de wiping si existe
+    if "Wiping" in module_name and os.path.exists("/tmp/wiping_speed.txt"):
+        try:
+            with open("/tmp/wiping_speed.txt", "r") as f:
+                speed_str = f.read().strip()
+                # Parsear "14.6 MB/s" o similar
+                val = float(speed_str.split()[0])
+                metrics['io_write_mb'] = val * metrics['duration_s']
+        except Exception as e:
+            pass
+        # Clean up
+        try:
+            os.remove("/tmp/wiping_speed.txt")
+        except:
+            pass
+
     # Guardar en JSON
     os.makedirs(case_dir, exist_ok=True)
     safe_module = module_name.replace(" ", "_").replace("/", "_")

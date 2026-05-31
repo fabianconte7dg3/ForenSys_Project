@@ -1165,7 +1165,8 @@ def run_command_api():
 
             if telemetry:
                 module_name = "Comando_Manual"
-                if "02_" in command: module_name = "Modulo_2_Hashes"
+                if "01_" in command: module_name = "Wiping_Disco_Destino"
+                elif "02_" in command: module_name = "Modulo_2_Hashes"
                 elif "07_" in command: module_name = "Modulo_7_Normalizacion"
                 elif "09_" in command: module_name = "Modulo_9_Reporte"
                 
