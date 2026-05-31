@@ -1980,15 +1980,18 @@
                                     </div>
                                     <div style="flex:1; min-width:200px;">
                                         <label class="form-label-custom">Modelo LLM</label>
-                                        <select id="ia-model-input" class="form-control-custom">
-                                            <option value="gemma3:4b">Cargando modelos...</option>
-                                        </select>
+                                        <div style="display:flex; gap:8px;">
+                                            <select id="ia-model-input" class="form-control-custom">
+                                                <option value="">(Haz clic en Escanear...)</option>
+                                            </select>
+                                            <button class="btn-secondary" onclick="loadIaModels()" title="Escanear Modelos Disponibles"><i class="bi bi-search"></i> Escanear</button>
+                                        </div>
                                     </div>
                                 </div>
                                 <div id="ia-remote-host-container" style="display:none;">
                                     <label class="form-label-custom">URL Motor Remoto (Ollama Desktop PC)</label>
                                     <div style="display:flex; gap:8px;">
-                                        <input type="text" id="ia-host-input" class="form-control-custom" placeholder="Ej: http://192.168.1.50:11434">
+                                        <input type="text" id="ia-host-input" class="form-control-custom" value="http://192.168.2.3:11434" placeholder="Ej: http://192.168.2.3:11434">
                                         <button class="btn-secondary" onclick="saveIaConfig()"><i class="bi bi-save me-1"></i>Guardar</button>
                                     </div>
                                     <div style="font-size:0.75rem; color:var(--text-muted); margin-top:5px;">Asegúrate de que Ollama en el PC tenga configurada la variable <code>OLLAMA_HOST=0.0.0.0</code></div>
@@ -4763,6 +4766,8 @@ actualizarTelemetria();  // Primera lectura inmediata
 let iaModels = { local: [], remote: [] };
 
 function loadIaModels() {
+    const btn = document.querySelector('button[onclick="loadIaModels()"]');
+    if (btn) btn.innerHTML = '<i class="bi bi-hourglass-split"></i>...';
     fetch('/api/config/ia/models')
         .then(r => r.json())
         .then(data => {
@@ -4770,9 +4775,16 @@ function loadIaModels() {
                 iaModels.local = data.local;
                 iaModels.remote = data.remote;
                 updateIaModelDropdown();
+                addLogEntry('[OK] Modelos IA detectados con éxito.', 'log-success');
             }
         })
-        .catch(err => console.error("Error loading IA models:", err));
+        .catch(err => {
+            console.error("Error loading IA models:", err);
+            addLogEntry('[ERROR] Error al escanear modelos.', 'log-error');
+        })
+        .finally(() => {
+            if (btn) btn.innerHTML = '<i class="bi bi-search"></i> Escanear';
+        });
 }
 
 function updateIaModelDropdown() {
@@ -4839,7 +4851,8 @@ function saveIaConfig() {
 
 // Inicializar configuración IA
 loadIaConfig();
-loadIaModels();
+// El auto-escaneo fue removido a petición del usuario.
+// loadIaModels();
 
 // ── SALIDA MODO KIOSKO ──────────────────────────────────────────
 function exitKiosk() {
