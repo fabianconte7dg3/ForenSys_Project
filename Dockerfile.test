@@ -17,7 +17,7 @@ RUN apt-get update && apt-get install -y \
     git \
     curl \
     # Dependencias teóricas forenses (aunque usemos mocks, validan el entorno)
-    lsblk \
+    util-linux \
     dc3dd \
     adb \
     libimobiledevice-utils \
