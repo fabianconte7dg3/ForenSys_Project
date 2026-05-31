@@ -18,3 +18,12 @@ build/
 
 # Archivos de configuración local sensibles
 .ia_config.json
+
+# Entorno portable y binarios desempaquetados
+.env_setup_done
+tools_bin/usr/
+tools_bin/bin/
+tools_bin/sbin/
+tools_bin/etc/
+tools_bin/lib/
+tools_bin/share/

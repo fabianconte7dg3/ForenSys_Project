@@ -43,17 +43,17 @@ def montar_destino():
         # 3. Verificación y Creación de Carpeta
         if not os.path.exists(punto_montaje):
             print(f"[*] Creando punto de montaje en {punto_montaje}...")
-            subprocess.run(['sudo', 'mkdir', '-p', punto_montaje], check=True)
+            subprocess.run(['mkdir', '-p', punto_montaje], check=True)
 
         # 4. Intento de Montaje
         print(f"[*] Intentando montar {particion} en {punto_montaje}...")
         
         # Sincronizamos el kernel primero por si acaso
-        subprocess.run(['sudo', 'partprobe', disco], check=True)
+        subprocess.run(['partprobe', disco], check=True)
         time.sleep(1)
         
         # Montaje con permisos de escritura (ya que es nuestro disco de destino)
-        subprocess.run(['sudo', 'mount', particion, punto_montaje], check=True)
+        subprocess.run(['mount', particion, punto_montaje], check=True)
         
         print("\n==================================================")
         print("   [SUCCESS] DISCO DE EVIDENCIA MONTADO           ")

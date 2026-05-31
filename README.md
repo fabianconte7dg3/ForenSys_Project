@@ -21,24 +21,29 @@ ForenSys es un sistema innovador de investigación forense digital que aprovecha
 
 ## Requisitos
 
-- Raspberry Pi 5
+- Raspberry Pi 5 o cualquier entorno Linux
 - Python 3.7+
-- Librerías de machine learning ligeras
-- Permisos de administrador para análisis de discos
+- Permisos de sudo (solo durante el primer arranque para configuración silenciosa)
 
 ## Instalación (Desde Cero)
 
-En una Raspberry Pi 5 con un sistema recién instalado (Ubuntu/Raspberry Pi OS), solo debes ejecutar los siguientes comandos:
+En cualquier entorno Linux o Raspberry Pi, ForenSys es 100% portable y configura sus dependencias locales sin afectar el sistema operativo:
 
 ```bash
 # 1. Clonar el repositorio
 git clone https://github.com/fabianconte7dg3/ForenSys_Project.git
 cd ForenSys_Project
 
-# 2. Ejecutar el instalador automático
-sudo bash scripts/kiosk/install_services.sh
+# 2. Iniciar el entorno portable
+# Este script instalará todo automáticamente, desempaquetará las herramientas
+# forenses localmente y levantará la aplicación web.
+./start_forensys.sh
+```
 
-# 3. Reiniciar el sistema
+**Nota para Raspberry Pi (Modo Kiosko Autónomo)**
+Si vas a instalarlo permanentemente en una Pi para uso en campo, puedes usar el script de Kiosko:
+```bash
+sudo bash scripts/kiosk/install_services.sh
 sudo reboot
 ```
 

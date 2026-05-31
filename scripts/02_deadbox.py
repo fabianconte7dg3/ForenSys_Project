@@ -47,7 +47,7 @@ def crear_imagen_dd(origen, destino_base, caso_id):
     print(f"[*] Guardando imagen en: {ruta_imagen}")
     
     comando = [
-        'sudo', 'dc3dd',
+        'dc3dd',
         f'if={origen}',
         f'of={ruta_imagen}',
         'hash=sha256',
@@ -76,13 +76,13 @@ def recuperar_borrados(ruta_imagen, destino_base, caso_id):
     try:
         # Montaje en modo loop y Solo Lectura (ro)
         print(f"[*] Montando imagen virtual en {punto_montaje} (Solo lectura)...")
-        subprocess.run(['sudo', 'mount', '-o', 'ro,loop', ruta_imagen, punto_montaje], check=True)
+        subprocess.run(['mount', '-o', 'ro,loop', ruta_imagen, punto_montaje], check=True)
         
         # Ejecución de Photorec en modo CLI (sin menús interactivos)
         print("[*] Ejecutando escáner profundo de Photorec. Buscando documentos y fotos...")
         # Comando estructurado para que no pida confirmación humana
         comando_photorec = [
-            'sudo', 'photorec',
+            'photorec',
             '/d', carpeta_recuperados,
             '/cmd', ruta_imagen,
             'partition_none,options,keep_corrupted_file,no,search'
@@ -96,7 +96,7 @@ def recuperar_borrados(ruta_imagen, destino_base, caso_id):
     finally:
         # Siempre desmontamos la imagen al terminar, incluso si hay error
         print("[*] Desmontando imagen y limpiando entorno...")
-        subprocess.run(['sudo', 'umount', punto_montaje])
+        subprocess.run(['umount', punto_montaje])
 
 def main():
     imprimir_banner()

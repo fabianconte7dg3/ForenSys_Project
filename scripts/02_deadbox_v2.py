@@ -41,7 +41,7 @@ def verificar_write_blocker(dispositivo):
     if result.stdout.strip() != '1':
         print(f"[X] ALERTA FORENSE: {dispositivo} NO está en modo read-only!")
         print("[*] Intentando activar write-blocker de software (blockdev --setro)...")
-        subprocess.run(['sudo', 'blockdev', '--setro', dispositivo])
+        subprocess.run(['blockdev', '--setro', dispositivo])
         
         result = subprocess.run(['blockdev', '--getro', dispositivo], capture_output=True, text=True)
         if result.stdout.strip() != '1':
@@ -121,7 +121,7 @@ def crear_imagen_dd(origen, destino_base, caso_id, hash_original):
     print(f"[*] Guardando imagen en: {ruta_imagen}")
     
     comando = [
-        'sudo', 'dc3dd',
+        'dc3dd',
         f'if={origen}',
         f'of={ruta_imagen}',
         'hash=sha256',
@@ -168,7 +168,7 @@ def recuperar_borrados(ruta_imagen, destino_base, caso_id):
     
     print("[*] Ejecutando escáner profundo de Photorec sobre la imagen RAW...")
     comando_photorec = [
-        'sudo', 'photorec',
+        'photorec',
         '/d', carpeta_recuperados,
         '/cmd', ruta_imagen,
         'partition_none,options,keep_corrupted_file,no,search'

@@ -1143,6 +1143,11 @@ def run_command_api():
         try:
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
+            # Inyectar herramientas locales para portabilidad
+            project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+            tools_bin = os.path.join(project_dir, 'tools_bin')
+            local_paths = f"{tools_bin}/usr/bin:{tools_bin}/bin:{tools_bin}/sbin:{tools_bin}/usr/sbin"
+            env['PATH'] = f"{local_paths}:{env.get('PATH', '')}"
             proc = subprocess.Popen(
                 command, shell=True,
                 stdout=subprocess.PIPE,
