@@ -1134,6 +1134,7 @@ def run_command_api():
     
     # Determinar destino
     base_dest = get_case_base_from_registry(caso_id) or DESTINO_FORENSYS
+    case_dir = os.path.join(base_dest, caso_id) if caso_id != 'MANUAL' else base_dest
 
     if not cmd:
         return jsonify({'status': 'error', 'message': 'Comando vacío'}), 400

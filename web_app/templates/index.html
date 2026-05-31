@@ -2596,7 +2596,22 @@ function initSSE() {
             entry.className = `log-entry ${cls}`;
             const ts  = document.createElement('span');
             ts.className   = 'log-ts';
-        ts.textContent = data.ts || getTimestamp();
+            ts.textContent = data.ts || getTimestamp();
+
+            // Log Filtering Logic
+            const showSystemLogs = document.getElementById('filter-system')?.checked ?? true;
+            const isSystemMsg = ['[SISTEMA]', '[OK]', '[ERROR]', '[WARN]'].some(p => data.msg.startsWith(p));
+
+            // Si el comando terminó (éxito o error) habilitar botones siempre, sin importar el filtro visual
+            if (data.level === 'success' || data.level === 'error') {
+                const killBtn = document.getElementById('btn-kill-proc');
+                const execBtn = document.getElementById('btn-exec-proc');
+                if(killBtn) killBtn.style.display = 'none';
+                if(execBtn) execBtn.disabled = false;
+            }
+
+            if (isSystemMsg && !showSystemLogs) return; // Skip appending
+
             const msg = document.createElement('span');
             msg.className  = 'log-msg';
             msg.textContent = data.msg;

@@ -74,6 +74,16 @@ def generate_pdf(case_dir):
             pdf.cell(50, 8, "I/O Lectura:", 0, 0)
             pdf.cell(0, 8, f"{data.get('io_read_mb', 0):.2f} MB", 0, 1)
             
+            io_write = data.get('io_write_mb', 0)
+            pdf.cell(50, 8, "I/O Escritura:", 0, 0)
+            pdf.cell(0, 8, f"{io_write:.2f} MB", 0, 1)
+            
+            if duration > 0:
+                speed_read = data.get('io_read_mb', 0) / duration
+                speed_write = io_write / duration
+                pdf.cell(50, 8, "Velocidad Promedio:", 0, 0)
+                pdf.cell(0, 8, f"Lectura: {speed_read:.2f} MB/s | Escritura: {speed_write:.2f} MB/s", 0, 1)
+            
             # Alerta de Temperatura
             pdf.cell(50, 8, "Temperatura Máxima:", 0, 0)
             if temp_max > 75:
