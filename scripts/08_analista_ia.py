@@ -43,6 +43,10 @@ MAX_CARACTERES_EVIDENCIA = 6000
 MODELOS_AUDITADOS = {
     'gemma3:4b',
     'gemma3:1b',
+    'gemma:4b',
+    'gemma2:4b',
+    'gemma4:4b',
+    'gemma:2b',
     'llama3.2:3b',
     'llama3.2:1b',
     'mistral:7b',
