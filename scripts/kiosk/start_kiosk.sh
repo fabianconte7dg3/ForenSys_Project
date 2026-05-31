@@ -6,5 +6,5 @@ export WLR_LIBINPUT_NO_DEVICES=1
 export WLR_RENDERER=pixman
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
-exec cage -s -- /usr/bin/chromium --kiosk --noerrdialogs --disable-infobars --no-sandbox --disable-dev-shm-usage --ozone-platform=wayland --disable-gpu http://127.0.0.1:5000
+exec cage -s -- chromium-browser --kiosk --noerrdialogs --disable-infobars --no-sandbox --disable-dev-shm-usage --ozone-platform=wayland --disable-gpu http://127.0.0.1:5000
 

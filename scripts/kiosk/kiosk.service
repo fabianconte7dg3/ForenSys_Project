@@ -25,7 +25,7 @@ StandardOutput=journal
 StandardError=journal
 
 ExecStart=/usr/bin/cage -s -- \
-  /usr/bin/chromium \
+  chromium-browser \
     --kiosk \
     --noerrdialogs \
     --disable-infobars \

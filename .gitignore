@@ -16,5 +16,5 @@ build/
 *.tmp
 *.bak
 
-# Servicio systemd (específico del servidor, no del repo)
-forensys.service
+# Archivos de configuración local sensibles
+.ia_config.json

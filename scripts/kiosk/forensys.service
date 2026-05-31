@@ -1,0 +1,17 @@
+[Unit]
+Description=ForenSys Web App (Flask)
+After=network.target seatd.service
+Wants=network.target
+
+[Service]
+User=ciber-admin
+WorkingDirectory=/home/ciber-admin/ForenSys_Project/web_app
+ExecStart=/home/ciber-admin/ForenSys_Project/venv/bin/python app.py
+Restart=on-failure
+RestartSec=5s
+StandardOutput=journal
+StandardError=journal
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
