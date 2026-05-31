@@ -2922,6 +2922,11 @@ function sendCommand() {
     if (cmdHistory.length > 50) cmdHistory.pop();
     cmdHistoryIdx = -1;
 
+    // Resetear variables de progreso para evitar bloqueos si el proceso anterior fue interrumpido
+    ['wiping', 'usb', 'ram', 'mobile', 'cloud', 'timeline', 'ia', 'report'].forEach(prefix => {
+        window[`_lastPct_${prefix}`] = 0;
+    });
+
     addLogEntry(`$ ${cmd}`, 'log-warn');
     cmdInput.value = '';
 
@@ -3846,6 +3851,11 @@ function runOperation(btnId) {
 
     // Si no se generó un command (módulo gestionado directamente arriba), salir
     if (!command) return;
+
+    // Resetear variables de progreso para evitar bloqueos si el proceso anterior fue interrumpido
+    ['wiping', 'usb', 'ram', 'mobile', 'cloud', 'timeline', 'ia', 'report'].forEach(prefix => {
+        window[`_lastPct_${prefix}`] = 0;
+    });
 
     disableAllPipeBtns();
     btn.classList.add('running');
