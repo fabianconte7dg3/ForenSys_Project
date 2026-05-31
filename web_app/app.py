@@ -41,6 +41,66 @@ CASES_REGISTRY = os.path.join(CASES_BASE_DIR, 'casos_registro.json')
 # Dispositivo externo forense — toda la evidencia real vive aquí
 DESTINO_FORENSYS = '/mnt/Destino_ForenSys'
 
+# ── Protección: Disco del Sistema Operativo ────────────────────────────────
+def get_system_disk():
+    """Detecta el disco físico que aloja el sistema operativo (donde está montado /).
+
+    Funciona con cualquier nombre de dispositivo: mmcblk0, sda, nvme0n1, etc.
+    Retorna un set con el disco base y TODAS sus particiones, por ejemplo:
+        {'mmcblk0', 'mmcblk0p1', 'mmcblk0p2'}
+    De esta forma ninguna partición del disco del sistema puede ser
+    accedida por las herramientas forenses, previniendo borrados accidentales.
+    """
+    protected = set()
+    try:
+        # Obtener el dispositivo que contiene el mount point raíz '/'
+        result = subprocess.run(
+            ['lsblk', '-J', '-o', 'NAME,MOUNTPOINT,PKNAME,TYPE'],
+            capture_output=True, text=True, check=True
+        )
+        data = json.loads(result.stdout)
+
+        # 1) Encontrar el nombre del disco padre donde está montado '/'
+        system_disk_name = None
+
+        def find_root_disk(devices):
+            """Busca recursivamente el disco padre del mount point '/'."""
+            nonlocal system_disk_name
+            for dev in devices:
+                if dev.get('mountpoint') == '/':
+                    # pkname = disco padre (p.ej. 'mmcblk0' para 'mmcblk0p2')
+                    pkname = dev.get('pkname')
+                    if pkname:
+                        system_disk_name = pkname
+                    else:
+                        # El propio dispositivo es el disco (sin partición)
+                        system_disk_name = dev['name']
+                    return
+                find_root_disk(dev.get('children', []))
+
+        find_root_disk(data.get('blockdevices', []))
+
+        if not system_disk_name:
+            return protected  # No se pudo determinar — falla segura (no protege nada)
+
+        # 2) Recopilar el disco y TODAS sus particiones/hijos
+        def collect_disk_and_children(devices):
+            for dev in devices:
+                if dev['name'] == system_disk_name or dev.get('pkname') == system_disk_name:
+                    protected.add(dev['name'])
+                collect_disk_and_children(dev.get('children', []))
+
+        collect_disk_and_children(data.get('blockdevices', []))
+        protected.add(system_disk_name)  # Asegurar que el disco base siempre esté
+
+    except Exception:
+        pass  # Falla silenciosa — la UI mostrará todos los discos en el peor caso
+
+    return protected
+
+# Calcular al iniciar la app (una sola vez) para no impactar rendimiento
+SYSTEM_DISK_NAMES = get_system_disk()
+
 def get_case_results_path(caso_id):
     """Devuelve la ruta a la carpeta de resultados del caso,
     buscando primero en el dispositivo externo y luego en local."""
@@ -748,16 +808,24 @@ def explore_files():
 
 @app.route('/api/list_devices', methods=['GET'])
 def list_devices():
-    """Lista dispositivos de bloque disponibles via lsblk para selección desde UI"""
+    """Lista dispositivos de bloque disponibles via lsblk para selección desde UI.
+
+    SEGURIDAD: El disco del sistema operativo (y todas sus particiones) se
+    excluye automáticamente del listado para prevenir borrados accidentales.
+    """
     try:
         result = subprocess.run(
-            ['lsblk', '-J', '-o', 'NAME,SIZE,MODEL,TYPE,MOUNTPOINT,RM'],
+            ['lsblk', '-J', '-o', 'NAME,SIZE,MODEL,TYPE,MOUNTPOINT,RM,PKNAME'],
             capture_output=True, text=True, check=True
         )
         lsblk_data = json.loads(result.stdout)
 
         devices = []
         def parse_device(dev):
+            # ── PROTECCIÓN: omitir el disco del sistema y sus particiones ──
+            if dev['name'] in SYSTEM_DISK_NAMES:
+                return  # Este dispositivo pertenece al disco del SO — ignorar
+
             path = f"/dev/{dev['name']}"
             entry = {
                 'name': dev['name'],
@@ -767,6 +835,7 @@ def list_devices():
                 'type': dev.get('type', ''),
                 'mountpoint': dev.get('mountpoint') or '',
                 'removable': dev.get('rm', False),
+                'system_disk': False,  # Siempre False aquí (los del sistema no llegan)
             }
             devices.append(entry)
             for child in dev.get('children', []):
@@ -775,7 +844,11 @@ def list_devices():
         for dev in lsblk_data.get('blockdevices', []):
             parse_device(dev)
 
-        return jsonify({"status": "success", "devices": devices})
+        return jsonify({
+            "status": "success",
+            "devices": devices,
+            "protected_disk": sorted(SYSTEM_DISK_NAMES),  # Info para debugging
+        })
     except subprocess.CalledProcessError as e:
         return jsonify({"status": "error", "message": f"lsblk error: {e.stderr}"}), 500
     except Exception as e:
@@ -789,6 +862,15 @@ def verify_disk():
     
     if not target_disk or not target_disk.startswith('/dev/'):
         return jsonify({"status": "error", "message": "Debe especificar un disco origen válido."}), 400
+
+    # ── PROTECCIÓN: Bloquear el disco del sistema operativo ──
+    disk_name = target_disk.replace('/dev/', '')
+    if disk_name in SYSTEM_DISK_NAMES:
+        return jsonify({
+            "status": "error",
+            "message": f"⛔ Acceso denegado: '{target_disk}' pertenece al disco del sistema operativo "
+                       f"(Raspberry Pi). No se puede operar sobre él para evitar daños al sistema."
+        }), 403
         
     resultados = {
         "readonly": False,
@@ -826,6 +908,15 @@ def set_readonly():
     target_disk = data.get('target_disk', '').strip()
     if not target_disk or not target_disk.startswith('/dev/'):
         return jsonify({"status": "error", "message": "Disco inválido."}), 400
+
+    # ── PROTECCIÓN: Bloquear el disco del sistema operativo ──
+    disk_name = target_disk.replace('/dev/', '')
+    if disk_name in SYSTEM_DISK_NAMES:
+        return jsonify({
+            "status": "error",
+            "message": f"⛔ Acceso denegado: '{target_disk}' pertenece al disco del sistema operativo. "
+                       f"No se puede aplicar el bloqueador de escritura sobre el disco de la Raspberry Pi."
+        }), 403
         
     try:
         # Ejecuta el script de python con sudo que ya está autorizado en sudoers sin contraseña
