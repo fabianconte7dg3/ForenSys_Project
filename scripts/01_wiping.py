@@ -308,6 +308,14 @@ def wiping_dd_ceros(disco, bs, size_bytes):
             # Última línea tras el EOF
             linea = buf.strip()
             m_speed = re.search(r'(\d+(?:\.\d+)?\s+[GMK]?B/s)', linea)
+            if m_speed:
+                speed = m_speed.group(1)
+                log(f"[*] Velocidad promedio: {speed}")
+                try:
+                    with open("/tmp/wiping_speed.txt", "w") as f:
+                        f.write(speed)
+                except Exception:
+                    pass
             log(f"[dd] {linea}")
 
         proc_hijo.wait()
@@ -555,8 +563,14 @@ def main():
     os.makedirs(punto_montaje, exist_ok=True)
     subprocess.run(['mount', particion, punto_montaje], check=True)
 
+    usuario = os.environ.get('SUDO_USER', 'ciber-admin')
+    subprocess.run(['chown', '-R', f'{usuario}:{usuario}', punto_montaje], check=False)
+    subprocess.run(['chmod', '777', punto_montaje], check=False)
+
     print("")
+    time.sleep(0.5)
     progress(100, "Wiping completado.")
+    time.sleep(0.5)
     log("\n==================================================")
     log("   [SUCCESS] WIPING COMPLETADO — SISTEMA LISTO   ")
     log("==================================================")
