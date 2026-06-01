@@ -32,4 +32,15 @@ Dado que un disco clonado puede contener decenas de miles de imágenes basura (�
 
 ---
 
+## 2. Barra de Progreso en Cálculo de Hash Pre-Adquisición
+
+**Contexto:**
+Durante la extracción estática (Módulo 2), el sistema realiza un hashing inicial leyendo todo el disco crudo (ej. `/dev/sdb`) usando bloques en Python puro. Este proceso demora considerablemente para discos de gran capacidad y no reporta su avance.
+
+**La Propuesta:**
+- Optimizar el cálculo de hash, posiblemente delegándolo a herramientas nativas o ajustando el tamaño del buffer en Python para mayor velocidad.
+- Implementar y reportar el progreso fraccionado (porcentaje de I/O) para que este sea transmitido en vivo al frontend (Live Console) usando Server-Sent Events (SSE). De esta manera el perito sabrá el porcentaje exacto y el sistema dejará de parecer "trabado" antes de que inicie `dc3dd`.
+
+---
+
 *(Añadir nuevas ideas debajo de esta línea a medida que el proyecto evolucione)*
