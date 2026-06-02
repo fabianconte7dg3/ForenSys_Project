@@ -307,7 +307,7 @@ def encontrar_offset_y_so(lista_imagenes):
             linea_limpia = re.sub(r'\d+:\d+', '', linea)
             linea_limpia = re.sub(r'\d+:', '', linea_limpia)
             partes = linea_limpia.split()
-            numeros = [p for p in partes if p.isdigit()]
+            numeros = [p for p in partes if p.isdigit() and p != '000']
             if len(numeros) >= 3:
                 start = numeros[0]
                 length = numeros[2]
