@@ -1103,6 +1103,8 @@
             font-size: 0.78rem;
             line-height: 1.7;
             color: var(--text-muted);
+            white-space: pre-wrap;
+            word-wrap: break-word;
         }
         .viewer-pane.active { display: block; }
         .viewer-pane::-webkit-scrollbar { width: 6px; }
@@ -2244,6 +2246,7 @@
 
                         </div>
                     </div>
+                    </div>
 
                     <!-- RIGHT: Preview Panel -->
                     <div class="explorer-preview-panel">
@@ -2640,10 +2643,10 @@ function initSSE() {
             }
 
             // PROGRESS PARSER — formato: [PROGRESO:X] o [PROGRESO:X] Mensaje...
-            const wipeMatch = data.msg.match(/^\[PROGRESO:(\d+)\]\s*(.*)/);
+            const wipeMatch = data.msg.match(/\[PROGRESO:(\d+)\]\s*(.*)/);
             if (wipeMatch) {
                 const pct = parseInt(wipeMatch[1]);
-                const detailStr = data.msg.replace(/^\[PROGRESO:\d+\]\s*/, '').trim() || 'Operación en progreso...';
+                const detailStr = wipeMatch[2].trim() || 'Operación en progreso...';
 
                 // Incluye 'timeline', 'ia' y 'report' además de los módulos anteriores
                 ['wiping', 'usb', 'ram', 'mobile', 'cloud', 'timeline', 'ia', 'report'].forEach(prefix => {
