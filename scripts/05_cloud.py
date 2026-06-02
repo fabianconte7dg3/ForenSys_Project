@@ -22,7 +22,7 @@ from datetime import datetime
 
 # ── Rutas base ─────────────────────────────────────────────────────
 CASES_BASE_DIR = '/home/ciber-admin/ForenSys_Project/Casos_ForenSys'
-MAIGRET_BIN    = shutil.which('maigret') or '/home/ciber-admin/.local/bin/maigret'
+MAIGRET_BIN    = shutil.which('maigret') or '/home/ciber-admin/ForenSys_Project/venv/bin/maigret'
 
 DISCLAIMER_LEGAL_CORRECTO = """
 AVISO CRÍTICO - DATOS NO FORENSES:

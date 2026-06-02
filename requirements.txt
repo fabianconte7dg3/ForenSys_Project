@@ -55,5 +55,7 @@ Werkzeug==3.1.8
 wsproto==1.3.2
 Pillow==10.3.0
 PyMuPDF==1.24.4
-regipy==2.2.0
+regipy==6.2.1
 pefile==2024.8.26
+maigret==0.6.1
+reportlab==4.3.0

@@ -24,6 +24,13 @@ echo "[*] 2. Configurando permisos SUDO transparentes para los scripts de ForenS
 USER_NAME=$(whoami)
 SUDOERS_FILE="/etc/sudoers.d/010_forensys_${USER_NAME}"
 
+# Descargar Volatility3 si no existe
+echo "   -> Verificando Volatility3..."
+if [ ! -d "$PROJECT_DIR/volatility3" ]; then
+    echo "   -> Clonando repositorio Volatility3..."
+    git clone https://github.com/volatilityfoundation/volatility3.git "$PROJECT_DIR/volatility3" >/dev/null 2>&1
+fi
+
 # Solo pedimos contraseña de sudo una vez
 echo "   [!] Por favor, ingresa tu contraseña para autorizar la ejecución silenciosa de los scripts (solo ocurrirá esta vez)."
 sudo bash -c "echo '$USER_NAME ALL=(ALL) NOPASSWD: $PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/scripts/*.py' > $SUDOERS_FILE"

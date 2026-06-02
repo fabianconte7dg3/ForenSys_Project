@@ -3757,7 +3757,7 @@ function runOperation(btnId) {
         }
         const topSites = selectedOsintTop;
         const topFlag  = topSites ? ` --top ${topSites}` : '';
-        command = `python3 /home/ciber-admin/ForenSys_Project/scripts/05_cloud.py --alias ${alias} --caso ${activeCaseNumber} --perito "${activeCasePerito}"${topFlag}`;
+        command = `/home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/05_cloud.py --alias ${alias} --caso ${activeCaseNumber} --perito "${activeCasePerito}"${topFlag}`;
 
         const pCloudContainer = document.getElementById('cloud-progress-container');
         if (pCloudContainer) {
@@ -3840,7 +3840,7 @@ function runOperation(btnId) {
             addLogEntry('[ERROR] No hay caso activo.', 'log-error');
             return;
         }
-        command = `python3 /home/ciber-admin/ForenSys_Project/scripts/09_reporte_pdf.py --caso ${activeCaseNumber}`;
+        command = `/home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/09_reporte_pdf.py --caso ${activeCaseNumber}`;
         const pReportContainer = document.getElementById('report-progress-container');
         if (pReportContainer) {
             pReportContainer.style.display = 'block';
