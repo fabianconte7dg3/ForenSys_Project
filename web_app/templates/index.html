@@ -9,6 +9,8 @@
     <!-- CSS Frameworks y Fuentes (Offline Vendors) -->
     <link href="{{ url_for('static', filename='vendor/bootstrap/css/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.js') }}"></script>
     <style>
         /* Fallback offline robusto para reemplazar Google Fonts cuando no hay internet */
         :root {
@@ -2288,12 +2290,18 @@
                             <div class="viewer-tabs">
                                 <div class="viewer-tab active" id="tab-text" onclick="switchTab('text')">Texto / Contenido</div>
                                 <div class="viewer-tab" id="tab-hex" onclick="switchTab('hex')">Vista Hexadecimal</div>
+                                <div class="viewer-tab" id="tab-media" onclick="switchTab('media')" style="display:none;">Multimedia</div>
+                                <div class="viewer-tab" id="tab-graph" onclick="switchTab('graph')" style="display:none;">Gráfica de Tiempos</div>
                             </div>
 
                             <!-- Text pane -->
                             <div class="viewer-pane active" id="pane-text"></div>
                             <!-- Hex pane -->
                             <div class="viewer-pane" id="pane-hex"></div>
+                            <!-- Media pane -->
+                            <div class="viewer-pane" id="pane-media" style="text-align: center; display: flex; align-items: center; justify-content: center; background: #000;"></div>
+                            <!-- Graph pane -->
+                            <div class="viewer-pane" id="pane-graph" style="position: relative; height: 100%; width: 100%;"><canvas id="timelineChart"></canvas></div>
                         </div>
                     </div>
                 </div>
@@ -4509,7 +4517,7 @@ function loadRealEvidence(casoId) {
                     </div>
                     <div class="tree-children">
                         ${categorias[cat].map(arch => `
-                            <div class="tree-file" onclick="selectRealFile('${casoId}', '${arch.filename}', '${arch.tipo}', ${arch.size_kb})">
+                            <div class="tree-file" onclick="selectRealFile('${casoId}', '${(arch.filepath || arch.filename).replace(/\\/g, '\\\\')}', '${arch.filename.replace(/'/g, "\\'")}', '${arch.tipo}', ${arch.size_kb})">
                                 <i class="bi ${arch.icono} tree-file-icon" style="color:${arch.color};"></i>
                                 ${arch.filename}
                                 <span style="margin-left:auto; font-size:0.68rem; color:var(--text-muted);">${arch.size_kb} KB</span>
@@ -4527,9 +4535,13 @@ function loadRealEvidence(casoId) {
 }
 
 // Abre un archivo real del disco externo en el panel de previsualización
-function selectRealFile(casoId, filename, tipo, sizeKb) {
+let currentTimelineChart = null;
+
+function selectRealFile(casoId, filepath, filename, tipo, sizeKb) {
     document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('selected'));
-    event.currentTarget.classList.add('selected');
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('selected');
+    }
 
     document.getElementById('preview-empty').style.display = 'none';
     document.getElementById('preview-active').classList.add('visible');
@@ -4538,11 +4550,41 @@ function selectRealFile(casoId, filename, tipo, sizeKb) {
     document.getElementById('meta-size').textContent = sizeKb + ' KB';
     document.getElementById('meta-type').textContent = tipo.toUpperCase();
     document.getElementById('meta-hash').textContent = 'Calculando...';
-    document.getElementById('pane-text').textContent = 'Cargando contenido del disco externo...';
+    document.getElementById('pane-text').textContent = 'Cargando contenido...';
     document.getElementById('pane-hex').innerHTML = '';
+    document.getElementById('pane-media').innerHTML = '';
+    
+    // Hide specialized tabs by default
+    document.getElementById('tab-media').style.display = 'none';
+    document.getElementById('tab-graph').style.display = 'none';
+    
+    // Handle multimedia
+    if (['imagen', 'video', 'audio'].includes(tipo)) {
+        document.getElementById('tab-media').style.display = 'block';
+        document.getElementById('tab-text').style.display = 'none';
+        document.getElementById('tab-hex').style.display = 'none';
+        switchTab('media');
+        
+        const mediaUrl = `/api/case/${casoId}/download?filepath=${encodeURIComponent(filepath)}`;
+        let mediaHtml = '';
+        if (tipo === 'imagen') {
+            mediaHtml = `<img src="${mediaUrl}" style="max-width:100%; max-height:100%; object-fit:contain;" alt="Preview">`;
+        } else if (tipo === 'video') {
+            mediaHtml = `<video src="${mediaUrl}" controls style="max-width:100%; max-height:100%;"></video>`;
+        } else if (tipo === 'audio') {
+            mediaHtml = `<audio src="${mediaUrl}" controls style="width:100%;"></audio>`;
+        }
+        document.getElementById('pane-media').innerHTML = mediaHtml;
+        document.getElementById('meta-hash').textContent = '(Calculado al exportar)';
+        return; // Skip fetching file text
+    }
+
+    // Default to text view for others
+    document.getElementById('tab-text').style.display = 'block';
+    document.getElementById('tab-hex').style.display = 'block';
     switchTab('text');
 
-    fetch(`/api/case/${casoId}/file_content?filename=${encodeURIComponent(filename)}`)
+    fetch(`/api/case/${casoId}/file_content?filename=${encodeURIComponent(filepath)}`)
         .then(r => r.json())
         .then(data => {
             if (data.status !== 'ok') {
@@ -4574,10 +4616,72 @@ function selectRealFile(casoId, filename, tipo, sizeKb) {
                 hexHtml += `<div class="hex-line"><span class="hex-offset">${offset}</span><span class="hex-bytes">${bytes.join(' ')}</span><span class="hex-ascii">${ascii.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span></div>`;
             }
             document.getElementById('pane-hex').innerHTML = hexHtml;
+            
+            // Si es un CSV de timeline, mostrar pestaña de gráficos
+            if (filename.includes('timeline') && filename.endsWith('.csv')) {
+                document.getElementById('tab-graph').style.display = 'block';
+                generarGraficaTimeline(content);
+            }
         })
         .catch(err => {
             document.getElementById('pane-text').textContent = `Error cargando: ${err}`;
         });
+}
+
+function generarGraficaTimeline(csvText) {
+    if (currentTimelineChart) {
+        currentTimelineChart.destroy();
+    }
+    const lines = csvText.split('\\n');
+    const conteoFechas = {};
+    
+    // Parse MACB format timeline (SleuthKit mactime format generally has date/time in 1st column)
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        
+        // Mactime format usually starts with:  Mon YYYY ...
+        // We will do a simple regex to find YYYY-MM-DD or standard date.
+        // Assuming CSV structure or mactime plain structure, we just grep the year-month-day
+        const match = line.match(/(\\d{4}-\\d{2}-\\d{2})/);
+        if (match) {
+            const fecha = match[1];
+            conteoFechas[fecha] = (conteoFechas[fecha] || 0) + 1;
+        }
+    }
+    
+    const fechasOrdenadas = Object.keys(conteoFechas).sort();
+    if (fechasOrdenadas.length === 0) return; // No hay fechas válidas
+    
+    const dataCounts = fechasOrdenadas.map(f => conteoFechas[f]);
+    
+    const ctx = document.getElementById('timelineChart').getContext('2d');
+    currentTimelineChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: fechasOrdenadas,
+            datasets: [{
+                label: 'Eventos Forenses (MACB)',
+                data: dataCounts,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59, 130, 246, 0.2)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#94a3b8' } }
+            },
+            scales: {
+                x: { ticks: { color: '#64748b' }, grid: { color: '#334155' } },
+                y: { ticks: { color: '#64748b' }, grid: { color: '#334155' }, beginAtZero: true }
+            }
+        }
+    });
 }
 
 let currentFileId = null;
@@ -4624,10 +4728,28 @@ function selectFile(fileId) {
 }
 
 function switchTab(tab) {
-    document.getElementById('tab-text').classList.toggle('active', tab === 'text');
-    document.getElementById('tab-hex').classList.toggle('active',  tab === 'hex');
-    document.getElementById('pane-text').classList.toggle('active', tab === 'text');
-    document.getElementById('pane-hex').classList.toggle('active',  tab === 'hex');
+    // Esconder/desmarcar todos
+    ['text', 'hex', 'media', 'graph'].forEach(t => {
+        const tEl = document.getElementById(`tab-${t}`);
+        const pEl = document.getElementById(`pane-${t}`);
+        if (tEl) tEl.classList.remove('active');
+        if (pEl) {
+            pEl.classList.remove('active');
+            pEl.style.display = 'none'; // Ensure CSS display goes to none for graphs to redraw correctly
+        }
+    });
+    
+    // Activar seleccionado
+    const tEl = document.getElementById(`tab-${tab}`);
+    const pEl = document.getElementById(`pane-${tab}`);
+    if (tEl) tEl.classList.add('active');
+    if (pEl) {
+        pEl.classList.add('active');
+        pEl.style.display = 'block'; // Make it visible
+        if (tab === 'graph' && currentTimelineChart) {
+            currentTimelineChart.resize(); // Fix Chart.js size when switching from display none
+        }
+    }
 }
 
 function loadRealIaReport(casoId) {
