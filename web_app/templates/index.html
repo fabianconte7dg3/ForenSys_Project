@@ -4555,6 +4555,25 @@ function selectRealFile(casoId, filename, tipo, sizeKb) {
             let content = data.content || '(vacío)';
             if (data.truncado) content += '\n\n[... Archivo truncado a 8 KB para visualización ...]';
             document.getElementById('pane-text').textContent = content;
+
+            // Generate Hex Dump
+            let hexHtml = '';
+            for (let row = 0; row < content.length; row += 16) {
+                const offset = '0x' + row.toString(16).padStart(8, '0');
+                let bytes = [];
+                let ascii = '';
+                for (let col = 0; col < 16; col++) {
+                    if (row + col < content.length) {
+                        const b = content.charCodeAt(row + col) & 0xff;
+                        bytes.push(b.toString(16).padStart(2, '0').toUpperCase());
+                        ascii += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
+                    } else {
+                        bytes.push('  ');
+                    }
+                }
+                hexHtml += `<div class="hex-line"><span class="hex-offset">${offset}</span><span class="hex-bytes">${bytes.join(' ')}</span><span class="hex-ascii">${ascii.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span></div>`;
+            }
+            document.getElementById('pane-hex').innerHTML = hexHtml;
         })
         .catch(err => {
             document.getElementById('pane-text').textContent = `Error cargando: ${err}`;
