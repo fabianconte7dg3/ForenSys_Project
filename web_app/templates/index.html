@@ -3687,7 +3687,7 @@ function runOperation(btnId) {
         }
         const fastFlag   = window._wipeFastFlag   || '';
         const passesFlag = window._wipePassesFlag  || '--passes 1';
-        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/01_wiping.py --target ${targetDev} --force ${fastFlag} ${passesFlag}`.trim();
+        command = `sudo /home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/01_wiping.py --target ${targetDev} --force ${fastFlag} ${passesFlag}`.trim();
 
         // Reset progress bar
         const pContainer = document.getElementById('wiping-progress-container');
@@ -3704,14 +3704,14 @@ function runOperation(btnId) {
             addLogEntry('[ERROR] Seleccione un disco sospechoso para extraer.', 'log-error');
             return;
         }
-        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/02_deadbox_v2.py --target ${targetDev} --case ${activeCaseNumber} --perito "${activeCasePerito}"`;
+        command = `sudo /home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/02_deadbox_v2.py --target ${targetDev} --case ${activeCaseNumber} --perito "${activeCasePerito}"`;
     } else if (btnId === 'btn-usb-ram') {
         const targetDev = selectedDevices.usb;
         if (!targetDev) {
             addLogEntry('[ERROR] Seleccione un USB destino para formatear e inyectar.', 'log-error');
             return;
         }
-        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/creador_de_extraccion_de_ram.py --target ${targetDev} --force`;
+        command = `sudo /home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/creador_de_extraccion_de_ram.py --target ${targetDev} --force`;
         
         // Reset progress bar
         const pContainer = document.getElementById('usb-progress-container');
@@ -3727,7 +3727,7 @@ function runOperation(btnId) {
             addLogEntry('[ERROR] Seleccione un volcado de memoria (.raw/.dmp/.mem) primero.', 'log-error');
             return;
         }
-        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/03_live_ram.py --archivo ${archivRAM} --caso ${activeCaseNumber} --perito "${activeCasePerito}"`;
+        command = `sudo /home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/03_live_ram.py --archivo ${archivRAM} --caso ${activeCaseNumber} --perito "${activeCasePerito}"`;
         
         const pRamContainer = document.getElementById('ram-progress-container');
         if (pRamContainer) {
@@ -3739,7 +3739,7 @@ function runOperation(btnId) {
         }
     } else if (btnId === 'btn-mobile') {
         const plataforma = selectedMobilePlatform || 'android';
-        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/04_mobile.py --caso ${activeCaseNumber} --perito "${activeCasePerito}" --plataforma ${plataforma}`;
+        command = `sudo /home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/04_mobile.py --caso ${activeCaseNumber} --perito "${activeCasePerito}" --plataforma ${plataforma}`;
 
         const pMobileContainer = document.getElementById('mobile-progress-container');
         if (pMobileContainer) {
@@ -3782,7 +3782,7 @@ function runOperation(btnId) {
         const basePathMatch = imageFile.match(new RegExp(`^(.*)/${activeCaseNumber}/`));
         const baseDest = basePathMatch ? basePathMatch[1] : '/home/ciber-admin/ForenSys_Project/Casos_ForenSys';
         
-        command = `sudo python3 /home/ciber-admin/ForenSys_Project/scripts/06_normalizacion.py --caso ${activeCaseNumber} --ruta "${imageFile}" --recuperar ${recovMethod} --dest "${baseDest}"`;
+        command = `sudo /home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/06_normalizacion.py --caso ${activeCaseNumber} --ruta "${imageFile}" --recuperar ${recovMethod} --dest "${baseDest}"`;
         
         const pTimelineContainer = document.getElementById('timeline-progress-container');
         if (pTimelineContainer) {

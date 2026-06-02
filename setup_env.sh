@@ -36,7 +36,7 @@ SUDOERS_FILE="/etc/sudoers.d/010_forensys_${USER_NAME}"
 
 # Solo pedimos contraseña de sudo una vez
 echo "   [!] Por favor, ingresa tu contraseña para autorizar la ejecución silenciosa de los scripts (solo ocurrirá esta vez)."
-sudo bash -c "echo '$USER_NAME ALL=(ALL) NOPASSWD: /usr/bin/python3 $PROJECT_DIR/scripts/*.py' > $SUDOERS_FILE"
+sudo bash -c "echo '$USER_NAME ALL=(ALL) NOPASSWD: $PROJECT_DIR/venv/bin/python3 $PROJECT_DIR/scripts/*.py' > $SUDOERS_FILE"
 sudo chmod 0440 "$SUDOERS_FILE"
 echo "   [OK] Permisos sudo silenciosos configurados para $PROJECT_DIR/scripts/"
 
