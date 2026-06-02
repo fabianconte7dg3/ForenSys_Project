@@ -493,17 +493,14 @@ def get_file_content(raw_caso_id):
         return jsonify({"status": "error", "message": "caso_id inválido."}), 400
 
     filename = request.args.get('filename', '').strip()
-    # Sanitizar: solo nombre de archivo, sin barras ni traversal
-    if not filename or '/' in filename or '\\' in filename or '..' in filename:
-        return jsonify({"status": "error", "message": "Nombre de archivo inválido."}), 400
+    # Sanitizar: prohibir traversal estricto
+    if not filename or '..' in filename:
+        return jsonify({"status": "error", "message": "Nombre de archivo o ruta inválida."}), 400
 
-    ruta_results = get_case_results_path(caso_id)
-    if not ruta_results:
-        return jsonify({"status": "error", "message": "Carpeta de resultados no encontrada."}), 404
-
-    ruta_archivo = os.path.join(ruta_results, filename)
-    # Prevenir path traversal verificando que el archivo esté dentro de ruta_results
-    if not os.path.realpath(ruta_archivo).startswith(os.path.realpath(ruta_results) + os.sep):
+    case_dir = os.path.join(CASES_BASE_DIR, caso_id)
+    ruta_archivo = os.path.abspath(os.path.join(case_dir, filename))
+    # Prevenir path traversal verificando que el archivo esté dentro de case_dir
+    if not ruta_archivo.startswith(os.path.abspath(case_dir) + os.sep):
         return jsonify({"status": "error", "message": "Acceso denegado."}), 403
 
     if not os.path.exists(ruta_archivo):
