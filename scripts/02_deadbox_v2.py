@@ -171,14 +171,18 @@ def recuperar_borrados(ruta_imagen, destino_base, caso_id):
         'photorec',
         '/d', carpeta_recuperados,
         '/cmd', ruta_imagen,
-        'partition_none,options,keep_corrupted_file,no,search'
+        'partition_none,search'
     ]
     
-    proc = subprocess.run(comando_photorec, capture_output=True, text=True)
-    if proc.returncode != 0:
-        print(f"\n[X] Error en recuperación de archivos con PhotoRec: {proc.stderr}")
-    else:
-        print(f"\n[✓] Data Carving completado en: {carpeta_recuperados}")
+    try:
+        proc = subprocess.run(comando_photorec, capture_output=True, text=True)
+        if proc.returncode != 0:
+            print(f"\n[X] Error en recuperación de archivos con PhotoRec: {proc.stderr}")
+        else:
+            print(f"\n[✓] Data Carving completado en: {carpeta_recuperados}")
+    except FileNotFoundError:
+        print("\n[X] Error crítico: El comando 'photorec' no se encuentra instalado.")
+        print("[*] Instale el paquete necesario ejecutando: sudo apt install testdisk")
 
 def firmar_y_reportar(destino_base, caso_id, perito, origen, hash_original, hash_imagen):
     """Generar reporte JSON ISO 27037 y firma digital RSA"""

@@ -349,7 +349,7 @@ def recuperar_archivos_borrados(lista_imagenes, offset, ruta_unalloc):
         return
 
     print("    [2/2] Esculpiendo archivos con PhotoRec... (Esto tomará tiempo)")
-    comando_photorec = ["photorec", "/d", ruta_unalloc, "/cmd", archivo_bloques, "search"]
+    comando_photorec = ["photorec", "/d", ruta_unalloc, "/cmd", archivo_bloques, "partition_none,search"]
     try:
         subprocess.run(comando_photorec, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         print("    [+] Recuperación de borrados finalizada.")
