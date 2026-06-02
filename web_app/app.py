@@ -398,7 +398,7 @@ def list_case_results(raw_caso_id):
             "ruta_abs": ruta_archivo,
         })
 
-    ruta_recuperados = os.path.join(CASES_BASE_DIR, caso_id, "04_Archivos_Borrados_Recuperados")
+    ruta_recuperados = os.path.join(CASES_BASE_DIR, caso_id, "02_Views_(Vistas)", "File_Types")
     if os.path.exists(ruta_recuperados):
         archivos_encontrados = 0
         for root, dirs, files in os.walk(ruta_recuperados):
