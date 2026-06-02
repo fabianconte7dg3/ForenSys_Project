@@ -4312,8 +4312,8 @@ if (btnBrowseRam) {
 const btnBrowseTimeline = document.getElementById('btn-browse-timeline');
 if (btnBrowseTimeline) {
     btnBrowseTimeline.addEventListener('click', () => {
-        openFileBrowser('/home/ciber-admin/ForenSys_Project/Casos_ForenSys', (path) => {
-            selectedFiles.timeline = path;
+        openFileBrowser('/mnt/Destino_ForenSys', (path) => {
+            window.selectedTimelineImage = path;
             const display = document.getElementById('timeline-file-display');
             display.style.color = 'var(--text-main)';
             display.innerHTML = `<i class="bi bi-file-earmark-binary me-2" style="color:var(--accent-blue);"></i>${path}`;
