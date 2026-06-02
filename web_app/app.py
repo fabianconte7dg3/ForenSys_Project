@@ -398,7 +398,7 @@ def list_case_results(raw_caso_id):
             "ruta_abs": ruta_archivo,
         })
 
-    ruta_recuperados = os.path.join(get_cases_dir(), caso_id, "04_Archivos_Borrados_Recuperados")
+    ruta_recuperados = os.path.join(CASES_BASE_DIR, caso_id, "04_Archivos_Borrados_Recuperados")
     if os.path.exists(ruta_recuperados):
         archivos_encontrados = 0
         for root, dirs, files in os.walk(ruta_recuperados):
@@ -446,7 +446,7 @@ def list_case_results(raw_caso_id):
                         color = "#ef4444"
                     
                     # Guardamos ruta relativa para el endpoint de descarga
-                    rel_path = os.path.relpath(ruta_completa, os.path.join(get_cases_dir(), caso_id))
+                    rel_path = os.path.relpath(ruta_completa, os.path.join(CASES_BASE_DIR, caso_id))
                     
                     resultado.append({
                         "key":      f"recuperado_{archivos_encontrados}",
@@ -476,7 +476,7 @@ def download_case_file(raw_caso_id):
     if not filepath or '..' in filepath:
         return "Path traversal no permitido.", 403
 
-    case_dir = os.path.join(get_cases_dir(), caso_id)
+    case_dir = os.path.join(CASES_BASE_DIR, caso_id)
     # Validar que el archivo exista dentro del case_dir
     ruta_absoluta = os.path.abspath(os.path.join(case_dir, filepath))
     if not ruta_absoluta.startswith(os.path.abspath(case_dir)):
