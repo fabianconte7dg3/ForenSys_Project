@@ -15,8 +15,9 @@ from flask import Flask, render_template, jsonify, request, Response, stream_wit
 app = Flask(__name__)
 
 # ── Real-time Log Stream via SSE ──────────────────────────────────
-# Global queue: worker threads push lines, SSE endpoint pops them
-log_queue = queue.Queue()
+# PubSub model: each SSE connection gets its own queue
+log_subscribers = []
+log_subscribers_lock = threading.Lock()
 
 # Currently running process (for signal/kill support)
 running_proc = None
@@ -26,10 +27,12 @@ def push_log(message: str, level: str = 'info'):
     """Thread-safe helper to push a log line into the SSE queue."""
     ts = datetime.now().strftime('%H:%M:%S.') + f"{datetime.now().microsecond // 1000:03d}"
     entry = json.dumps({'ts': ts, 'msg': message, 'level': level})
-    try:
-        log_queue.put_nowait(entry)
-    except queue.Full:
-        pass  # Drop when queue is full (shouldn't happen in normal use)
+    with log_subscribers_lock:
+        for q in log_subscribers:
+            try:
+                q.put_nowait(entry)
+            except queue.Full:
+                pass
 
 
 # Definir la ruta base de tus scripts
@@ -1101,15 +1104,25 @@ def get_telemetry():
 def stream_logs():
     """SSE endpoint — sends real-time log entries to the browser"""
     def event_generator():
-        # Send a keepalive comment first so browser knows stream started
-        yield ': keepalive\n\n'
-        while True:
-            try:
-                entry = log_queue.get(timeout=20)  # 20-second timeout acts as heartbeat
-                yield f'data: {entry}\n\n'
-            except queue.Empty:
-                # Send SSE comment as heartbeat to keep connection alive
-                yield ': heartbeat\n\n'
+        # Crear cola para este cliente
+        q = queue.Queue(maxsize=1000)
+        with log_subscribers_lock:
+            log_subscribers.append(q)
+            
+        try:
+            # Send a keepalive comment first so browser knows stream started
+            yield ': keepalive\n\n'
+            while True:
+                try:
+                    entry = q.get(timeout=20)  # 20-second timeout acts as heartbeat
+                    yield f'data: {entry}\n\n'
+                except queue.Empty:
+                    # Send SSE comment as heartbeat to keep connection alive
+                    yield ': heartbeat\n\n'
+        finally:
+            with log_subscribers_lock:
+                if q in log_subscribers:
+                    log_subscribers.remove(q)
 
     return Response(
         stream_with_context(event_generator()),
