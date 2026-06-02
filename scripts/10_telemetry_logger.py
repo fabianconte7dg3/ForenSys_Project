@@ -106,7 +106,7 @@ def monitor_process(pid, module_name, case_dir):
                 speed_str = f.read().strip()
                 # Parsear "14.6 MB/s" o similar
                 val = float(speed_str.split()[0])
-                metrics['io_write_mb'] = val * metrics['duration_s']
+                metrics['io_write_mb'] = val * metrics['duration_sec']
         except Exception as e:
             pass
         # Clean up
