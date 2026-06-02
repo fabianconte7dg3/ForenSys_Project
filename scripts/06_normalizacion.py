@@ -626,13 +626,21 @@ def generar_gui_timeline(conn, ruta_salida):
     labels_js = list(datos_grafico.keys())
     data_js = list(datos_grafico.values())
 
+    chartjs_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'web_app', 'static', 'vendor', 'chartjs', 'chart.min.js')
+    chartjs_content = ""
+    try:
+        with open(chartjs_path, 'r', encoding='utf-8') as f:
+            chartjs_content = f.read()
+    except Exception as e:
+        chartjs_content = "console.error('Error cargando Chart.js localmente');"
+
     html_content = f"""
     <!DOCTYPE html>
     <html lang="es">
     <head>
         <meta charset="UTF-8">
         <title>Foren-Sys: Dashboard Super Timeline</title>
-        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script>{chartjs_content}</script>
         <style>
             body {{ background-color: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; margin: 0; padding: 20px; }}
             h1, h2 {{ color: #58a6ff; border-bottom: 1px solid #30363d; padding-bottom: 10px; }}
