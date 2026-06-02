@@ -15,20 +15,10 @@ echo "=================================================="
 echo "   CONFIGURACIÓN DE ENTORNO PORTABLE FORENSYS   "
 echo "=================================================="
 
-echo "[*] 1. Descargando dependencias forenses en modo User-Space (sin instalación global)..."
-mkdir -p "$TOOLS_DIR"
-cd "$TOOLS_DIR"
-
-# Descargamos los debs y los extraemos en tools_bin
-apt-get download dc3dd dcfldd testdisk libimobiledevice-utils ideviceinstaller >/dev/null 2>&1
-for deb in *.deb; do
-    if [ -f "$deb" ]; then
-        echo "   -> Desempaquetando $deb..."
-        dpkg -x "$deb" .
-        rm "$deb"
-    fi
-done
-cd "$PROJECT_DIR"
+echo "[*] 1. Instalando dependencias forenses base en el sistema operativo..."
+# Pedimos permisos si es necesario
+sudo apt-get update >/dev/null 2>&1
+sudo apt-get install -y dc3dd dcfldd testdisk libimobiledevice-utils ideviceinstaller sleuthkit
 
 echo "[*] 2. Configurando permisos SUDO transparentes para los scripts de ForenSys..."
 USER_NAME=$(whoami)
