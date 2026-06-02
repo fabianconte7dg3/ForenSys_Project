@@ -289,6 +289,13 @@ def wiping_dd_ceros(disco, bs, size_bytes):
                     # Formato dd: "64424509440 bytes (64 GB, 60 GiB) copied, 718 s, 89.7 MB/s"
                     m_bytes = re.match(r'(\d+)\s+bytes', linea)
                     m_speed = re.search(r'(\d+(?:\.\d+)?\s+[GMK]?B/s)', linea)
+                    if m_speed:
+                        try:
+                            with open("/tmp/wiping_speed.txt", "w") as f:
+                                f.write(m_speed.group(1))
+                        except:
+                            pass
+
                     if m_bytes and size_bytes > 0:
                         bytes_hechos = int(m_bytes.group(1))
                         pct = min(99, int(bytes_hechos * 100 / size_bytes))
