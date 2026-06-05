@@ -301,7 +301,7 @@ def list_cases():
                 <td style="padding: 14px 18px;">{badge}</td>
                 <td style="padding: 14px 18px;">{hash_display}</td>
                 <td style="padding: 14px 18px;">
-                    <button class="pipe-btn pb-blue" style="padding: 4px 10px; font-size: 0.7rem;" onclick="loadCaseFromPath('{caso.get('ruta', '')}')">
+                    <button class="pipe-btn pb-blue" style="padding: 4px 10px; font-size: 0.7rem;" onclick="importarCasoDesdeRuta('{caso.get('ruta', '').replace('\\', '\\\\')}')">
                         <i class="bi bi-folder-symlink"></i> Cargar
                     </button>
                 </td>
