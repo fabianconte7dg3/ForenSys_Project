@@ -10,6 +10,7 @@
     <link href="{{ url_for('static', filename='vendor/bootstrap/css/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.css') }}">
+    <script src="{{ url_for('static', filename='vendor/htmx/htmx.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.js') }}"></script>
 </head>
 <body>
@@ -191,7 +192,7 @@
                             <button onclick="abrirExploradorParaImportar()" style="background:none;border:1px solid var(--border-dim);color:var(--accent-purple);border-radius:4px;padding:2px 10px;font-size:.7rem;cursor:pointer;">
                                 <i class="bi bi-folder-symlink me-1"></i>Importar desde Ruta
                             </button>
-                            <button onclick="cargarCasosRegistrados()" style="background:none;border:1px solid var(--border-dim);color:var(--accent-blue);border-radius:4px;padding:2px 10px;font-size:.7rem;cursor:pointer;">
+                            <button hx-get="/api/case/list" hx-target="#cases-tbody" hx-swap="innerHTML" style="background:none;border:1px solid var(--border-dim);color:var(--accent-blue);border-radius:4px;padding:2px 10px;font-size:.7rem;cursor:pointer;">
                                 <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
                             </button>
                         </div>
@@ -209,17 +210,8 @@
                                     <th>Acción</th>
                                 </tr>
                             </thead>
-                            <tbody id="cases-tbody">
-                                <!-- JS populated -->
-                            </tbody>
-                        </table>
-                        <div id="cases-empty" style="text-align:center;padding:20px;color:var(--text-muted);font-size:.85rem;">
-                            <i class="bi bi-inbox" style="font-size:1.5rem;display:block;margin-bottom:8px;"></i>
-                            No hay casos registrados aún.
-                        </div>
-                    </div>
-                </div>
-            </section>
+                            <tbody id="cases-tbody" hx-get="/api/case/list" hx-trigger="load, reloadCases from:body" hx-swap="innerHTML">
+                                <tr><td colspan='6' class='text-center py-4 text-gray-500'>Cargando...</td></tr>
 
             <!-- ============================================================
                  SECTION 2: VISIÓN GENERAL
@@ -2114,92 +2106,8 @@ document.getElementById('hash-modal').addEventListener('click', function(e) {
 
 // ── Tabla de Casos Registrados ────────────────────────────────────
 function cargarCasosRegistrados() {
-    fetch('/api/case/list')
-    .then(res => res.json())
-    .then(data => {
-        const tbody = document.getElementById('cases-tbody');
-        const emptyMsg = document.getElementById('cases-empty');
-        tbody.replaceChildren();
-
-        if (!data.cases || data.cases.length === 0) {
-            emptyMsg.style.display = 'block';
-            return;
-        }
-        emptyMsg.style.display = 'none';
-
-        data.cases.forEach(caso => {
-            const tr = document.createElement('tr');
-
-            const tdId = document.createElement('td');
-            tdId.textContent = caso.caso_id;
-            tdId.style.fontFamily = 'var(--font-mono)';
-
-            const tdPerito = document.createElement('td');
-            tdPerito.textContent = caso.perito;
-
-            const tdClass = document.createElement('td');
-            tdClass.textContent = caso.clasificacion;
-
-            const tdFecha = document.createElement('td');
-            tdFecha.textContent = caso.fecha_apertura ? caso.fecha_apertura.substring(0, 19).replace('T', ' ') : '—';
-            tdFecha.style.fontSize = '0.78rem';
-
-            const tdEstado = document.createElement('td');
-            const badge = document.createElement('span');
-            badge.style.padding = '2px 10px';
-            badge.style.borderRadius = '4px';
-            badge.style.fontSize = '0.72rem';
-            badge.style.fontWeight = '600';
-            if (caso.estado === 'abierto') {
-                badge.textContent = 'ABIERTO';
-                badge.style.background = 'rgba(16,185,129,.15)';
-                badge.style.color = 'var(--accent-green)';
-            } else {
-                badge.textContent = 'CERRADO';
-                badge.style.background = 'rgba(239,68,68,.15)';
-                badge.style.color = 'var(--accent-red)';
-            }
-            tdEstado.appendChild(badge);
-
-            const tdHash = document.createElement('td');
-            tdHash.textContent = caso.hash_contexto ? caso.hash_contexto.substring(0, 16) + '...' : '—';
-            tdHash.style.fontFamily = 'var(--font-mono)';
-            tdHash.style.fontSize = '0.72rem';
-            tdHash.title = caso.hash_contexto || '';
-
-            const tdAction = document.createElement('td');
-            const btnLoad = document.createElement('button');
-            btnLoad.innerHTML = '<i class="bi bi-box-arrow-in-right"></i>';
-            btnLoad.title = "Cargar este caso";
-            btnLoad.style.background = 'transparent';
-            btnLoad.style.border = '1px solid var(--accent-purple)';
-            btnLoad.style.color = 'var(--accent-purple)';
-            btnLoad.style.borderRadius = '4px';
-            btnLoad.style.cursor = 'pointer';
-            btnLoad.onclick = () => {
-                if (caso.ruta) {
-                    importarCasoDesdeRuta(caso.ruta);
-                } else {
-                    alert("La ruta de este caso es desconocida.");
-                }
-            };
-            tdAction.appendChild(btnLoad);
-
-            tr.appendChild(tdId);
-            tr.appendChild(tdPerito);
-            tr.appendChild(tdClass);
-            tr.appendChild(tdFecha);
-            tr.appendChild(tdEstado);
-            tr.appendChild(tdHash);
-            tr.appendChild(tdAction);
-            tbody.appendChild(tr);
-        });
-    })
-    .catch(err => {
-        const emptyMsg = document.getElementById('cases-empty');
-        emptyMsg.textContent = 'Error al cargar casos: ' + err;
-        emptyMsg.style.display = 'block';
-    });
+    // HTMX maneja esto via evento
+    document.body.dispatchEvent(new Event("reloadCases"));
 }
 
 // Cargar casos al inicio
@@ -3368,58 +3276,27 @@ function toggleCategory(catId) {
 // Carga los archivos reales generados por la normalización desde el SSD externo
 function loadRealEvidence(casoId) {
     const statusLabel = document.getElementById('evidence-status-label');
-    const dynTree     = document.getElementById('evidence-tree-dynamic');
     const staticTree  = document.getElementById('evidence-tree-static');
+    const dynTree     = document.getElementById('evidence-tree-dynamic');
 
     if (!casoId) {
         if (statusLabel) statusLabel.textContent = 'No hay caso activo. Abre o importa un caso primero.';
         return;
     }
-    if (statusLabel) statusLabel.textContent = 'Cargando archivos del disco externo...';
+    if (statusLabel) statusLabel.textContent = 'Cargando archivos del disco externo con HTMX...';
 
-    fetch(`/api/case/${casoId}/results`)
-        .then(r => r.json())
-        .then(data => {
-            if (!data.archivos || data.archivos.length === 0) {
-                if (statusLabel) statusLabel.textContent = '⚠ No se encontraron archivos. ¿Está conectado el disco externo y se ejecutó el Módulo 7?';
-                return;
-            }
-            // Agrupar por categoría
-            const categorias = {};
-            data.archivos.forEach(arch => {
-                if (!categorias[arch.categoria]) categorias[arch.categoria] = [];
-                categorias[arch.categoria].push(arch);
-            });
-            // Limpiar árbol dinámico
-            dynTree.innerHTML = '';
-            Object.keys(categorias).forEach((cat, i) => {
-                const catId = `real-cat-${i}`;
-                const catDiv = document.createElement('div');
-                catDiv.className = 'tree-category open';
-                catDiv.id = catId;
-                catDiv.innerHTML = `
-                    <div class="tree-category-label" onclick="toggleCategory('${catId}')">
-                        <i class="bi bi-folder2-open" style="color:#94a3b8;"></i>
-                        ${cat}
-                        <i class="bi bi-chevron-right caret"></i>
-                    </div>
-                    <div class="tree-children">
-                        ${categorias[cat].map(arch => `
-                            <div class="tree-file" onclick="selectRealFile('${casoId}', '${(arch.filepath || arch.filename).replace(/\\/g, '\\\\')}', '${arch.filename.replace(/'/g, "\\'")}', '${arch.tipo}', ${arch.size_kb})">
-                                <i class="bi ${arch.icono} tree-file-icon" style="color:${arch.color};"></i>
-                                ${arch.filename}
-                                <span style="margin-left:auto; font-size:0.68rem; color:var(--text-muted);">${arch.size_kb} KB</span>
-                            </div>`).join('')}
-                    </div>`;
-                dynTree.appendChild(catDiv);
-            });
-            // Ocultar el árbol estático (placeholder)
-            if (staticTree) staticTree.style.display = 'none';
-            if (statusLabel) statusLabel.textContent = `✓ ${data.archivos.length} archivos cargados desde el disco externo.`;
-        })
-        .catch(err => {
-            if (statusLabel) statusLabel.textContent = `Error de conexión: ${err}`;
-        });
+    // Ocultar el árbol estático
+    if (staticTree) staticTree.style.display = 'none';
+
+    // Usar HTMX API para cargar dinámicamente
+    htmx.ajax('GET', `/api/case/${casoId}/results`, {
+        target: '#evidence-tree-dynamic',
+        swap: 'innerHTML'
+    }).then(() => {
+        if (statusLabel) statusLabel.textContent = `✓ Archivos cargados exitosamente (HTMX).`;
+    }).catch(err => {
+        if (statusLabel) statusLabel.textContent = `Error de conexión: ${err}`;
+    });
 }
 
 // Abre un archivo real del disco externo en el panel de previsualización

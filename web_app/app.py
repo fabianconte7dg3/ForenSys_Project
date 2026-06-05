@@ -275,6 +275,36 @@ def open_case():
 def list_cases():
     """Lista todos los casos registrados."""
     registry = load_registry()
+    if request.headers.get('HX-Request'):
+        if not registry:
+            return "<tr><td colspan='6' class='text-center py-4 text-gray-500'>No hay casos registrados aún.</td></tr>"
+        
+        html = ""
+        for caso in registry:
+            fecha = caso.get('fecha_apertura', '')[:19].replace('T', ' ') if caso.get('fecha_apertura') else '—'
+            estado = caso.get('estado', 'abierto')
+            
+            if estado == 'abierto':
+                badge = "<span style='padding: 2px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; background: rgba(16,185,129,.15); color: var(--accent-green);'>ABIERTO</span>"
+            else:
+                badge = "<span style='padding: 2px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; background: rgba(239,68,68,.15); color: var(--accent-red);'>CERRADO</span>"
+                
+            html += f"""
+            <tr class="hover:bg-white/5 transition-colors">
+                <td style="font-family: var(--font-mono); padding: 14px 18px;">{caso.get('caso_id', '')}</td>
+                <td style="padding: 14px 18px;">{caso.get('perito', '')}</td>
+                <td style="padding: 14px 18px;">{caso.get('clasificacion', '')}</td>
+                <td style="font-size: 0.78rem; padding: 14px 18px;">{fecha}</td>
+                <td style="padding: 14px 18px;">{badge}</td>
+                <td style="padding: 14px 18px;">
+                    <button class="pipe-btn pb-blue" style="padding: 4px 10px; font-size: 0.7rem;" onclick="loadCaseFromPath('{caso.get('ruta', '')}')">
+                        <i class="bi bi-folder-symlink"></i> Cargar
+                    </button>
+                </td>
+            </tr>
+            """
+        return html
+        
     return jsonify({"status": "success", "cases": registry})
 
 @app.route('/api/case/close', methods=['POST'])
@@ -462,6 +492,46 @@ def list_case_results(raw_caso_id):
                     archivos_encontrados += 1
                 except Exception:
                     pass
+
+    if request.headers.get('HX-Request'):
+        if not resultado:
+            return "<div class='p-4 text-center text-gray-500 text-sm'>⚠ No se encontraron archivos. ¿Está conectado el disco externo y se ejecutó el Módulo 7?</div>"
+            
+        # Agrupar por categoría
+        categorias = {}
+        for arch in resultado:
+            cat = arch['categoria']
+            if cat not in categorias:
+                categorias[cat] = []
+            categorias[cat].append(arch)
+            
+        html = ""
+        for i, (cat, archivos) in enumerate(categorias.items()):
+            cat_id = f"real-cat-{i}"
+            html += f"""
+            <div class="tree-category open" id="{cat_id}">
+                <div class="tree-category-label" onclick="toggleCategory('{cat_id}')">
+                    <i class="bi bi-folder2-open" style="color:#94a3b8;"></i>
+                    {cat}
+                    <i class="bi bi-chevron-right caret"></i>
+                </div>
+                <div class="tree-children">
+            """
+            for arch in archivos:
+                filepath_escaped = (arch.get('filepath') or arch['filename']).replace('\\', '\\\\').replace("'", "\\'")
+                filename_escaped = arch['filename'].replace("'", "\\'")
+                html += f"""
+                    <div class="tree-file" onclick="selectRealFile('{caso_id}', '{filepath_escaped}', '{filename_escaped}', '{arch['tipo']}', {arch['size_kb']})">
+                        <i class="bi {arch['icono']} tree-file-icon" style="color:{arch['color']};"></i>
+                        {arch['filename']}
+                        <span style="margin-left:auto; font-size:0.68rem; color:var(--text-muted);">{arch['size_kb']} KB</span>
+                    </div>
+                """
+            html += """
+                </div>
+            </div>
+            """
+        return html
 
     return jsonify({"status": "ok", "archivos": resultado, "ruta_base": ruta_results})
 
