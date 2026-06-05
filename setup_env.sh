@@ -47,6 +47,22 @@ venv/bin/pip install --upgrade pip -q
 venv/bin/pip install -r requirements.txt -q
 venv/bin/pip install -r requirements-test.txt -q
 
+echo "[*] 4. Compilando estilos Frontend (Tailwind CSS)..."
+mkdir -p "$PROJECT_DIR/web_app/tools"
+if [ ! -f "$PROJECT_DIR/web_app/tools/tailwindcss" ]; then
+    echo "   -> Descargando Tailwind CLI Standalone..."
+    curl -sLO https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-arm64
+    mv tailwindcss-linux-arm64 "$PROJECT_DIR/web_app/tools/tailwindcss"
+    chmod +x "$PROJECT_DIR/web_app/tools/tailwindcss"
+fi
+
+if [ -x "$PROJECT_DIR/web_app/tools/tailwindcss" ]; then
+    "$PROJECT_DIR/web_app/tools/tailwindcss" -i "$PROJECT_DIR/web_app/static/tailwind-input.css" -o "$PROJECT_DIR/web_app/static/tailwind.css" --minify
+    echo "   [OK] CSS compilado exitosamente."
+else
+    echo "   [!] Error al descargar o dar permisos a Tailwind CLI."
+fi
+
 # Marcador de finalización
 touch "$MARKER"
 echo "=================================================="
