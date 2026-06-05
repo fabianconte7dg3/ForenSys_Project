@@ -1,4 +1,9 @@
-@import "tailwindcss";
+/* 
+  ForenSys – Tailwind v4 CSS-First Config
+  Strategy: Import only utilities layer (NO preflight/reboot)
+  so Bootstrap Reboot + components.css remain in full control of layout.
+*/
+@import "tailwindcss/utilities";
 
 @theme {
   /* ================================================================
@@ -12,26 +17,20 @@
   --color-border-mid:    #2a3050;
   --color-text-primary:  #d8dff5;
   --color-text-muted:    #64718f;
-  
+
   --color-accent-blue:   #3b82f6;
   --color-accent-cyan:   #06b6d4;
   --color-accent-green:  #10b981;
   --color-accent-yellow: #f59e0b;
   --color-accent-red:    #ef4444;
   --color-accent-purple: #a855f7;
-  
+
   --color-terminal-bg:   #000408;
   --color-terminal-green:#22c55e;
-  
+
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
 
-/* Base resets specifically for ForenSys offline Kiosk */
-@layer base {
-  html, body {
-    background-color: var(--color-bg-root);
-    color: var(--color-text-primary);
-  }
-}
+/* components.css: all the original ForenSys custom CSS (layout, sidebar, etc.) */
 @import "./components.css";
