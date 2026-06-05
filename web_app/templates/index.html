@@ -4565,16 +4565,21 @@ function selectRealFile(casoId, filepath, filename, tipo, sizeKb) {
     
     // Configure Download Button
     const mediaUrl = `/api/case/${casoId}/download?filepath=${encodeURIComponent(filepath)}`;
+    const previewUrl = `/api/case/${casoId}/download?filepath=${encodeURIComponent(filepath)}&preview=true`;
     const downloadBtn = document.getElementById('btn-download');
     downloadBtn.href = mediaUrl;
     downloadBtn.style.display = 'inline-block';
     
-    // Handle multimedia and PDF
-    if (['imagen', 'video', 'audio'].includes(tipo) || filename.toLowerCase().endsWith('.pdf')) {
+    // Check if it's an Office document
+    const isOffice = filename.toLowerCase().match(/\.(docx|doc|pptx|ppt|xlsx|xls)$/);
+    const isPdf = filename.toLowerCase().endsWith('.pdf');
+    
+    // Handle multimedia and PDF/Office
+    if (['imagen', 'video', 'audio'].includes(tipo) || isPdf || isOffice) {
         document.getElementById('tab-media').style.display = 'block';
         document.getElementById('tab-text').style.display = 'none';
         document.getElementById('tab-hex').style.display = 'none';
-        document.getElementById('tab-media').textContent = filename.toLowerCase().endsWith('.pdf') ? 'Visualizador PDF' : 'Multimedia';
+        document.getElementById('tab-media').textContent = (isPdf || isOffice) ? 'Visualizador de Documentos' : 'Multimedia';
         switchTab('media');
         
         let mediaHtml = '';
@@ -4584,8 +4589,8 @@ function selectRealFile(casoId, filepath, filename, tipo, sizeKb) {
             mediaHtml = `<video src="${mediaUrl}" controls style="max-width:100%; max-height:100%;"></video>`;
         } else if (tipo === 'audio') {
             mediaHtml = `<audio src="${mediaUrl}" controls style="width:100%;"></audio>`;
-        } else if (filename.toLowerCase().endsWith('.pdf')) {
-            mediaHtml = `<iframe src="${mediaUrl}" style="width:100%; height:100%; border:none;"></iframe>`;
+        } else if (isPdf || isOffice) {
+            mediaHtml = `<iframe src="${isOffice ? previewUrl : mediaUrl}" style="width:100%; height:100%; border:none;"></iframe>`;
         }
         document.getElementById('pane-media').innerHTML = mediaHtml;
         document.getElementById('meta-hash').textContent = '(Calculado al exportar)';

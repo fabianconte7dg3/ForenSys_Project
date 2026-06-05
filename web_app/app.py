@@ -473,6 +473,7 @@ def download_case_file(raw_caso_id):
         return "caso_id inválido.", 400
 
     filepath = request.args.get('filepath', '').strip()
+    preview = request.args.get('preview', 'false').lower() == 'true'
     if not filepath or '..' in filepath:
         return "Path traversal no permitido.", 403
 
@@ -481,6 +482,29 @@ def download_case_file(raw_caso_id):
     ruta_absoluta = os.path.abspath(os.path.join(case_dir, filepath))
     if not ruta_absoluta.startswith(os.path.abspath(case_dir)):
         return "Acceso denegado.", 403
+
+    if preview:
+        ext = os.path.splitext(ruta_absoluta)[1].lower()
+        if ext in ['.docx', '.doc', '.pptx', '.ppt', '.xlsx', '.xls']:
+            import subprocess
+            import tempfile
+            
+            # Usar un directorio temporal para almacenar el PDF convertido
+            temp_dir = tempfile.gettempdir()
+            filename_pdf = os.path.splitext(os.path.basename(ruta_absoluta))[0] + ".pdf"
+            pdf_path = os.path.join(temp_dir, filename_pdf)
+            
+            # Ejecutar libreoffice headless para convertir a PDF
+            try:
+                subprocess.run([
+                    "libreoffice", "--headless", "--convert-to", "pdf",
+                    ruta_absoluta, "--outdir", temp_dir
+                ], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                
+                if os.path.exists(pdf_path):
+                    return send_from_directory(temp_dir, filename_pdf)
+            except Exception as e:
+                return f"Error convirtiendo a PDF: {str(e)}", 500
 
     return send_from_directory(case_dir, filepath)
 
