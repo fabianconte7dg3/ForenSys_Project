@@ -200,3 +200,78 @@ class ForensysTerminal extends HTMLElement {
 
 customElements.define('forensys-progress', ForensysProgress);
 customElements.define('forensys-terminal', ForensysTerminal);
+
+class ForensysVirtualList extends HTMLElement {
+    constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+        this.items = [];
+        this.itemHeight = 35;
+        this.renderItem = (item) => `<div>${item}</div>`;
+        this.buffer = 10;
+
+        this.shadowRoot.innerHTML = `
+            <style>
+                :host {
+                    display: block;
+                    width: 100%;
+                    height: 100%;
+                    overflow-y: auto;
+                    position: relative;
+                }
+                .virtual-scroll-spacer {
+                    width: 1px;
+                }
+                .virtual-list-content {
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                }
+            </style>
+            <div class="virtual-scroll-spacer" id="spacer"></div>
+            <div class="virtual-list-content" id="content"></div>
+        `;
+        
+        this.spacer = this.shadowRoot.getElementById('spacer');
+        this.content = this.shadowRoot.getElementById('content');
+        
+        // Using scroll event is the most robust way for pure 50-line virtualization
+        // IntersectionObserver can be used on sentinels, but scroll is simpler and zero lag.
+        this.addEventListener('scroll', () => this.updateRender(), { passive: true });
+    }
+
+    set config({ items, renderItem, itemHeight = 35 }) {
+        this.items = items;
+        this.renderItem = renderItem;
+        this.itemHeight = itemHeight;
+        this.spacer.style.height = (this.items.length * this.itemHeight) + 'px';
+        this.updateRender();
+    }
+
+    updateRender() {
+        if (!this.items.length) {
+            this.content.innerHTML = '';
+            return;
+        }
+        
+        const scrollTop = this.scrollTop;
+        const viewportHeight = this.clientHeight;
+        
+        const startIndex = Math.max(0, Math.floor(scrollTop / this.itemHeight) - this.buffer);
+        const visibleCount = Math.ceil(viewportHeight / this.itemHeight) + (this.buffer * 2);
+        const endIndex = Math.min(this.items.length - 1, startIndex + visibleCount);
+        
+        const visibleItems = this.items.slice(startIndex, endIndex + 1);
+        
+        let html = '';
+        visibleItems.forEach(item => {
+            html += this.renderItem(item);
+        });
+        
+        this.content.innerHTML = html;
+        this.content.style.transform = `translateY(${startIndex * this.itemHeight}px)`;
+    }
+}
+
+customElements.define('forensys-virtual-list', ForensysVirtualList);

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+    <link rel="manifest" href="/static/manifest.json">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="Foren-Sys – Panel de Control Headless para Triaje Forense y Respuesta a Incidentes">
@@ -2944,7 +2945,24 @@ navItems.forEach(item => {
 
         // Update topbar title (strip icon text)
         topbarTitle.textContent = this.querySelector('span').textContent.trim();
+        
+        // Save state to localStorage
+        localStorage.setItem('forensys_active_section', targetId);
     });
+});
+
+// Restore active section on load
+document.addEventListener('DOMContentLoaded', () => {
+    const savedSection = localStorage.getItem('forensys_active_section');
+    if (savedSection) {
+        const targetNav = document.querySelector(`.nav-item-custom[data-section="${savedSection}"]`);
+        if (targetNav) targetNav.click();
+    }
+    
+    const savedCasePath = localStorage.getItem('forensys_active_case_path');
+    if (savedCasePath) {
+        importarCasoDesdeRuta(savedCasePath);
+    }
 });
 
 // ── Case Management ───────────────────────────────────────────────
@@ -3238,6 +3256,8 @@ cargarCasosRegistrados();
 function resetCaseForm() {
     closeHashModal();
     activeCaseNumber = null;
+    localStorage.removeItem('forensys_active_case_path');
+
     activeCasePerito = null;
 
     const caseNumEl   = document.getElementById('case-number');
@@ -3511,6 +3531,8 @@ function importarCasoDesdeRuta(ruta) {
 function loadCaseInUI(caso, notasTxt) {
     // Cargar datos en el formulario
     activeCaseNumber = caso.caso_id;
+    localStorage.setItem('forensys_active_case_path', caso.ruta || '');
+
     activeCasePerito = caso.perito;
     activeCasePath   = caso.ruta || null;  // Guardar ruta real del disco (puede ser /mnt/Destino_ForenSys/<id>)
 
@@ -4400,283 +4422,83 @@ function loadRealEvidence(casoId) {
     if (statusLabel) statusLabel.textContent = 'Cargando archivos...';
     if (staticTree) staticTree.style.display = 'none';
 
-    // Use HTMX to load server-rendered HTML fragment
-    htmx.ajax('GET', `/api/case/${casoId}/results`, {
-        target: '#evidence-tree-dynamic',
-        swap: 'innerHTML'
-    }).then(() => {
-        if (statusLabel) statusLabel.textContent = '✓ Archivos cargados.';
-    }).catch(err => {
-        // Fallback to fetch+json if HTMX fails
-        fetch(`/api/case/${casoId}/results`)
-            .then(r => r.json())
-            .then(data => {
-                if (!data.archivos || data.archivos.length === 0) {
-                    if (statusLabel) statusLabel.textContent = '⚠ No se encontraron archivos. ¿Está conectado el disco externo y se ejecutó el Módulo 7?';
-                    return;
-                }
-                const categorias = {};
-                data.archivos.forEach(arch => {
-                    if (!categorias[arch.categoria]) categorias[arch.categoria] = [];
-                    categorias[arch.categoria].push(arch);
-                });
-                dynTree.innerHTML = '';
-                Object.keys(categorias).forEach((cat, i) => {
-                    const catId = `real-cat-${i}`;
-                    const catDiv = document.createElement('div');
-                    catDiv.className = 'tree-category open';
-                    catDiv.id = catId;
-                    catDiv.innerHTML = `
-                        <div class="tree-category-label" onclick="toggleCategory('${catId}')">
-                            <i class="bi bi-folder2-open" style="color:#94a3b8;"></i>
-                            ${cat}
-                            <i class="bi bi-chevron-right caret"></i>
-                        </div>
-                        <div class="tree-children">
-                            ${categorias[cat].map(arch => `
-                                <div class="tree-file" onclick="selectRealFile('${casoId}', '${(arch.filepath || arch.filename).replace(/\\/g, '\\\\')}', '${arch.filename.replace(/'/g, "\\'")}', '${arch.tipo}', ${arch.size_kb})">
-                                    <i class="bi ${arch.icono} tree-file-icon" style="color:${arch.color};"></i>
-                                    ${arch.filename}
-                                    <span style="margin-left:auto; font-size:0.68rem; color:var(--text-muted);">${arch.size_kb} KB</span>
-                                </div>`).join('')}
-                        </div>`;
-                    dynTree.appendChild(catDiv);
-                });
-                if (statusLabel) statusLabel.textContent = `✓ ${data.archivos.length} archivos cargados.`;
-            })
-            .catch(e => { if (statusLabel) statusLabel.textContent = `Error: ${e}`; });
-    });
-}
-
-// Abre un archivo real del disco externo en el panel de previsualización
-let currentTimelineChart = null;
-
-function selectRealFile(casoId, filepath, filename, tipo, sizeKb) {
-    document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('selected'));
-    if (event && event.currentTarget) {
-        event.currentTarget.classList.add('selected');
+    // VirtualList needs to be created if not exists
+    let vList = document.querySelector('forensys-virtual-list#evidence-vlist');
+    if (!vList) {
+        vList = document.createElement('forensys-virtual-list');
+        vList.id = 'evidence-vlist';
+        dynTree.innerHTML = '';
+        dynTree.appendChild(vList);
     }
 
-    document.getElementById('preview-empty').style.display = 'none';
-    document.getElementById('preview-active').classList.add('visible');
-    document.getElementById('preview-filename').textContent = filename;
-    document.getElementById('meta-name').textContent = filename;
-    document.getElementById('meta-size').textContent = sizeKb + ' KB';
-    document.getElementById('meta-type').textContent = tipo.toUpperCase();
-    document.getElementById('meta-hash').textContent = 'Calculando...';
-    document.getElementById('pane-text').textContent = 'Cargando contenido...';
-    document.getElementById('pane-hex').innerHTML = '';
-    document.getElementById('pane-media').innerHTML = '';
-    
-    // Hide specialized tabs by default
-    document.getElementById('tab-media').style.display = 'none';
-    document.getElementById('tab-graph').style.display = 'none';
-    
-    // Configure Download Button
-    const mediaUrl = `/api/case/${casoId}/download?filepath=${encodeURIComponent(filepath)}`;
-    const previewUrl = `/api/case/${casoId}/download?filepath=${encodeURIComponent(filepath)}&preview=true`;
-    const downloadBtn = document.getElementById('btn-download');
-    downloadBtn.href = mediaUrl;
-    downloadBtn.style.display = 'inline-block';
-    
-    // Check if it's an Office document
-    const isOffice = filename.toLowerCase().match(/\.(docx|doc|pptx|ppt|xlsx|xls)$/);
-    const isPdf = filename.toLowerCase().endsWith('.pdf');
-    
-    // Handle multimedia and PDF/Office
-    if (['imagen', 'video', 'audio'].includes(tipo) || isPdf || isOffice) {
-        document.getElementById('tab-media').style.display = 'block';
-        document.getElementById('tab-text').style.display = 'none';
-        document.getElementById('tab-hex').style.display = 'none';
-        document.getElementById('tab-media').textContent = (isPdf || isOffice) ? 'Visualizador de Documentos' : 'Multimedia';
-        switchTab('media');
-        
-        let mediaHtml = '';
-        if (tipo === 'imagen') {
-            mediaHtml = `<img src="${mediaUrl}" style="max-width:100%; max-height:100%; object-fit:contain;" alt="Preview">`;
-        } else if (tipo === 'video') {
-            mediaHtml = `<video src="${mediaUrl}" controls style="max-width:100%; max-height:100%;"></video>`;
-        } else if (tipo === 'audio') {
-            mediaHtml = `<audio src="${mediaUrl}" controls style="width:100%;"></audio>`;
-        } else if (isPdf || isOffice) {
-            mediaHtml = `<iframe src="${isOffice ? previewUrl : mediaUrl}" style="width:100%; height:100%; border:none;"></iframe>`;
-        }
-        document.getElementById('pane-media').innerHTML = mediaHtml;
-        document.getElementById('meta-hash').textContent = '(Calculado al exportar)';
-        return; // Skip fetching file text
-    }
-
-    // Default to text view for others
-    document.getElementById('tab-text').style.display = 'block';
-    document.getElementById('tab-hex').style.display = 'block';
-    switchTab('text');
-
-    fetch(`/api/case/${casoId}/file_content?filename=${encodeURIComponent(filepath)}`)
+    fetch(`/api/case/${casoId}/results`)
         .then(r => r.json())
         .then(data => {
-            if (data.status !== 'ok') {
-                document.getElementById('pane-text').textContent = `[ERROR] ${data.message}`;
-                document.getElementById('meta-hash').textContent = '—';
+            if (!data.archivos || data.archivos.length === 0) {
+                if (statusLabel) statusLabel.textContent = '⚠ No se encontraron archivos. ¿Está conectado el disco externo y se ejecutó el Módulo 7?';
+                vList.config = { items: [], renderItem: () => '' };
                 return;
             }
-            document.getElementById('meta-hash').textContent = data.sha256 || '—';
-            document.getElementById('meta-size').textContent = `${sizeKb} KB (${data.size_bytes} bytes)`;
-            let content = data.content || '(vacío)';
-            if (data.truncado) content += '\n\n[... Archivo truncado a 8 KB para visualización ...]';
-            document.getElementById('pane-text').textContent = content;
 
-            // Generate Hex Dump
-            let hexHtml = '';
-            for (let row = 0; row < content.length; row += 16) {
-                const offset = '0x' + row.toString(16).padStart(8, '0');
-                let bytes = [];
-                let ascii = '';
-                for (let col = 0; col < 16; col++) {
-                    if (row + col < content.length) {
-                        const b = content.charCodeAt(row + col) & 0xff;
-                        bytes.push(b.toString(16).padStart(2, '0').toUpperCase());
-                        ascii += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
-                    } else {
-                        bytes.push('  ');
+            // Flatten data into a list for virtualization
+            const flattened = [];
+            const categorias = {};
+            data.archivos.forEach(arch => {
+                if (!categorias[arch.categoria]) categorias[arch.categoria] = [];
+                categorias[arch.categoria].push(arch);
+            });
+
+            // Store category toggles locally (default open)
+            window._vListToggleState = window._vListToggleState || {};
+
+            window.toggleVListCategory = function(cat) {
+                window._vListToggleState[cat] = !window._vListToggleState[cat];
+                rebuildVList();
+            };
+
+            const rebuildVList = () => {
+                const flatItems = [];
+                Object.keys(categorias).forEach(cat => {
+                    const isOpen = window._vListToggleState[cat] !== false;
+                    flatItems.push({ type: 'category', cat, isOpen });
+                    if (isOpen) {
+                        categorias[cat].forEach(arch => {
+                            flatItems.push({ type: 'file', arch });
+                        });
                     }
-                }
-                hexHtml += `<div class="hex-line"><span class="hex-offset">${offset}</span><span class="hex-bytes">${bytes.join(' ')}</span><span class="hex-ascii">${ascii.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span></div>`;
-            }
-            document.getElementById('pane-hex').innerHTML = hexHtml;
-            
-            // Si es un CSV de timeline, mostrar pestaña de gráficos
-            if (filename.includes('timeline') && filename.endsWith('.csv')) {
-                document.getElementById('tab-graph').style.display = 'block';
-                generarGraficaTimeline(content);
-            }
+                });
+
+                vList.config = {
+                    items: flatItems,
+                    itemHeight: 32,
+                    renderItem: (item) => {
+                        if (item.type === 'category') {
+                            return `<div class="tree-category-label" style="height:32px; display:flex; align-items:center; cursor:pointer;" onclick="toggleVListCategory('${item.cat}')">
+                                        <i class="bi bi-folder2-open" style="color:#94a3b8; margin-right:8px;"></i>
+                                        ${item.cat}
+                                        <i class="bi bi-chevron-${item.isOpen ? 'down' : 'right'} caret" style="margin-left:auto;"></i>
+                                    </div>`;
+                        } else {
+                            const arch = item.arch;
+                            const fpath = (arch.filepath || arch.filename).replace(/\/g, '\').replace(/'/g, "\'");
+                            const fname = arch.filename.replace(/'/g, "\'");
+                            return `<div class="tree-file" style="height:32px; padding-left:20px; display:flex; align-items:center; cursor:pointer;" onclick="selectRealFile('${casoId}', '${fpath}', '${fname}', '${arch.tipo}', ${arch.size_kb})">
+                                        <i class="bi ${arch.icono} tree-file-icon" style="color:${arch.color}; margin-right:8px;"></i>
+                                        <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:70%;">${arch.filename}</span>
+                                        <span style="margin-left:auto; font-size:0.68rem; color:var(--text-muted);">${arch.size_kb} KB</span>
+                                    </div>`;
+                        }
+                    }
+                };
+            };
+
+            rebuildVList();
+            if (statusLabel) statusLabel.textContent = `✓ ${data.archivos.length} archivos cargados.`;
         })
         .catch(err => {
-            document.getElementById('pane-text').textContent = `Error cargando: ${err}`;
+            console.error('Error fetching real evidence:', err);
+            if (statusLabel) statusLabel.textContent = 'Error al cargar evidencia real.';
         });
-}
-
-function generarGraficaTimeline(csvText) {
-    if (currentTimelineChart) {
-        currentTimelineChart.destroy();
-    }
-    const lines = csvText.split('\\n');
-    const conteoFechas = {};
-    
-    // Parse MACB format timeline (SleuthKit mactime format generally has date/time in 1st column)
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        if (!line) continue;
-        
-        // Mactime format usually starts with:  Mon YYYY ...
-        // We will do a simple regex to find YYYY-MM-DD or standard date.
-        // Assuming CSV structure or mactime plain structure, we just grep the year-month-day
-        const match = line.match(/(\\d{4}-\\d{2}-\\d{2})/);
-        if (match) {
-            const fecha = match[1];
-            conteoFechas[fecha] = (conteoFechas[fecha] || 0) + 1;
-        }
-    }
-    
-    const fechasOrdenadas = Object.keys(conteoFechas).sort();
-    if (fechasOrdenadas.length === 0) return; // No hay fechas válidas
-    
-    const dataCounts = fechasOrdenadas.map(f => conteoFechas[f]);
-    
-    const ctx = document.getElementById('timelineChart').getContext('2d');
-    currentTimelineChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: fechasOrdenadas,
-            datasets: [{
-                label: 'Eventos Forenses (MACB)',
-                data: dataCounts,
-                borderColor: '#3b82f6',
-                backgroundColor: 'rgba(59, 130, 246, 0.2)',
-                borderWidth: 2,
-                fill: true,
-                tension: 0.3
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: { labels: { color: '#94a3b8' } }
-            },
-            scales: {
-                x: { ticks: { color: '#64748b' }, grid: { color: '#334155' } },
-                y: { ticks: { color: '#64748b' }, grid: { color: '#334155' }, beginAtZero: true }
-            }
-        }
-    });
-}
-
-let currentFileId = null;
-
-function selectFile(fileId) {
-    currentFileId = fileId;
-    const file = evidenceFiles[fileId];
-    if (!file) return;
-
-    // Highlight selected in tree
-    document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('selected'));
-    event.currentTarget.classList.add('selected');
-
-    // Show preview
-    document.getElementById('preview-empty').style.display  = 'none';
-    document.getElementById('preview-active').classList.add('visible');
-    document.getElementById('preview-filename').textContent = file.name;
-
-    // Meta
-    document.getElementById('meta-name').textContent = file.name;
-    document.getElementById('meta-size').textContent = file.size;
-    document.getElementById('meta-type').textContent = file.type;
-    document.getElementById('meta-hash').textContent = file.hash;
-
-    // Text pane
-    document.getElementById('pane-text').textContent = file.text;
-
-    // Hex pane
-    const hexPane = document.getElementById('pane-hex');
-    hexPane.innerHTML = '';
-    const lines = generateHexDump(fileId, 28);
-    lines.forEach(line => {
-        const div = document.createElement('div');
-        div.className = 'hex-line';
-        div.innerHTML =
-            `<span class="hex-offset">${line.offset}</span>` +
-            `<span class="hex-bytes">${line.bytes}</span>` +
-            `<span class="hex-ascii">${line.ascii}</span>`;
-        hexPane.appendChild(div);
-    });
-
-    // Switch to appropriate default tab
-    switchTab(file.hex ? 'hex' : 'text');
-}
-
-function switchTab(tab) {
-    // Esconder/desmarcar todos
-    ['text', 'hex', 'media', 'graph'].forEach(t => {
-        const tEl = document.getElementById(`tab-${t}`);
-        const pEl = document.getElementById(`pane-${t}`);
-        if (tEl) tEl.classList.remove('active');
-        if (pEl) {
-            pEl.classList.remove('active');
-            pEl.style.display = 'none'; // Ensure CSS display goes to none for graphs to redraw correctly
-        }
-    });
-    
-    // Activar seleccionado
-    const tEl = document.getElementById(`tab-${tab}`);
-    const pEl = document.getElementById(`pane-${tab}`);
-    if (tEl) tEl.classList.add('active');
-    if (pEl) {
-        pEl.classList.add('active');
-        pEl.style.display = 'block'; // Make it visible
-        if (tab === 'graph' && currentTimelineChart) {
-            currentTimelineChart.resize(); // Fix Chart.js size when switching from display none
-        }
-    }
 }
 
 function loadRealIaReport(casoId) {
@@ -4976,5 +4798,19 @@ function exitKiosk() {
 
 </script>
 
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js')
+      .then(registration => {
+        console.log('SW registered: ', registration);
+      })
+      .catch(registrationError => {
+        console.log('SW registration failed: ', registrationError);
+      });
+  });
+}
+</script>
 </body>
 </html>

@@ -1,0 +1,9 @@
+{
+  "name": "ForenSys Interface v2",
+  "short_name": "ForenSys",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a1520",
+  "theme_color": "#3b82f6",
+  "icons": []
+}
