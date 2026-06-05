@@ -289,6 +289,9 @@ def list_cases():
             else:
                 badge = "<span style='padding: 2px 10px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; background: rgba(239,68,68,.15); color: var(--accent-red);'>CERRADO</span>"
                 
+            hash_ctx = caso.get('hash_contexto', '')
+            hash_display = f"<a href='#' onclick='event.preventDefault(); showHashDetails(\"Hash del Contexto de Incidente\", \"{hash_ctx}\", \"Garantiza que los datos iniciales del caso no han sido alterados.\");' style='font-family: var(--font-mono); font-size: 0.72rem;' title='{hash_ctx}'>{hash_ctx[:16]}...</a>" if hash_ctx else '—'
+                
             html += f"""
             <tr class="hover:bg-white/5 transition-colors">
                 <td style="font-family: var(--font-mono); padding: 14px 18px;">{caso.get('caso_id', '')}</td>
@@ -296,6 +299,7 @@ def list_cases():
                 <td style="padding: 14px 18px;">{caso.get('clasificacion', '')}</td>
                 <td style="font-size: 0.78rem; padding: 14px 18px;">{fecha}</td>
                 <td style="padding: 14px 18px;">{badge}</td>
+                <td style="padding: 14px 18px;">{hash_display}</td>
                 <td style="padding: 14px 18px;">
                     <button class="pipe-btn pb-blue" style="padding: 4px 10px; font-size: 0.7rem;" onclick="loadCaseFromPath('{caso.get('ruta', '')}')">
                         <i class="bi bi-folder-symlink"></i> Cargar
