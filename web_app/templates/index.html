@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.css') }}">
     <script src="{{ url_for('static', filename='vendor/htmx/htmx.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.js') }}"></script>
+    <script src="{{ url_for('static', filename='web-components.js') }}"></script>
     <style>
         /* Fallback offline robusto para reemplazar Google Fonts cuando no hay internet */
         :root {
@@ -1575,15 +1576,7 @@
                             </div>
 
                             <!-- Progress Bar -->
-                            <div id="wiping-progress-container" style="display: none; margin-top: 20px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
-                                    <span id="wiping-progress-text">Progreso: 0%</span>
-                                    <span id="wiping-progress-detail">Iniciando...</span>
-                                </div>
-                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
-                                    <div id="wiping-progress-bar" style="width: 0%; height: 100%; background: var(--accent-red); transition: width 0.3s ease;"></div>
-                                </div>
-                            </div>
+                            <forensys-progress id="wiping-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-red)"></forensys-progress>
                         </div>
 
 
@@ -1659,15 +1652,7 @@
                             </div>
                             
                             <!-- Progress Bar -->
-                            <div id="usb-progress-container" style="display: none; margin-top: 20px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
-                                    <span id="usb-progress-text">Progreso: 0%</span>
-                                    <span id="usb-progress-detail">Iniciando preparación...</span>
-                                </div>
-                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
-                                    <div id="usb-progress-bar" style="width: 0%; height: 100%; background: #a855f7; transition: width 0.4s ease;"></div>
-                                </div>
-                            </div>
+                            <forensys-progress id="usb-progress-container" style="display: none; margin-top: 20px;" color="#a855f7"></forensys-progress>
                         </div>
 
                         <!-- 4. RAM -->
@@ -1712,15 +1697,7 @@
                             </div>
                             
                             <!-- Progress Bar -->
-                            <div id="ram-progress-container" style="display: none; margin-top: 20px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
-                                    <span id="ram-progress-text">Progreso: 0%</span>
-                                    <span id="ram-progress-detail">Iniciando análisis...</span>
-                                </div>
-                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
-                                    <div id="ram-progress-bar" style="width: 0%; height: 100%; background: var(--accent-cyan); transition: width 0.4s ease;"></div>
-                                </div>
-                            </div>
+                            <forensys-progress id="ram-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-cyan)"></forensys-progress>
                         </div>
 
                         <!-- 5. CELULAR -->
@@ -1784,15 +1761,7 @@
                             </div>
 
                             <!-- Progress Bar -->
-                            <div id="mobile-progress-container" style="display: none; margin-top: 20px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
-                                    <span id="mobile-progress-text">Progreso: 0%</span>
-                                    <span id="mobile-progress-detail">Iniciando extracción...</span>
-                                </div>
-                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
-                                    <div id="mobile-progress-bar" style="width: 0%; height: 100%; background: var(--accent-yellow); transition: width 0.4s ease;"></div>
-                                </div>
-                            </div>
+                            <forensys-progress id="mobile-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-yellow)"></forensys-progress>
                         </div>
 
                         <!-- 6. NUBE -->
@@ -1865,15 +1834,7 @@
                             </div>
 
                             <!-- Progress Bar -->
-                            <div id="cloud-progress-container" style="display: none; margin-top: 20px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
-                                    <span id="cloud-progress-text">Progreso: 0%</span>
-                                    <span id="cloud-progress-detail">Iniciando rastreo...</span>
-                                </div>
-                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
-                                    <div id="cloud-progress-bar" style="width: 0%; height: 100%; background: #94a3b8; transition: width 0.4s ease;"></div>
-                                </div>
-                            </div>
+                            <forensys-progress id="cloud-progress-container" style="display: none; margin-top: 20px;" color="#94a3b8"></forensys-progress>
                         </div>
 
                         <!-- ═══ MODAL: Resultados OSINT ═══════════════════════════ -->
@@ -1964,15 +1925,7 @@
                             </div>
 
                             <!-- Progress Bar -->
-                            <div id="timeline-progress-container" style="display: none; margin-top: 20px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
-                                    <span id="timeline-progress-text">Progreso: 0%</span>
-                                    <span id="timeline-progress-detail">Iniciando...</span>
-                                </div>
-                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
-                                    <div id="timeline-progress-bar" style="width: 0%; height: 100%; background: var(--accent-blue); transition: width 0.3s ease;"></div>
-                                </div>
-                            </div>
+                            <forensys-progress id="timeline-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-blue)"></forensys-progress>
                         </div>
 
                         <!-- 8. TRIAJE IA -->
@@ -2016,15 +1969,7 @@
                                 <button class="btn-primary" id="btn-run-ia" style="background: var(--accent-green); border-color: var(--accent-green); color: #000;"><i class="bi bi-play-fill me-2"></i>Iniciar Análisis Inteligente</button>
                             </div>
                             <!-- Progress Bar IA -->
-                            <div id="ia-progress-container" style="display: none; margin-top: 20px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
-                                    <span id="ia-progress-text">Progreso: 0%</span>
-                                    <span id="ia-progress-detail">Conectando con Ollama...</span>
-                                </div>
-                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
-                                    <div id="ia-progress-bar" style="width: 0%; height: 100%; background: var(--accent-green); transition: width 0.3s ease;"></div>
-                                </div>
-                            </div>
+                            <forensys-progress id="ia-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-green)"></forensys-progress>
                         </div>
 
 
@@ -2036,15 +1981,7 @@
                                 <button class="btn-primary" id="btn-run-report" style="background: var(--accent-purple); border-color: var(--accent-purple);"><i class="bi bi-play-fill me-2"></i>Generar y Sellar Reporte PDF</button>
                             </div>
                             <!-- Progress Bar Reporte -->
-                            <div id="report-progress-container" style="display: none; margin-top: 20px;">
-                                <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">
-                                    <span id="report-progress-text">Progreso: 0%</span>
-                                    <span id="report-progress-detail">Generando documento...</span>
-                                </div>
-                                <div style="width: 100%; background: var(--bg-surface); border: 1px solid var(--border-dim); border-radius: 4px; overflow: hidden; height: 12px;">
-                                    <div id="report-progress-bar" style="width: 0%; height: 100%; background: var(--accent-purple); transition: width 0.3s ease;"></div>
-                                </div>
-                            </div>
+                            <forensys-progress id="report-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-purple)"></forensys-progress>
                         </div>
                     </div>
                 </div>
@@ -2098,12 +2035,9 @@
                                 <span id="console-path-label">foren-sys@headless:~$</span>
                             </div>
                         </div>
-                        <div id="live-log">
-                            <div class="log-entry log-idle">
-                                <span class="log-ts"></span>
-                                <span class="log-msg">Foren-Sys Terminal Interface v2.0 — Conectando al servidor de logs...</span>
-                            </div>
-                        </div>
+                        <forensys-terminal id="live-log" show-header>
+                            <div style="color: #cbd5e1; font-family: monospace;">Foren-Sys Terminal Interface v2.0 — Conectando al servidor de logs...</div>
+                        </forensys-terminal>
                         <!-- Manual Command Input (hidden by default) -->
                         <div id="cmd-input-bar" style="display:none; padding: 8px 14px; background:#0a1520; border-top: 1px solid rgba(59,130,246,0.3); display:none;">
                             <div style="display:flex; align-items:center; gap:8px;">
@@ -2562,31 +2496,8 @@ const levelClassMap = {
 };
 
 function addLogEntry(message, cssType = 'log-info') {
-    const entry = document.createElement('div');
-    entry.className = `log-entry ${cssType}`;
-
-    const ts = document.createElement('span');
-    ts.className = 'log-ts';
-    ts.textContent = getTimestamp();
-
-    const msg = document.createElement('span');
-    msg.className = 'log-msg';
-    msg.textContent = message;
-
-    entry.appendChild(ts);
-    entry.appendChild(msg);
-    liveLog.appendChild(entry);
-
-    // Keep DOM lean
-    while (liveLog.children.length > MAX_LOG_LINES) {
-        liveLog.removeChild(liveLog.firstChild);
-    }
-
-    // Auto-scroll only if user hasn't scrolled up manually
-    const parent = liveLog.parentElement;
-    const isAtBottom = parent.scrollHeight - parent.clientHeight - parent.scrollTop < 60;
-    if (isAtBottom) {
-        parent.scrollTop = parent.scrollHeight;
+    if (liveLog && typeof liveLog.addLog === 'function') {
+        liveLog.addLog(message, cssType);
     }
 }
 
@@ -2668,10 +2579,6 @@ function initSSE() {
                 ['wiping', 'usb', 'ram', 'mobile', 'cloud', 'timeline', 'ia', 'report'].forEach(prefix => {
                     const pContainer = document.getElementById(`${prefix}-progress-container`);
                     if (pContainer && pContainer.style.display !== 'none') {
-                        const pBar    = document.getElementById(`${prefix}-progress-bar`);
-                        const pText   = document.getElementById(`${prefix}-progress-text`);
-                        const pDetail = document.getElementById(`${prefix}-progress-detail`);
-
                         const key = `_lastPct_${prefix}`;
                         const prev = window[key] || 0;
                         if (pct < prev) return;
@@ -3714,10 +3621,9 @@ function runOperation(btnId) {
         const pContainer = document.getElementById('wiping-progress-container');
         if (pContainer) {
             pContainer.style.display = 'block';
-            document.getElementById('wiping-progress-bar').style.width = '0%';
-            document.getElementById('wiping-progress-bar').style.background = 'var(--accent-red)';
-            document.getElementById('wiping-progress-text').textContent = 'Progreso: 0%';
-            document.getElementById('wiping-progress-detail').textContent = 'Iniciando esterilización...';
+            pContainer.setAttribute('value', '0');
+            pContainer.setAttribute('color', 'var(--accent-red)');
+            pContainer.detail = 'Iniciando esterilización...';
         }
     } else if (btnId === 'btn-disk') {
         const targetDev = selectedDevices.disco;
@@ -3735,12 +3641,12 @@ function runOperation(btnId) {
         command = `sudo /home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/creador_de_extraccion_de_ram.py --target ${targetDev} --force`;
         
         // Reset progress bar
-        const pContainer = document.getElementById('usb-progress-container');
-        if (pContainer) {
-            pContainer.style.display = 'block';
-            document.getElementById('usb-progress-bar').style.width = '0%';
-            document.getElementById('usb-progress-text').textContent = 'Progreso: 0%';
-            document.getElementById('usb-progress-detail').textContent = 'Iniciando preparación...';
+        const pContainerUsb = document.getElementById('usb-progress-container');
+        if (pContainerUsb) {
+            pContainerUsb.style.display = 'block';
+            pContainerUsb.setAttribute('value', '0');
+            pContainerUsb.setAttribute('color', '#a855f7');
+            pContainerUsb.detail = 'Iniciando preparación...';
         }
     } else if (btnId === 'btn-ram') {
         const archivRAM = selectedFiles.ram;
@@ -3753,10 +3659,9 @@ function runOperation(btnId) {
         const pRamContainer = document.getElementById('ram-progress-container');
         if (pRamContainer) {
             pRamContainer.style.display = 'block';
-            document.getElementById('ram-progress-bar').style.width = '0%';
-            document.getElementById('ram-progress-bar').style.background = 'var(--accent-cyan)';
-            document.getElementById('ram-progress-text').textContent = 'Progreso: 0%';
-            document.getElementById('ram-progress-detail').textContent = 'Iniciando análisis...';
+            pRamContainer.setAttribute('value', '0');
+            pRamContainer.setAttribute('color', 'var(--accent-cyan)');
+            pRamContainer.detail = 'Iniciando análisis...';
         }
     } else if (btnId === 'btn-mobile') {
         const plataforma = selectedMobilePlatform || 'android';
@@ -3765,10 +3670,9 @@ function runOperation(btnId) {
         const pMobileContainer = document.getElementById('mobile-progress-container');
         if (pMobileContainer) {
             pMobileContainer.style.display = 'block';
-            document.getElementById('mobile-progress-bar').style.width = '0%';
-            document.getElementById('mobile-progress-bar').style.background = 'var(--accent-yellow)';
-            document.getElementById('mobile-progress-text').textContent = 'Progreso: 0%';
-            document.getElementById('mobile-progress-detail').textContent = `Iniciando extracción ${plataforma.toUpperCase()}...`;
+            pMobileContainer.setAttribute('value', '0');
+            pMobileContainer.setAttribute('color', 'var(--accent-yellow)');
+            pMobileContainer.detail = `Iniciando extracción ${plataforma.toUpperCase()}...`;
         }
     } else if (btnId === 'btn-cloud') {
         const alias = document.getElementById('osint-alias')?.value?.trim();
@@ -3783,10 +3687,9 @@ function runOperation(btnId) {
         const pCloudContainer = document.getElementById('cloud-progress-container');
         if (pCloudContainer) {
             pCloudContainer.style.display = 'block';
-            document.getElementById('cloud-progress-bar').style.width = '0%';
-            document.getElementById('cloud-progress-bar').style.background = '#94a3b8';
-            document.getElementById('cloud-progress-text').textContent = 'Progreso: 0%';
-            document.getElementById('cloud-progress-detail').textContent = `Rastreando @${alias} en ${topSites || '+3000'} sitios...`;
+            pCloudContainer.setAttribute('value', '0');
+            pCloudContainer.setAttribute('color', '#94a3b8');
+            pCloudContainer.detail = `Rastreando @${alias} en ${topSites || '+3000'} sitios...`;
         }
         addLogEntry(`[OSINT] Iniciando rastreo de alias: @${alias}`, 'log-system');
     } else if (btnId === 'btn-timeline') {
@@ -3808,10 +3711,9 @@ function runOperation(btnId) {
         const pTimelineContainer = document.getElementById('timeline-progress-container');
         if (pTimelineContainer) {
             pTimelineContainer.style.display = 'block';
-            document.getElementById('timeline-progress-bar').style.width = '0%';
-            document.getElementById('timeline-progress-bar').style.background = 'var(--accent-blue)';
-            document.getElementById('timeline-progress-text').textContent = 'Progreso: 0%';
-            document.getElementById('timeline-progress-detail').textContent = `Iniciando Normalización...`;
+            pTimelineContainer.setAttribute('value', '0');
+            pTimelineContainer.setAttribute('color', 'var(--accent-blue)');
+            pTimelineContainer.detail = `Iniciando Normalización...`;
         }
     } else if (btnId === 'btn-ia') {
         // Módulo 8: Triaje IA — llama a /api/run/ia en lugar de run_command
@@ -3822,10 +3724,9 @@ function runOperation(btnId) {
         const pIaContainer = document.getElementById('ia-progress-container');
         if (pIaContainer) {
             pIaContainer.style.display = 'block';
-            document.getElementById('ia-progress-bar').style.width = '0%';
-            document.getElementById('ia-progress-bar').style.background = 'var(--accent-green)';
-            document.getElementById('ia-progress-text').textContent = 'Progreso: 0%';
-            document.getElementById('ia-progress-detail').textContent = 'Conectando con Ollama...';
+            pIaContainer.setAttribute('value', '0');
+            pIaContainer.setAttribute('color', 'var(--accent-green)');
+            pIaContainer.detail = 'Conectando con Ollama...';
         }
         disableAllPipeBtns();
         const btnIaEl = document.getElementById('btn-ia');
@@ -3865,10 +3766,9 @@ function runOperation(btnId) {
         const pReportContainer = document.getElementById('report-progress-container');
         if (pReportContainer) {
             pReportContainer.style.display = 'block';
-            document.getElementById('report-progress-bar').style.width = '0%';
-            document.getElementById('report-progress-bar').style.background = 'var(--accent-purple)';
-            document.getElementById('report-progress-text').textContent = 'Progreso: 0%';
-            document.getElementById('report-progress-detail').textContent = 'Iniciando generación de PDF...';
+            pReportContainer.setAttribute('value', '0');
+            pReportContainer.setAttribute('color', 'var(--accent-purple)');
+            pReportContainer.detail = 'Iniciando generación de PDF...';
         }
     } else {
         // Módulos no reconocidos: ignorar
