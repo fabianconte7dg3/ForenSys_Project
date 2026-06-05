@@ -93,25 +93,38 @@ ___________________________
     print("[SUCCESS] Cadena de Custodia (Acta) generada correctamente.")
 
 def calcular_hash(ruta_dispositivo):
-    """Calcula el Hash SHA-256 leyendo el dispositivo en bloques de 4KB."""
+    """Calcula el Hash SHA-256 usando sha256sum nativo en C (rápido) o fallback a bloques 8MB en Python."""
     print(f"\n[*] 1/4: Calculando Hash SHA-256 PRE-ADQUISICIÓN de {ruta_dispositivo}...")
     
-    sha256 = hashlib.sha256()
+    # Intento 1: sha256sum nativo (C) altamente optimizado
     try:
-        with open(ruta_dispositivo, "rb") as f:
-            for bloque in iter(lambda: f.read(4096), b""):
-                sha256.update(bloque)
-                
-        hash_resultado = sha256.hexdigest()
-        print(f"[+] HASH ORIGINAL: {hash_resultado}")
+        print("[*] Usando motor de hashing acelerado (sha256sum)...")
+        result = subprocess.run(
+            ['sha256sum', ruta_dispositivo],
+            capture_output=True, text=True, check=True
+        )
+        hash_resultado = result.stdout.split()[0].lower()
+        print(f"[+] HASH ORIGINAL (Rápido): {hash_resultado}")
         return hash_resultado
-    except PermissionError:
-        print("\n[X] Permiso denegado. ¡Debes ejecutar el script con sudo!")
-        sys.exit(1)
-    except FileNotFoundError:
-        print(f"\n[X] No se encontró el dispositivo {ruta_dispositivo}.")
-        sys.exit(1)
-
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("[-] Fallo en sha256sum, usando fallback en Python optimizado (8MB chunks)...")
+        # Intento 2: Fallback en Python pero con bloques de 8MB para minimizar syscalls
+        sha256 = hashlib.sha256()
+        try:
+            with open(ruta_dispositivo, "rb") as f:
+                # 8MB chunk = 8388608 bytes
+                for bloque in iter(lambda: f.read(8388608), b""):
+                    sha256.update(bloque)
+                    
+            hash_resultado = sha256.hexdigest()
+            print(f"[+] HASH ORIGINAL (Python 8MB): {hash_resultado}")
+            return hash_resultado
+        except PermissionError:
+            print("\n[X] Permiso denegado. ¡Debes ejecutar el script con sudo!")
+            sys.exit(1)
+        except FileNotFoundError:
+            print(f"\n[X] No se encontró el dispositivo {ruta_dispositivo}.")
+            sys.exit(1)
 def crear_imagen_dd(origen, destino_base, caso_id, hash_original):
     """Utiliza dc3dd para crear la imagen física y verifica su hash posteriormente."""
     ruta_imagen = os.path.join(destino_base, f"{caso_id}_evidencia.dd")

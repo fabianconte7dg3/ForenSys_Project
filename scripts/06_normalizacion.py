@@ -253,7 +253,7 @@ def verificar_integridad_normalizacion(ruta_resultados):
         try:
             sha256 = hashlib.sha256()
             with open(ruta, 'rb') as f:
-                for bloque in iter(lambda: f.read(65536), b''):
+                for bloque in iter(lambda: f.read(8388608), b''):
                     sha256.update(bloque)
             h = sha256.hexdigest()
             hashes_finales[nombre] = h
@@ -691,7 +691,7 @@ def calcular_sha256(ruta_archivo):
     sha256 = hashlib.sha256()
     try:
         with open(ruta_archivo, "rb") as f:
-            for bloque in iter(lambda: f.read(8192), b""): sha256.update(bloque)
+            for bloque in iter(lambda: f.read(8388608), b""): sha256.update(bloque)
         return sha256.hexdigest()
     except Exception: return "ERROR_LECTURA"
 

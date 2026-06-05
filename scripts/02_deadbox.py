@@ -16,27 +16,35 @@ def listar_discos():
     print("-------------------------\n")
 
 def calcular_hash(ruta_dispositivo):
-    """Calcula el Hash SHA-256 puro leyendo el dispositivo en bloques de 4KB."""
+    """Calcula el Hash SHA-256 usando sha256sum nativo en C (rápido) o fallback a bloques 8MB en Python."""
     print(f"\n[*] 1/3: Calculando Hash SHA-256 PRE-ADQUISICIÓN de {ruta_dispositivo}...")
-    print("[*] (Esto puede tardar dependiendo del tamaño. Paciencia...)")
+    print("[*] (Usando aceleración sha256sum nativa...)")
     
-    sha256 = hashlib.sha256()
     try:
-        # Leemos en formato binario ('rb')
-        with open(ruta_dispositivo, "rb") as f:
-            # Leemos en bloques de 4096 bytes para no saturar la RAM
-            for bloque in iter(lambda: f.read(4096), b""):
-                sha256.update(bloque)
-                
-        hash_resultado = sha256.hexdigest()
-        print(f"[+] HASH ORIGINAL: {hash_resultado}")
+        result = subprocess.run(
+            ['sha256sum', ruta_dispositivo],
+            capture_output=True, text=True, check=True
+        )
+        hash_resultado = result.stdout.split()[0].lower()
+        print(f"[+] HASH ORIGINAL (Rápido): {hash_resultado}")
         return hash_resultado
-    except PermissionError:
-        print("\n[X] Permiso denegado. ¡Debes ejecutar el script con sudo!")
-        sys.exit(1)
-    except FileNotFoundError:
-        print(f"\n[X] No se encontró el dispositivo {ruta_dispositivo}.")
-        sys.exit(1)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("[-] Fallo en sha256sum, usando fallback en Python optimizado (8MB chunks)...")
+        sha256 = hashlib.sha256()
+        try:
+            with open(ruta_dispositivo, "rb") as f:
+                for bloque in iter(lambda: f.read(8388608), b""):
+                    sha256.update(bloque)
+                    
+            hash_resultado = sha256.hexdigest()
+            print(f"[+] HASH ORIGINAL (Python 8MB): {hash_resultado}")
+            return hash_resultado
+        except PermissionError:
+            print("\n[X] Permiso denegado. ¡Debes ejecutar el script con sudo!")
+            sys.exit(1)
+        except FileNotFoundError:
+            print(f"\n[X] No se encontró el dispositivo {ruta_dispositivo}.")
+            sys.exit(1)
 
 def crear_imagen_dd(origen, destino_base, caso_id):
     """Utiliza dc3dd para crear la imagen física bit a bit."""
