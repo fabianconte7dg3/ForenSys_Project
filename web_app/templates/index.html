@@ -2280,6 +2280,11 @@
                                     <div class="meta-item-label">Tipo</div>
                                     <div class="meta-item-value" id="meta-type">—</div>
                                 </div>
+                                <div style="display:flex; align-items:flex-end;">
+                                    <a id="btn-download" href="#" target="_blank" class="btn btn-sm btn-outline-secondary" style="display:none; font-size:0.75rem;">
+                                        <i class="bi bi-download"></i> Descargar
+                                    </a>
+                                </div>
                                 <div class="meta-hash-row">
                                     <div class="meta-item-label">SHA-256 (Artefacto)</div>
                                     <div class="meta-hash-value" id="meta-hash">—</div>
@@ -4558,14 +4563,20 @@ function selectRealFile(casoId, filepath, filename, tipo, sizeKb) {
     document.getElementById('tab-media').style.display = 'none';
     document.getElementById('tab-graph').style.display = 'none';
     
-    // Handle multimedia
-    if (['imagen', 'video', 'audio'].includes(tipo)) {
+    // Configure Download Button
+    const mediaUrl = `/api/case/${casoId}/download?filepath=${encodeURIComponent(filepath)}`;
+    const downloadBtn = document.getElementById('btn-download');
+    downloadBtn.href = mediaUrl;
+    downloadBtn.style.display = 'inline-block';
+    
+    // Handle multimedia and PDF
+    if (['imagen', 'video', 'audio'].includes(tipo) || filename.toLowerCase().endsWith('.pdf')) {
         document.getElementById('tab-media').style.display = 'block';
         document.getElementById('tab-text').style.display = 'none';
         document.getElementById('tab-hex').style.display = 'none';
+        document.getElementById('tab-media').textContent = filename.toLowerCase().endsWith('.pdf') ? 'Visualizador PDF' : 'Multimedia';
         switchTab('media');
         
-        const mediaUrl = `/api/case/${casoId}/download?filepath=${encodeURIComponent(filepath)}`;
         let mediaHtml = '';
         if (tipo === 'imagen') {
             mediaHtml = `<img src="${mediaUrl}" style="max-width:100%; max-height:100%; object-fit:contain;" alt="Preview">`;
@@ -4573,6 +4584,8 @@ function selectRealFile(casoId, filepath, filename, tipo, sizeKb) {
             mediaHtml = `<video src="${mediaUrl}" controls style="max-width:100%; max-height:100%;"></video>`;
         } else if (tipo === 'audio') {
             mediaHtml = `<audio src="${mediaUrl}" controls style="width:100%;"></audio>`;
+        } else if (filename.toLowerCase().endsWith('.pdf')) {
+            mediaHtml = `<iframe src="${mediaUrl}" style="width:100%; height:100%; border:none;"></iframe>`;
         }
         document.getElementById('pane-media').innerHTML = mediaHtml;
         document.getElementById('meta-hash').textContent = '(Calculado al exportar)';
