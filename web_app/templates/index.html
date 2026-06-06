@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.css') }}">
     <script src="{{ url_for('static', filename='vendor/htmx/htmx.min.js') }}"></script>
-    <script src="{{ url_for('static', filename='vendor/chartjs/chart.umd.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/chartjs/chart.min.js') }}"></script>
     <script src="{{ url_for('static', filename='web-components.js') }}"></script>
     <style>
         /* Fallback offline robusto para reemplazar Google Fonts cuando no hay internet */
@@ -4473,20 +4473,21 @@ function loadRealEvidence(casoId) {
                     itemHeight: 32,
                     renderItem: (item) => {
                         if (item.type === 'category') {
-                            return `<div class="tree-category-label" style="height:32px; display:flex; align-items:center; cursor:pointer;" onclick="toggleVListCategory('${item.cat}')">
-                                        <i class="bi bi-folder2-open" style="color:#94a3b8; margin-right:8px;"></i>
-                                        ${item.cat}
-                                        <i class="bi bi-chevron-${item.isOpen ? 'down' : 'right'} caret" style="margin-left:auto;"></i>
-                                    </div>`;
+                            return '<div class="tree-category ' + (item.isOpen ? 'open' : '') + '" style="border-radius:0;">'
+                                + '<div class="tree-category-label" onclick="toggleVListCategory(\'' + item.cat.replace(/'/g, "\\'") + '\')">'
+                                + '<i class="bi bi-folder2-open"></i>'
+                                + item.cat
+                                + '<i class="bi bi-chevron-right caret"></i>'
+                                + '</div></div>';
                         } else {
                             const arch = item.arch;
-                            const fpath = (arch.filepath || arch.filename).replace(/\/g, '\').replace(/'/g, "\'");
-                            const fname = arch.filename.replace(/'/g, "\'");
-                            return `<div class="tree-file" style="height:32px; padding-left:20px; display:flex; align-items:center; cursor:pointer;" onclick="selectRealFile('${casoId}', '${fpath}', '${fname}', '${arch.tipo}', ${arch.size_kb})">
-                                        <i class="bi ${arch.icono} tree-file-icon" style="color:${arch.color}; margin-right:8px;"></i>
-                                        <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:70%;">${arch.filename}</span>
-                                        <span style="margin-left:auto; font-size:0.68rem; color:var(--text-muted);">${arch.size_kb} KB</span>
-                                    </div>`;
+                            const fpath = (arch.filepath || arch.filename).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                            const fname = arch.filename.replace(/'/g, "\\'");
+                            return '<div class="tree-file" onclick="selectRealFile(\'' + casoId + '\', \'' + fpath + '\', \'' + fname + '\', \'' + arch.tipo + '\', ' + arch.size_kb + ')">'
+                                + '<i class="bi ' + arch.icono + ' tree-file-icon" style="color:' + arch.color + ';"></i>'
+                                + '<span style="max-width:70%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + arch.filename + '</span>'
+                                + '<span style="margin-left:auto; font-size:0.68rem; color:var(--text-muted);">' + arch.size_kb + ' KB</span>'
+                                + '</div>';
                         }
                     }
                 };
@@ -4779,6 +4780,298 @@ function saveIaConfig() {
 loadIaConfig();
 // El auto-escaneo fue removido a petición del usuario.
 // loadIaModels();
+
+
+
+// ── VIEWER: Selección de archivos y tabs ─────────────────────────────────
+function selectRealFile(casoId, filepath, filename, tipo, sizeKb) {
+    document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('selected'));
+    if (event && event.currentTarget) {
+        event.currentTarget.classList.add('selected');
+    }
+
+    document.getElementById('preview-empty').style.display = 'none';
+    document.getElementById('preview-active').classList.add('visible');
+    document.getElementById('preview-filename').textContent = filename;
+    document.getElementById('meta-name').textContent = filename;
+    document.getElementById('meta-size').textContent = sizeKb + ' KB';
+    document.getElementById('meta-type').textContent = tipo.toUpperCase();
+    document.getElementById('meta-hash').textContent = 'Calculando...';
+    document.getElementById('pane-text').textContent = 'Cargando contenido...';
+    document.getElementById('pane-hex').innerHTML = '';
+    document.getElementById('pane-media').innerHTML = '';
+    
+    // Hide specialized tabs by default
+    document.getElementById('tab-media').style.display = 'none';
+    document.getElementById('tab-graph').style.display = 'none';
+    
+    // Configure Download Button
+    const mediaUrl = `/api/case/${casoId}/download?filepath=${encodeURIComponent(filepath)}`;
+    const previewUrl = `/api/case/${casoId}/download?filepath=${encodeURIComponent(filepath)}&preview=true`;
+    const downloadBtn = document.getElementById('btn-download');
+    downloadBtn.href = mediaUrl;
+    downloadBtn.style.display = 'inline-block';
+    
+    // Check if it's an Office document
+    const isOffice = filename.toLowerCase().match(/\.(docx|doc|pptx|ppt|xlsx|xls)$/);
+    const isPdf = filename.toLowerCase().endsWith('.pdf');
+    
+    // Handle multimedia and PDF/Office
+    if (['imagen', 'video', 'audio'].includes(tipo) || isPdf || isOffice) {
+        document.getElementById('tab-media').style.display = 'block';
+        document.getElementById('tab-text').style.display = 'none';
+        document.getElementById('tab-hex').style.display = 'none';
+        document.getElementById('tab-media').textContent = (isPdf || isOffice) ? 'Visualizador de Documentos' : 'Multimedia';
+        switchTab('media');
+        
+        let mediaHtml = '';
+        if (tipo === 'imagen') {
+            mediaHtml = `<img src="${mediaUrl}" style="max-width:100%; max-height:100%; object-fit:contain;" alt="Preview">`;
+        } else if (tipo === 'video') {
+            mediaHtml = `<video src="${mediaUrl}" controls style="max-width:100%; max-height:100%;"></video>`;
+        } else if (tipo === 'audio') {
+            mediaHtml = `<audio src="${mediaUrl}" controls style="width:100%;"></audio>`;
+        } else if (isPdf || isOffice) {
+            mediaHtml = `<iframe src="${isOffice ? previewUrl : mediaUrl}" style="width:100%; height:100%; border:none;"></iframe>`;
+        }
+        document.getElementById('pane-media').innerHTML = mediaHtml;
+        document.getElementById('meta-hash').textContent = '(Calculado al exportar)';
+        return; // Skip fetching file text
+    }
+
+    // Default to text view for others
+    document.getElementById('tab-text').style.display = 'block';
+    document.getElementById('tab-hex').style.display = 'block';
+    switchTab('text');
+
+    fetch(`/api/case/${casoId}/file_content?filename=${encodeURIComponent(filepath)}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.status !== 'ok') {
+                document.getElementById('pane-text').textContent = `[ERROR] ${data.message}`;
+                document.getElementById('meta-hash').textContent = '—';
+                return;
+            }
+            document.getElementById('meta-hash').textContent = data.sha256 || '—';
+            document.getElementById('meta-size').textContent = `${sizeKb} KB (${data.size_bytes} bytes)`;
+            const content = data.content || '(vacío)';
+
+            // VIRTUAL TEXT PANE: split into lines, render only visible rows
+            const lines = content.split('\n');
+            const paneText = document.getElementById('pane-text');
+            paneText.innerHTML = '';
+            paneText.style.cssText = 'padding:0; overflow:hidden; position:relative;';
+
+            const vTextList = document.createElement('forensys-virtual-list');
+            vTextList.style.cssText = 'height:100%; min-height:300px; background:transparent;';
+            paneText.appendChild(vTextList);
+
+            requestAnimationFrame(() => {
+                vTextList.config = {
+                    items: lines,
+                    itemHeight: 20,
+                    renderItem: (line) => {
+                        const escaped = line
+                            .replace(/&/g, '&amp;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;');
+                        return '<div style="height:20px;line-height:20px;white-space:pre;font-family:var(--font-mono,monospace);font-size:0.8rem;color:#cbd5e1;padding:0 8px;">' + (escaped || ' ') + '</div>';
+                    }
+                };
+            });
+
+            if (data.truncado) {
+                const notice = document.createElement('div');
+                notice.style.cssText = 'text-align:center;padding:6px;color:#fbbf24;font-size:0.75rem;font-family:monospace;';
+                notice.textContent = `[Archivo > 5MB - mostrando ${data.size_bytes} bytes]`;
+                paneText.appendChild(notice);
+            }
+
+            // HEX DUMP (muestra de 4KB para rendimiento)
+            const hexSample = content.slice(0, 4096);
+            let hexHtml = '';
+            for (let row = 0; row < hexSample.length; row += 16) {
+                const offset = '0x' + row.toString(16).padStart(8, '0');
+                let bytes = [], ascii = '';
+                for (let col = 0; col < 16; col++) {
+                    if (row + col < hexSample.length) {
+                        const b = hexSample.charCodeAt(row + col) & 0xff;
+                        bytes.push(b.toString(16).padStart(2, '0').toUpperCase());
+                        ascii += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
+                    } else { bytes.push('  '); }
+                }
+                hexHtml += '<div class="hex-line"><span class="hex-offset">' + offset + '</span><span class="hex-bytes">' + bytes.join(' ') + '</span><span class="hex-ascii">' + ascii.replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span></div>';
+            }
+            document.getElementById('pane-hex').innerHTML = hexHtml;
+
+            // TIMELINE CHART
+            if (filename.includes('timeline') && filename.endsWith('.csv')) {
+                document.getElementById('tab-graph').style.display = 'block';
+                generarGraficaTimeline(content);
+            }
+        })
+        .catch(err => {
+            document.getElementById('pane-text').textContent = `Error cargando: ${err}`;
+        });
+}
+
+function generarGraficaTimeline(csvText) {
+    if (currentTimelineChart) {
+        currentTimelineChart.destroy();
+        currentTimelineChart = null;
+    }
+
+    // SleuthKit mactime format: "Mon Aug 15 2016 12:49:32,size,type,..."
+    // Also handles ISO: "2016-08-15 ..."
+    const MACTIME_RE = /^(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+(\w+)\s+(\d{1,2})\s+(\d{4})\s/;
+    const ISO_RE     = /(\d{4}-\d{2}-\d{2})/;
+    const MONTH_MAP  = { Jan:'01', Feb:'02', Mar:'03', Apr:'04', May:'05', Jun:'06',
+                         Jul:'07', Aug:'08', Sep:'09', Oct:'10', Nov:'11', Dec:'12' };
+
+    const conteoFechas = {};
+    const lines = csvText.split('\n');
+
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line || line.startsWith('Date,') || line.startsWith('Xxx')) continue;
+
+        let fecha = null;
+
+        // Try mactime format first (e.g. "Mon Aug 15 2016 12:49:32")
+        const mt = line.match(MACTIME_RE);
+        if (mt) {
+            const mon = MONTH_MAP[mt[1]];
+            if (mon) {
+                const day = mt[2].padStart(2, '0');
+                fecha = `${mt[3]}-${mon}-${day}`;
+            }
+        }
+
+        // Fallback to ISO YYYY-MM-DD
+        if (!fecha) {
+            const iso = line.match(ISO_RE);
+            if (iso) fecha = iso[1];
+        }
+
+        if (fecha) {
+            conteoFechas[fecha] = (conteoFechas[fecha] || 0) + 1;
+        }
+    }
+
+    const fechasOrdenadas = Object.keys(conteoFechas).sort();
+    if (fechasOrdenadas.length === 0) {
+        document.getElementById('pane-graph').innerHTML =
+            '<p style="color:#94a3b8; text-align:center; padding:40px;">No se encontraron fechas válidas en el archivo.<br>Las entradas con timestamp=0 ("Xxx Xxx 00 0000") son archivos sin marca de tiempo.</p>';
+        return;
+    }
+
+    const dataCounts = fechasOrdenadas.map(f => conteoFechas[f]);
+    const canvas = document.getElementById('timelineChart');
+    canvas.style.display = 'block';
+    const ctx = canvas.getContext('2d');
+
+    currentTimelineChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: fechasOrdenadas,
+            datasets: [{
+                label: `Eventos Forenses MACB (${Object.values(conteoFechas).reduce((a,b) => a+b,0)} total)`,
+                data: dataCounts,
+                backgroundColor: 'rgba(59, 130, 246, 0.6)',
+                borderColor: '#3b82f6',
+                borderWidth: 1,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: '#94a3b8' } },
+                tooltip: {
+                    callbacks: {
+                        title: (items) => items[0].label,
+                        label: (item) => ` ${item.raw} eventos`,
+                    }
+                }
+            },
+            scales: {
+                x: { ticks: { color: '#64748b', maxRotation: 45 }, grid: { color: '#1e293b' } },
+                y: { ticks: { color: '#64748b' }, grid: { color: '#334155' }, beginAtZero: true,
+                     title: { display: true, text: 'Número de eventos', color: '#94a3b8' } }
+            }
+        }
+    });
+}
+
+let currentFileId = null;
+let currentTimelineChart = null;
+
+function selectFile(fileId) {
+    currentFileId = fileId;
+    const file = evidenceFiles[fileId];
+    if (!file) return;
+
+    // Highlight selected in tree
+    document.querySelectorAll('.tree-file').forEach(el => el.classList.remove('selected'));
+    event.currentTarget.classList.add('selected');
+
+    // Show preview
+    document.getElementById('preview-empty').style.display  = 'none';
+    document.getElementById('preview-active').classList.add('visible');
+    document.getElementById('preview-filename').textContent = file.name;
+
+    // Meta
+    document.getElementById('meta-name').textContent = file.name;
+    document.getElementById('meta-size').textContent = file.size;
+    document.getElementById('meta-type').textContent = file.type;
+    document.getElementById('meta-hash').textContent = file.hash;
+
+    // Text pane
+    document.getElementById('pane-text').textContent = file.text;
+
+    // Hex pane
+    const hexPane = document.getElementById('pane-hex');
+    hexPane.innerHTML = '';
+    const lines = generateHexDump(fileId, 28);
+    lines.forEach(line => {
+        const div = document.createElement('div');
+        div.className = 'hex-line';
+        div.innerHTML =
+            `<span class="hex-offset">${line.offset}</span>` +
+            `<span class="hex-bytes">${line.bytes}</span>` +
+            `<span class="hex-ascii">${line.ascii}</span>`;
+        hexPane.appendChild(div);
+    });
+
+    // Switch to appropriate default tab
+    switchTab(file.hex ? 'hex' : 'text');
+}
+
+function switchTab(tab) {
+    // Esconder/desmarcar todos
+    ['text', 'hex', 'media', 'graph'].forEach(t => {
+        const tEl = document.getElementById(`tab-${t}`);
+        const pEl = document.getElementById(`pane-${t}`);
+        if (tEl) tEl.classList.remove('active');
+        if (pEl) {
+            pEl.classList.remove('active');
+            pEl.style.display = 'none'; // Ensure CSS display goes to none for graphs to redraw correctly
+        }
+    });
+    
+    // Activar seleccionado
+    const tEl = document.getElementById(`tab-${tab}`);
+    const pEl = document.getElementById(`pane-${tab}`);
+    if (tEl) tEl.classList.add('active');
+    if (pEl) {
+        pEl.classList.add('active');
+        pEl.style.display = 'block'; // Make it visible
+        if (tab === 'graph' && currentTimelineChart) {
+            currentTimelineChart.resize(); // Fix Chart.js size when switching from display none
+        }
+    }
+}
+
 
 // ── SALIDA MODO KIOSKO ──────────────────────────────────────────
 function exitKiosk() {

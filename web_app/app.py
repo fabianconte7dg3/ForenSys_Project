@@ -421,15 +421,17 @@ def list_case_results(raw_caso_id):
 
         stat = os.stat(ruta_archivo)
         size_kb = round(stat.st_size / 1024, 1)
+        # Use relative path from case_dir so file_content API can resolve it safely
+        rel_filepath = os.path.relpath(ruta_archivo, os.path.join(CASES_BASE_DIR, caso_id))
         resultado.append({
             "key":      arch["key"],
             "filename": filename_real,
+            "filepath": rel_filepath,
             "tipo":     arch["tipo"],
             "categoria":arch["categoria"],
             "icono":    arch["icono"],
             "color":    arch["color"],
             "size_kb":  size_kb,
-            "ruta_abs": ruta_archivo,
         })
 
     ruta_recuperados = os.path.join(CASES_BASE_DIR, caso_id, "02_Views_(Vistas)", "File_Types")
@@ -605,20 +607,21 @@ def get_file_content(raw_caso_id):
         return jsonify({"status": "error", "message": f"Archivo '{filename}' no encontrado."}), 404
 
     try:
-        max_chars = 8000  # Límite para no sobrecargar el frontend
+        MAX_SIZE = 5 * 1024 * 1024  # 5MB safety cap — frontend virtualizes rendering
+        file_size = os.path.getsize(ruta_archivo)
         with open(ruta_archivo, 'r', encoding='utf-8', errors='replace') as f:
-            contenido = f.read(max_chars)
-        truncado = os.path.getsize(ruta_archivo) > max_chars
+            contenido = f.read(MAX_SIZE)
+        truncado = file_size > MAX_SIZE
         sha = hashlib.sha256()
         with open(ruta_archivo, 'rb') as f:
-            for chunk in iter(lambda: f.read(8192), b''):
+            for chunk in iter(lambda: f.read(65536), b''):
                 sha.update(chunk)
         return jsonify({
-            "status":   "ok",
-            "content":  contenido,
-            "truncado": truncado,
-            "sha256":   sha.hexdigest(),
-            "size_bytes": os.path.getsize(ruta_archivo),
+            "status":     "ok",
+            "content":    contenido,
+            "truncado":   truncado,
+            "sha256":     sha.hexdigest(),
+            "size_bytes": file_size,
         })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500

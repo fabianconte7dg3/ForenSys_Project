@@ -1,6 +1,7 @@
 // web-components.js
 // Colección de componentes nativos Web Component (Custom Elements v1) para ForenSys
 
+// ── 1. <forensys-progress> ────────────────────────────────────────────────────
 class ForensysProgress extends HTMLElement {
     constructor() {
         super();
@@ -89,6 +90,7 @@ class ForensysProgress extends HTMLElement {
     }
 }
 
+// ── 2. <forensys-terminal> ───────────────────────────────────────────────────
 class ForensysTerminal extends HTMLElement {
     constructor() {
         super();
@@ -113,9 +115,7 @@ class ForensysTerminal extends HTMLElement {
                     display: flex;
                     flex-direction: column;
                 }
-                .terminal-container::-webkit-scrollbar {
-                    width: 6px;
-                }
+                .terminal-container::-webkit-scrollbar { width: 6px; }
                 .terminal-container::-webkit-scrollbar-thumb {
                     background: rgba(255,255,255,0.2);
                     border-radius: 3px;
@@ -125,12 +125,11 @@ class ForensysTerminal extends HTMLElement {
                     line-height: 1.4;
                     word-wrap: break-word;
                 }
-                .log-error { color: #f87171; }
-                .log-warn { color: #fbbf24; }
+                .log-error   { color: #f87171; }
+                .log-warn    { color: #fbbf24; }
                 .log-success { color: #34d399; }
-                .log-system { color: #60a5fa; }
-                .log-cmd { color: #a78bfa; font-weight: bold; }
-                
+                .log-system  { color: #60a5fa; }
+                .log-cmd     { color: #a78bfa; font-weight: bold; }
                 .terminal-header {
                     display: flex;
                     align-items: center;
@@ -142,9 +141,9 @@ class ForensysTerminal extends HTMLElement {
                     width: 10px; height: 10px; border-radius: 50%;
                     margin-right: 6px;
                 }
-                .dot-red { background: #ef4444; }
+                .dot-red    { background: #ef4444; }
                 .dot-yellow { background: #eab308; }
-                .dot-green { background: #22c55e; }
+                .dot-green  { background: #22c55e; }
             </style>
             <div class="terminal-container" id="container">
                 <div class="terminal-header" id="header" style="display:none;">
@@ -171,26 +170,20 @@ class ForensysTerminal extends HTMLElement {
     addLog(text, type = 'log-normal') {
         const line = document.createElement('div');
         line.className = 'log-line ' + type;
-        
-        // Auto-detect types if not explicitly provided
         if (type === 'log-normal') {
             if (text.includes('[ERROR]') || text.includes('[X]')) line.classList.add('log-error');
             else if (text.includes('[WARN]') || text.includes('[!]')) line.classList.add('log-warn');
             else if (text.includes('[SUCCESS]') || text.includes('[+]') || text.includes('[✓]')) line.classList.add('log-success');
             else if (text.includes('[SISTEMA]') || text.includes('[*]')) line.classList.add('log-system');
         }
-
         line.textContent = text;
         this.logsArea.appendChild(line);
         this.autoScroll();
     }
 
-    clear() {
-        this.logsArea.innerHTML = '';
-    }
+    clear() { this.logsArea.innerHTML = ''; }
 
     autoScroll() {
-        // Debounce slightly to prevent thrashing
         if (this._scrollTimeout) clearTimeout(this._scrollTimeout);
         this._scrollTimeout = setTimeout(() => {
             this.container.scrollTop = this.container.scrollHeight;
@@ -198,80 +191,68 @@ class ForensysTerminal extends HTMLElement {
     }
 }
 
-customElements.define('forensys-progress', ForensysProgress);
-customElements.define('forensys-terminal', ForensysTerminal);
-
+// ── 3. <forensys-virtual-list> ───────────────────────────────────────────────
+// IMPORTANTE: Usa Light DOM (sin Shadow DOM) para heredar el CSS global y
+// permitir que los onclick llamen funciones globales (selectRealFile, etc.)
 class ForensysVirtualList extends HTMLElement {
-    constructor() {
-        super();
-        this.attachShadow({ mode: 'open' });
+    connectedCallback() {
         this.items = [];
-        this.itemHeight = 35;
+        this.itemHeight = 32;
         this.renderItem = (item) => `<div>${item}</div>`;
-        this.buffer = 10;
+        this.buffer = 8;
 
-        this.shadowRoot.innerHTML = `
-            <style>
-                :host {
-                    display: block;
-                    width: 100%;
-                    height: 100%;
-                    overflow-y: auto;
-                    position: relative;
-                }
-                .virtual-scroll-spacer {
-                    width: 1px;
-                }
-                .virtual-list-content {
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                }
-            </style>
-            <div class="virtual-scroll-spacer" id="spacer"></div>
-            <div class="virtual-list-content" id="content"></div>
-        `;
-        
-        this.spacer = this.shadowRoot.getElementById('spacer');
-        this.content = this.shadowRoot.getElementById('content');
-        
-        // Using scroll event is the most robust way for pure 50-line virtualization
-        // IntersectionObserver can be used on sentinels, but scroll is simpler and zero lag.
-        this.addEventListener('scroll', () => this.updateRender(), { passive: true });
+        // Estilos del host
+        Object.assign(this.style, {
+            display: 'block',
+            width: '100%',
+            overflowY: 'auto',
+            position: 'relative',
+        });
+
+        // Spacer para crear el scroll virtual correcto
+        this._spacer = document.createElement('div');
+        this._spacer.style.cssText = 'width:1px; height:0px; pointer-events:none;';
+        this.appendChild(this._spacer);
+
+        // Contenedor de los elementos visibles
+        this._content = document.createElement('div');
+        this._content.style.cssText = 'position:absolute; top:0; left:0; width:100%;';
+        this.appendChild(this._content);
+
+        this.addEventListener('scroll', () => this._render(), { passive: true });
     }
 
-    set config({ items, renderItem, itemHeight = 35 }) {
-        this.items = items;
+    set config({ items, renderItem, itemHeight = 32 }) {
+        this.items = items || [];
         this.renderItem = renderItem;
         this.itemHeight = itemHeight;
-        this.spacer.style.height = (this.items.length * this.itemHeight) + 'px';
-        this.updateRender();
+        this._spacer.style.height = (this.items.length * this.itemHeight) + 'px';
+        this._render();
     }
 
-    updateRender() {
-        if (!this.items.length) {
-            this.content.innerHTML = '';
+    _render() {
+        if (!this.items || !this.items.length) {
+            this._content.innerHTML = '';
             return;
         }
-        
+
         const scrollTop = this.scrollTop;
-        const viewportHeight = this.clientHeight;
-        
+        const viewportH = this.clientHeight || 400;
+
         const startIndex = Math.max(0, Math.floor(scrollTop / this.itemHeight) - this.buffer);
-        const visibleCount = Math.ceil(viewportHeight / this.itemHeight) + (this.buffer * 2);
-        const endIndex = Math.min(this.items.length - 1, startIndex + visibleCount);
-        
-        const visibleItems = this.items.slice(startIndex, endIndex + 1);
-        
+        const visible    = Math.ceil(viewportH / this.itemHeight) + (this.buffer * 2);
+        const endIndex   = Math.min(this.items.length - 1, startIndex + visible);
+
         let html = '';
-        visibleItems.forEach(item => {
-            html += this.renderItem(item);
-        });
-        
-        this.content.innerHTML = html;
-        this.content.style.transform = `translateY(${startIndex * this.itemHeight}px)`;
+        for (let i = startIndex; i <= endIndex; i++) {
+            html += this.renderItem(this.items[i]);
+        }
+
+        this._content.innerHTML = html;
+        this._content.style.transform = `translateY(${startIndex * this.itemHeight}px)`;
     }
 }
 
+customElements.define('forensys-progress', ForensysProgress);
+customElements.define('forensys-terminal', ForensysTerminal);
 customElements.define('forensys-virtual-list', ForensysVirtualList);
