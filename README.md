@@ -16,8 +16,9 @@ ForenSys es un sistema innovador de investigación forense digital que aprovecha
 ✅ **Compacto y portátil** - Diseñado para funcionar en Raspberry Pi 5
 ✅ **Bajo costo** - Solución económica para investigación forense
 ✅ **Análisis inmediato** - Adquisición y procesamiento en tiempo real
-✅ **IA Optimizada** - Modelos ligeros para detección de patrones
+✅ **IA Optimizada** - Modelos ligeros para detección de patrones y síntesis de inteligencia
 ✅ **Análisis digital integral** - Cobertura de sistemas de archivos y redes
+✅ **SuperTimeline v2** - Motor de correlación de eventos con visualización interactiva y búsqueda FTS5
 
 ## Requisitos
 

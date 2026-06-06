@@ -566,11 +566,38 @@ def importar_timeline_real(timeline_csv, conn):
     return importados
 
 # ==========================================
-# TIMELINE: SQLITE & HTML GUI
+# TIMELINE: SQLITE v2 — Schema ampliado
 # ==========================================
+
+def _severity_from_source(source: str, subtype: str, event_type: str) -> tuple:
+    """Heurística RPi-friendly: asigna severity y confidence según fuente/tipo."""
+    s = (source or '').upper()
+    st = (subtype or '').lower()
+    et = (event_type or '').lower()
+
+    if any(k in st for k in ('malfind', 'hollowing', 'dllinjection', 'psxview')):
+        return 'critical', 0.90
+    if any(k in et for k in ('4625', '4720', '4732', '1102', 'account_lockout')):
+        return 'high', 0.85
+    if s in ('PERSIST', 'PERSISTENCE') or 'persist' in st:
+        return 'high', 0.80
+    if s == 'EVTX' or '4624' in et:
+        return 'medium', 0.70
+    if s == 'WEB':
+        return 'low', 0.65
+    if s in ('TSK_REAL', 'FS'):
+        return 'low', 0.60
+    return 'low', 0.50
+
+
 def iniciar_db_timeline(ruta_db):
+    """Abre o crea el SuperTimeline SQLite con tablas v1 (compatibilidad) y v2 (extendida)."""
     conn = sqlite3.connect(ruta_db)
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA synchronous=NORMAL')
     cursor = conn.cursor()
+
+    # ── Tabla v1 (compatibilidad hacia atrás) ──────────────────────────────────
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS eventos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -582,8 +609,131 @@ def iniciar_db_timeline(ruta_db):
         )
     ''')
     cursor.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON eventos(timestamp)')
+
+    # ── Tabla v2 — schema extendido ────────────────────────────────────────────
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS eventos_v2 (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp      INTEGER,
+            source         TEXT,
+            subtype        TEXT,
+            event_type     TEXT,
+            description    TEXT,
+            mapping        TEXT,
+            severity       TEXT DEFAULT 'low',
+            confidence     REAL DEFAULT 0.5,
+            file_hash      TEXT,
+            correlation_id TEXT,
+            metadata       TEXT,
+            stored_path    TEXT
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_v2_ts     ON eventos_v2(timestamp)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_v2_src    ON eventos_v2(source)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_v2_sev    ON eventos_v2(severity)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_v2_corr   ON eventos_v2(correlation_id)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_v2_hash   ON eventos_v2(file_hash)')
+
+    # ── FTS5 para búsqueda full-text en descripción, metadata y stored_path ───
+    cursor.execute('''
+        CREATE VIRTUAL TABLE IF NOT EXISTS eventos_fts USING fts5(
+            description,
+            metadata,
+            stored_path,
+            content='eventos_v2',
+            content_rowid='id'
+        )
+    ''')
+
+    # ── Tabla de enlaces de correlación ────────────────────────────────────────
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS correlation_links (
+            id            INTEGER PRIMARY KEY AUTOINCREMENT,
+            primary_event INTEGER,
+            related_event INTEGER,
+            rule          TEXT,
+            score         REAL,
+            created_at    INTEGER
+        )
+    ''')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_cl_primary ON correlation_links(primary_event)')
+    cursor.execute('CREATE INDEX IF NOT EXISTS idx_cl_related ON correlation_links(related_event)')
+
     conn.commit()
     return conn
+
+
+def insertar_eventos_v2_lote(conn, lote_v2: list):
+    """
+    Inserta un lote en eventos_v2 y actualiza el índice FTS5.
+    lote_v2: lista de dicts con claves del schema v2.
+    """
+    if not lote_v2:
+        return
+    cursor = conn.cursor()
+    rows = []
+    fts_rows = []
+    for ev in lote_v2:
+        severity, confidence = _severity_from_source(
+            ev.get('source'), ev.get('subtype'), ev.get('event_type'))
+        # Allow manual override
+        severity  = ev.get('severity', severity)
+        confidence = ev.get('confidence', confidence)
+        meta_str = json.dumps(ev.get('metadata', {}), ensure_ascii=False) if ev.get('metadata') else None
+        rows.append((
+            ev.get('timestamp'), ev.get('source'), ev.get('subtype'),
+            ev.get('event_type'), ev.get('description'), ev.get('mapping'),
+            severity, confidence,
+            ev.get('file_hash'), ev.get('correlation_id'),
+            meta_str, ev.get('stored_path'),
+        ))
+        fts_rows.append((ev.get('description', ''), meta_str or '', ev.get('stored_path', '')))
+
+    cursor.executemany('''
+        INSERT INTO eventos_v2
+            (timestamp, source, subtype, event_type, description, mapping,
+             severity, confidence, file_hash, correlation_id, metadata, stored_path)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+    ''', rows)
+
+    # Poblar FTS5 (insert con rowid implícito auto)
+    cursor.executemany('''
+        INSERT INTO eventos_fts(rowid, description, metadata, stored_path)
+        SELECT id, description, COALESCE(metadata,''), COALESCE(stored_path,'')
+        FROM eventos_v2
+        WHERE id > (SELECT COALESCE(MAX(rowid),0) FROM eventos_fts)
+    ''', [()] * 1)   # trigger de un solo paso tras el bulk insert
+
+    conn.commit()
+
+
+def poblar_eventos_v2_desde_v1(conn):
+    """
+    Migración one-shot: copia todos los registros de 'eventos' (v1)
+    a 'eventos_v2' que aún no estén presentes (por descripción+timestamp).
+    Útil para casos ya procesados antes de la v2.
+    """
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM eventos_v2")
+    if cursor.fetchone()[0] > 0:
+        print("    [i] eventos_v2 ya tiene datos, omitiendo migración desde v1.")
+        return 0
+
+    cursor.execute("SELECT timestamp, source, event_type, description, mapping FROM eventos")
+    filas = cursor.fetchall()
+    if not filas:
+        return 0
+
+    lote_v2 = []
+    for ts, src, et, desc, mapping in filas:
+        lote_v2.append({
+            'timestamp': ts, 'source': src, 'subtype': None,
+            'event_type': et, 'description': desc, 'mapping': mapping,
+        })
+    insertar_eventos_v2_lote(conn, lote_v2)
+    print(f"    [+] Migrados {len(lote_v2)} eventos v1 → eventos_v2")
+    return len(lote_v2)
+
 
 def generar_gui_timeline(conn, ruta_salida):
     print("[*] Renderizando Dashboard HTML de Línea de Tiempo...")
@@ -1731,18 +1881,30 @@ def organizar_estilo_autopsy(ruta_fuente, ruta_vistas, ruta_resultados, carpeta_
             print(f"    [+] {len(multimedia_meta)} archivos multimedia con metadatos -> {multimedia_csv_path}")
             estadisticas['multimedia_con_meta'] = len(multimedia_meta)
 
-        # Inserción masiva a SQLite
+        # Inserción masiva a SQLite (v1 — compatibilidad)
         if eventos_lote:
             cursor.executemany('INSERT INTO eventos (timestamp, source, event_type, description, mapping) VALUES (?, ?, ?, ?, ?)', eventos_lote)
             conn.commit()
+
+            # Espejo en eventos_v2 (schema extendido)
+            lote_v2 = [
+                {'timestamp': ts, 'source': src, 'subtype': None,
+                 'event_type': et, 'description': desc, 'mapping': mapping}
+                for ts, src, et, desc, mapping in eventos_lote
+            ]
+            insertar_eventos_v2_lote(conn, lote_v2)
 
         # --- 9. IMPORTAR TIMELINE REAL (MACB del disco, no de extracción) ---
         timeline_csv_path = os.path.join(ruta_resultados, "filesystem_timeline.csv")
         estadisticas['timeline_real'] = importar_timeline_real(timeline_csv_path, conn)
 
+        # Migrar timeline_real a eventos_v2 (viene de importar_timeline_real que escribe v1)
+        poblar_eventos_v2_desde_v1(conn)
+
         # Generar Dashboard GUI
         generar_gui_timeline(conn, html_timeline_path)
         conn.close()
+
 
         integrar_fuentes_externas(carpeta_caso, caso_id, f_maestro)
         generar_resumen(estadisticas, f_maestro)

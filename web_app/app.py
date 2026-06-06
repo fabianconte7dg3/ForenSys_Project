@@ -1526,6 +1526,460 @@ def get_telemetry_pdf(raw_caso_id):
         return "El reporte de telemetría aún no ha sido generado para este caso.", 404
 
 
+# ═══════════════════════════════════════════════════════════════════
+# SUPERTIMELINE v2 — API REST
+# ═══════════════════════════════════════════════════════════════════
+import sqlite3 as _sqlite3
+import uuid as _uuid
+
+# ── helpers ──────────────────────────────────────────────────────────
+def _get_timeline_db(caso_id):
+    """Devuelve la ruta al SuperTimeline.sqlite del caso o None."""
+    results_path = get_case_results_path(caso_id)
+    if not results_path:
+        return None
+    db_path = os.path.join(results_path, 'SuperTimeline.sqlite')
+    return db_path if os.path.exists(db_path) else None
+
+
+def _open_db(db_path):
+    conn = _sqlite3.connect(db_path, check_same_thread=False)
+    conn.row_factory = _sqlite3.Row
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA query_only=ON')
+    return conn
+
+
+def _has_v2(conn):
+    cur = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='eventos_v2'")
+    return cur.fetchone() is not None
+
+
+# ── GET /api/case/<id>/events ─────────────────────────────────────────
+@app.route('/api/case/<raw_caso_id>/events', methods=['GET'])
+def get_events(raw_caso_id):
+    """
+    Listar eventos paginados de eventos_v2.
+    Query params:
+      from, to      — unix timestamps
+      source        — puede repetirse: source=FS&source=WEB
+      severity      — critical|high|medium|low
+      q             — búsqueda FTS5 libre
+      limit         — default 100, max 500
+      offset        — default 0
+    """
+    caso_id = sanitize_case_id(raw_caso_id)
+    if not caso_id:
+        return jsonify({'status': 'error', 'message': 'caso_id inválido'}), 400
+
+    db_path = _get_timeline_db(caso_id)
+    if not db_path:
+        return jsonify({'status': 'error', 'message': 'SuperTimeline.sqlite no encontrado. Ejecuta el Módulo 7.'}), 404
+
+    try:
+        conn = _sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = _sqlite3.Row
+        conn.execute('PRAGMA journal_mode=WAL')
+
+        if not _has_v2(conn):
+            return jsonify({'status': 'error', 'message': 'DB sin eventos_v2. Ejecuta el Módulo 7 para migrar.'}), 409
+
+        limit  = min(int(request.args.get('limit',  100)), 500)
+        offset = max(int(request.args.get('offset', 0)),   0)
+        ts_from   = request.args.get('from',     type=int)
+        ts_to     = request.args.get('to',       type=int)
+        sources   = request.args.getlist('source')
+        severity  = request.args.get('severity')
+        q         = request.args.get('q', '').strip()
+
+        conditions, params = [], []
+
+        if ts_from:
+            conditions.append('timestamp >= ?'); params.append(ts_from)
+        if ts_to:
+            conditions.append('timestamp <= ?'); params.append(ts_to)
+        if sources:
+            placeholders = ','.join('?' * len(sources))
+            conditions.append(f'source IN ({placeholders})'); params.extend(sources)
+        if severity:
+            conditions.append('severity = ?'); params.append(severity)
+
+        # FTS search (si hay query de texto)
+        if q:
+            q_safe = q.replace('"', '""')
+            fts_sql = f'''
+                SELECT ev.id, ev.timestamp, ev.source, ev.subtype, ev.event_type,
+                       ev.description, ev.mapping, ev.severity, ev.confidence,
+                       ev.file_hash, ev.metadata, ev.stored_path
+                FROM eventos_fts
+                JOIN eventos_v2 ev ON eventos_fts.rowid = ev.id
+                WHERE eventos_fts MATCH ?
+            '''
+            base_params = [q_safe]
+            if conditions:
+                fts_sql += ' AND ' + ' AND '.join(f'ev.{c}' if 'timestamp' in c or 'source' in c or 'severity' in c else c for c in conditions)
+                base_params.extend(params)
+            count_sql  = f'SELECT COUNT(*) FROM eventos_fts JOIN eventos_v2 ev ON eventos_fts.rowid = ev.id WHERE eventos_fts MATCH ?' + ((' AND ' + ' AND '.join(conditions)) if conditions else '')
+            total = conn.execute(count_sql, base_params).fetchone()[0]
+            rows  = conn.execute(fts_sql + f' ORDER BY ev.timestamp DESC LIMIT {limit} OFFSET {offset}', base_params).fetchall()
+        else:
+            where = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
+            base_sql = f'SELECT id,timestamp,source,subtype,event_type,description,mapping,severity,confidence,file_hash,metadata,stored_path FROM eventos_v2 {where}'
+            total = conn.execute(f'SELECT COUNT(*) FROM eventos_v2 {where}', params).fetchone()[0]
+            rows  = conn.execute(base_sql + f' ORDER BY timestamp DESC LIMIT {limit} OFFSET {offset}', params).fetchall()
+
+        events = []
+        for r in rows:
+            ev = dict(r)
+            if ev.get('metadata'):
+                try:
+                    ev['metadata'] = json.loads(ev['metadata'])
+                except Exception:
+                    pass
+            events.append(ev)
+
+        conn.close()
+        return jsonify({'status': 'ok', 'total': total, 'limit': limit, 'offset': offset, 'events': events})
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ── GET /api/case/<id>/events/stats ──────────────────────────────────
+@app.route('/api/case/<raw_caso_id>/events/stats', methods=['GET'])
+def get_events_stats(raw_caso_id):
+    """Devuelve estadísticas y histograma de eventos_v2 para el dashboard."""
+    caso_id = sanitize_case_id(raw_caso_id)
+    if not caso_id:
+        return jsonify({'status': 'error', 'message': 'caso_id inválido'}), 400
+
+    db_path = _get_timeline_db(caso_id)
+    if not db_path:
+        return jsonify({'status': 'error', 'message': 'DB no encontrada'}), 404
+
+    try:
+        conn = _sqlite3.connect(db_path, check_same_thread=False)
+        if not _has_v2(conn):
+            return jsonify({'status': 'error', 'message': 'Sin eventos_v2'}), 409
+
+        total = conn.execute('SELECT COUNT(*) FROM eventos_v2').fetchone()[0]
+        by_source   = {r[0]: r[1] for r in conn.execute('SELECT source, COUNT(*) FROM eventos_v2 GROUP BY source ORDER BY COUNT(*) DESC').fetchall()}
+        by_severity = {r[0]: r[1] for r in conn.execute('SELECT severity, COUNT(*) FROM eventos_v2 GROUP BY severity').fetchall()}
+
+        # Histograma por día (ignora timestamp=0)
+        hist_rows = conn.execute('''
+            SELECT date(timestamp, 'unixepoch') AS day, COUNT(*) AS cnt
+            FROM eventos_v2
+            WHERE timestamp > 0
+            GROUP BY day
+            ORDER BY day ASC
+        ''').fetchall()
+        histogram = [{'date': r[0], 'count': r[1]} for r in hist_rows]
+
+        ts_range = conn.execute('SELECT MIN(timestamp), MAX(timestamp) FROM eventos_v2 WHERE timestamp > 0').fetchone()
+        conn.close()
+
+        return jsonify({
+            'status': 'ok',
+            'total': total,
+            'by_source': by_source,
+            'by_severity': by_severity,
+            'histogram': histogram,
+            'ts_min': ts_range[0],
+            'ts_max': ts_range[1],
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ── GET /api/case/<id>/events/<event_id> ─────────────────────────────
+@app.route('/api/case/<raw_caso_id>/events/<int:event_id>', methods=['GET'])
+def get_event_detail(raw_caso_id, event_id):
+    """Devuelve un evento completo + sus correlation_links."""
+    caso_id = sanitize_case_id(raw_caso_id)
+    if not caso_id:
+        return jsonify({'status': 'error', 'message': 'caso_id inválido'}), 400
+
+    db_path = _get_timeline_db(caso_id)
+    if not db_path:
+        return jsonify({'status': 'error', 'message': 'DB no encontrada'}), 404
+
+    try:
+        conn = _sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = _sqlite3.Row
+        if not _has_v2(conn):
+            return jsonify({'status': 'error', 'message': 'Sin eventos_v2'}), 409
+
+        row = conn.execute('SELECT * FROM eventos_v2 WHERE id = ?', (event_id,)).fetchone()
+        if not row:
+            return jsonify({'status': 'error', 'message': 'Evento no encontrado'}), 404
+
+        ev = dict(row)
+        if ev.get('metadata'):
+            try: ev['metadata'] = json.loads(ev['metadata'])
+            except Exception: pass
+
+        # Correlation links
+        links_rows = conn.execute('''
+            SELECT cl.rule, cl.score, cl.related_event,
+                   ev2.description, ev2.source, ev2.event_type, ev2.timestamp
+            FROM correlation_links cl
+            JOIN eventos_v2 ev2 ON cl.related_event = ev2.id
+            WHERE cl.primary_event = ?
+            UNION ALL
+            SELECT cl.rule, cl.score, cl.primary_event,
+                   ev2.description, ev2.source, ev2.event_type, ev2.timestamp
+            FROM correlation_links cl
+            JOIN eventos_v2 ev2 ON cl.primary_event = ev2.id
+            WHERE cl.related_event = ?
+            LIMIT 50
+        ''', (event_id, event_id)).fetchall()
+
+        links = [dict(l) for l in links_rows]
+        conn.close()
+        return jsonify({'status': 'ok', 'event': ev, 'correlation_links': links})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ── POST /api/case/<id>/events/correlate ─────────────────────────────
+@app.route('/api/case/<raw_caso_id>/events/correlate', methods=['POST'])
+def correlate_events(raw_caso_id):
+    """
+    Ejecuta el motor de correlación sobre eventos_v2.
+    Reglas: hash_match, ip_match, user_match, temporal_cluster.
+    """
+    caso_id = sanitize_case_id(raw_caso_id)
+    if not caso_id:
+        return jsonify({'status': 'error', 'message': 'caso_id inválido'}), 400
+
+    db_path = _get_timeline_db(caso_id)
+    if not db_path:
+        return jsonify({'status': 'error', 'message': 'DB no encontrada'}), 404
+
+    try:
+        conn = _sqlite3.connect(db_path, check_same_thread=False)
+        if not _has_v2(conn):
+            return jsonify({'status': 'error', 'message': 'Sin eventos_v2'}), 409
+
+        # Borrar links anteriores para re-calcular
+        conn.execute('DELETE FROM correlation_links')
+        now_ts = int(time.time())
+        links_created = 0
+        batch = []
+
+        # ── Regla 1: hash_match (mismo file_hash ≠ null) ─────────────────
+        rows = conn.execute('''
+            SELECT a.id, b.id
+            FROM eventos_v2 a JOIN eventos_v2 b ON a.file_hash = b.file_hash
+            WHERE a.file_hash IS NOT NULL AND a.id < b.id
+            LIMIT 5000
+        ''').fetchall()
+        for a_id, b_id in rows:
+            batch.append((a_id, b_id, 'hash_match', 0.95, now_ts))
+        links_created += len(rows)
+
+        # ── Regla 2: ip_match (misma IP en description) ───────────────────
+        import re as _re
+        IP_RE = _re.compile(r'\b(?:\d{1,3}\.){3}\d{1,3}\b')
+        ev_rows = conn.execute('SELECT id, description FROM eventos_v2 WHERE description IS NOT NULL').fetchall()
+        ip_map = {}
+        for ev_id, desc in ev_rows:
+            for ip in IP_RE.findall(desc or ''):
+                if ip not in ('0.0.0.0', '127.0.0.1', '255.255.255.255'):
+                    ip_map.setdefault(ip, []).append(ev_id)
+        for ip, ids in ip_map.items():
+            if len(ids) > 1:
+                for i in range(len(ids)):
+                    for j in range(i + 1, min(i + 10, len(ids))):
+                        batch.append((ids[i], ids[j], 'ip_match', 0.80, now_ts))
+                        links_created += 1
+
+        # ── Regla 3: user_match (mismo user en metadata JSON) ────────────
+        meta_rows = conn.execute('SELECT id, metadata FROM eventos_v2 WHERE metadata IS NOT NULL').fetchall()
+        user_map = {}
+        for ev_id, meta_str in meta_rows:
+            try:
+                meta = json.loads(meta_str)
+                user = meta.get('user') or meta.get('usuario') or meta.get('username')
+                if user:
+                    user_map.setdefault(str(user).lower(), []).append(ev_id)
+            except Exception:
+                pass
+        for user, ids in user_map.items():
+            if len(ids) > 1:
+                for i in range(len(ids)):
+                    for j in range(i + 1, min(i + 10, len(ids))):
+                        batch.append((ids[i], ids[j], 'user_match', 0.70, now_ts))
+                        links_created += 1
+
+        # ── Regla 4: temporal_cluster (>3 eventos misma fuente en <60s) ──
+        ts_rows = conn.execute('''
+            SELECT id, timestamp, source FROM eventos_v2
+            WHERE timestamp > 0 ORDER BY source, timestamp
+        ''').fetchall()
+        prev_src, cluster = None, []
+        for ev_id, ts, src in ts_rows:
+            if src != prev_src:
+                cluster = [(ev_id, ts)]
+                prev_src = src
+                continue
+            if ts - cluster[-1][1] <= 60:
+                cluster.append((ev_id, ts))
+            else:
+                cluster = [(ev_id, ts)]
+            if len(cluster) >= 3:
+                anchor = cluster[-1][0]
+                for old_id, _ in cluster[-4:-1]:
+                    batch.append((anchor, old_id, 'temporal_cluster', 0.60, now_ts))
+                    links_created += 1
+
+        # Insertar en lotes
+        if batch:
+            conn.executemany(
+                'INSERT INTO correlation_links(primary_event,related_event,rule,score,created_at) VALUES(?,?,?,?,?)',
+                batch[:10000]  # cap for safety
+            )
+        conn.commit()
+        conn.close()
+
+        return jsonify({'status': 'ok', 'links_created': links_created, 'rules_applied': ['hash_match', 'ip_match', 'user_match', 'temporal_cluster']})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════════════════
+# IA JOB RUNNER — Análisis async de selección de eventos
+# ═══════════════════════════════════════════════════════════════════
+_ia_jobs: dict = {}        # {job_id: {status, progress, result_path, ...}}
+_ia_semaphore = threading.Semaphore(1)  # 1 job a la vez en RPi
+
+
+def _run_ia_selection_job(job_id: str, caso_id: str, event_ids: list, note: str):
+    """Worker thread: construye evidencia de eventos seleccionados y llama al IA."""
+    _ia_semaphore.acquire()
+    try:
+        _ia_jobs[job_id]['status'] = 'running'
+        _ia_jobs[job_id]['progress'] = 10
+
+        # Localizar DB y construir evidencia
+        db_path = _get_timeline_db(caso_id)
+        if not db_path:
+            _ia_jobs[job_id].update({'status': 'error', 'error_msg': 'DB no encontrada'})
+            return
+
+        conn = _sqlite3.connect(db_path, check_same_thread=False)
+        conn.row_factory = _sqlite3.Row
+        if not _has_v2(conn):
+            _ia_jobs[job_id].update({'status': 'error', 'error_msg': 'Sin eventos_v2'})
+            conn.close()
+            return
+
+        placeholders = ','.join('?' * len(event_ids))
+        rows = conn.execute(
+            f'SELECT timestamp,source,event_type,description,severity,metadata FROM eventos_v2 WHERE id IN ({placeholders}) LIMIT 50',
+            event_ids
+        ).fetchall()
+        conn.close()
+
+        _ia_jobs[job_id]['progress'] = 25
+
+        # Construir texto de evidencia
+        evidencia_lines = [f"[SELECCIÓN MANUAL — {len(rows)} eventos]\n"]
+        if note:
+            evidencia_lines.append(f"Nota del analista: {note}\n")
+        for r in rows:
+            ts_str = datetime.fromtimestamp(r['timestamp']).strftime('%Y-%m-%d %H:%M:%S') if r['timestamp'] else 'N/A'
+            evidencia_lines.append(
+                f"[{ts_str}] [{r['source']}] [{r['severity'].upper()}] {r['event_type']}: {(r['description'] or '')[:200]}"
+            )
+
+        evidencia_cruda = '\n'.join(evidencia_lines)
+        _ia_jobs[job_id]['progress'] = 40
+
+        # Rutas de salida
+        results_path = get_case_results_path(caso_id)
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        ruta_sintesis  = os.path.join(results_path, f'Sintesis_IA_{caso_id}_SELECTION_{ts}.md')
+        ruta_auditoria = os.path.join(results_path, f'Auditoria_IA_{caso_id}_SELECTION_{ts}.json')
+
+        # Importar analizar_con_ia desde 08_analista_ia.py
+        scripts_dir = os.path.join(os.path.dirname(__file__), '..', 'scripts')
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+
+        try:
+            import importlib.util as _ilu
+            spec = _ilu.spec_from_file_location('analista_ia', os.path.join(scripts_dir, '08_analista_ia.py'))
+            ia_mod = _ilu.module_from_spec(spec)
+            spec.loader.exec_module(ia_mod)
+            _ia_jobs[job_id]['progress'] = 60
+            ia_mod.analizar_con_ia(evidencia_cruda, ruta_sintesis, ruta_auditoria)
+            _ia_jobs[job_id].update({
+                'status': 'done',
+                'progress': 100,
+                'result_path': ruta_sintesis,
+                'audit_path': ruta_auditoria,
+            })
+        except Exception as e:
+            _ia_jobs[job_id].update({'status': 'error', 'error_msg': str(e)})
+
+    except Exception as e:
+        _ia_jobs[job_id].update({'status': 'error', 'error_msg': str(e)})
+    finally:
+        _ia_semaphore.release()
+
+
+@app.route('/api/ia/analyze_selection', methods=['POST'])
+def analyze_selection():
+    """
+    Encola un análisis IA de eventos seleccionados.
+    Body JSON: {case_id, event_ids: [1,2,...], note: "..."}
+    Returns: {job_id}
+    """
+    body = request.get_json(silent=True) or {}
+    raw_case_id = body.get('case_id', '')
+    event_ids   = body.get('event_ids', [])
+    note        = body.get('note', '')
+
+    caso_id = sanitize_case_id(raw_case_id)
+    if not caso_id:
+        return jsonify({'status': 'error', 'message': 'case_id inválido'}), 400
+    if not event_ids or not isinstance(event_ids, list):
+        return jsonify({'status': 'error', 'message': 'event_ids debe ser una lista no vacía'}), 400
+    if len(event_ids) > 50:
+        return jsonify({'status': 'error', 'message': 'Máximo 50 eventos por análisis'}), 400
+
+    job_id = str(_uuid.uuid4())
+    _ia_jobs[job_id] = {
+        'status': 'queued', 'progress': 0,
+        'result_path': None, 'audit_path': None, 'error_msg': None,
+        'created_at': datetime.utcnow().isoformat(),
+        'case_id': caso_id, 'event_count': len(event_ids),
+    }
+
+    t = threading.Thread(
+        target=_run_ia_selection_job,
+        args=(job_id, caso_id, [int(x) for x in event_ids], str(note)[:500]),
+        daemon=True
+    )
+    t.start()
+
+    return jsonify({'status': 'ok', 'job_id': job_id})
+
+
+@app.route('/api/ia/jobs/<job_id>', methods=['GET'])
+def get_ia_job(job_id):
+    """Consulta el estado de un job de análisis IA."""
+    # Sanitize job_id (UUID format only)
+    if not re.match(r'^[0-9a-f\-]{36}$', job_id):
+        return jsonify({'status': 'error', 'message': 'job_id inválido'}), 400
+    job = _ia_jobs.get(job_id)
+    if not job:
+        return jsonify({'status': 'error', 'message': 'Job no encontrado'}), 404
+    return jsonify({'status': 'ok', 'job': job})
+
+
 if __name__ == '__main__':
     # Escucha en todas las interfaces de red de la Raspberry Pi
     app.run(host='0.0.0.0', port=5000, debug=True, threaded=True)

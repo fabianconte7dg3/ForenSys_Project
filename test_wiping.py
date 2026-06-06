@@ -1,0 +1,13 @@
+import time, sys
+def progress(p): print(f"[PROGRESO:{p}] test", flush=True)
+progress(80)
+print("\r[*] Verificando 1", end='', flush=True)
+time.sleep(0.1)
+print("\r[*] Verificando 2", end='', flush=True)
+print("")
+print("[+] Exitosa.", flush=True)
+progress(90)
+print("[SUCCESS] Formato", flush=True)
+progress(100)
+print("==================================================", flush=True)
+print("[SUCCESS] WIPING COMPLETADO - SISTEMA LISTO", flush=True)

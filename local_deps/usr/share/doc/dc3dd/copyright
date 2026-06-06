@@ -1,0 +1,79 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Contact: https://sourceforge.net/projects/dc3dd/support
+Source: https://dc3dd.sourceforge.net
+Upstream-Name: dc3dd
+
+Files: *
+Copyright: 1985-2011 Free Software Foundation, Inc.
+           1997-1999 Colin Plumb
+           2000-2005 Pavel Roskin <proski@gnu.org>
+License: GPL-3+
+
+Files: build-aux/check.mk
+Copyright: 2006-2007 The Vaucanson Group.
+License: GPL-2+
+
+Files: lib/atexit.c
+       lib/ftruncate.c
+       lib/memmove.c
+Copyright: ? David MacKenzie <djm@gnu.ai.mit.edu>
+           ? Mike Stump
+License: public-domain
+
+Files: README.coreutils
+Copyright: 1998-2006 Free Software Foundation, Inc.
+License: GFDL-1.2+
+
+Files: debian/*
+Copyright: 2011      Christophe Monniez <christophe.monniez@fccu.be>
+           2011      Julien Valroff <julien@debian.org>
+           2014-2023 Joao Eriberto Mota Filho <eriberto@debian.org>
+           2018      Raphaël Hertzog <hertzog@debian.org>
+           2020      Samuel Henrique <samueloph@debian.org>
+License: GPL-2+
+
+License: GPL-3+
+ This program is free software: you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation, either version 3 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ with this program. If not, see <http://www.gnu.org/licenses/>.
+Comment:
+ On Debian systems, the complete text of the GNU General Public License
+ version 3 can be found in /usr/share/common-licenses/GPL-3 file.
+
+License: GPL-2+
+ This program is free software; you can redistribute it and/or modify
+ it under the terms of the GNU General Public License as published by
+ the Free Software Foundation; either version 2 of the License, or
+ (at your option) any later version.
+ .
+ This program is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ GNU General Public License for more details.
+ .
+ You should have received a copy of the GNU General Public License
+ along with this program. If not, see <http://www.gnu.org/licenses/>
+Comment:
+ On Debian systems, the complete text of the GNU General
+ Public License version 2 can be found in "/usr/share/common-licenses/GPL-2".
+
+License: GFDL-1.2+
+ Permission is granted to copy, distribute and/or modify this document
+ under the terms of the GNU Free Documentation License, Version 1.2
+ or any later version published by the Free Software Foundation;
+ with no Invariant Sections, no Front-Cover Texts, and no Back-Cover Texts.
+Comment:
+ On Debian systems, the complete text of the GNU Free Document License
+ version 1.2 can be found in /usr/share/common-licenses/GFDL-1.2.
+
+License: public-domain
+ This file is in the public domain.

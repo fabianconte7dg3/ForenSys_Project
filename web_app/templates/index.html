@@ -10,10 +10,13 @@
     <!-- CSS Frameworks y Fuentes (Offline Vendors) -->
     <link href="{{ url_for('static', filename='vendor/bootstrap/css/bootstrap.min.css') }}" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/vis-timeline/vis-timeline-graph2d.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='tailwind.css') }}">
     <script src="{{ url_for('static', filename='vendor/htmx/htmx.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/chartjs/chart.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/vis-timeline/vis-timeline-graph2d.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='vendor/cytoscape/cytoscape.min.js') }}"></script>
     <script src="{{ url_for('static', filename='web-components.js') }}"></script>
     <style>
         /* Fallback offline robusto para reemplazar Google Fonts cuando no hay internet */
@@ -1188,6 +1191,11 @@
                 <span>Explorador de Evidencia</span>
                 <span class="nav-lock-badge" id="explorer-lock-badge"><i class="bi bi-lock-fill me-1"></i>Bloqueado</span>
             </a>
+            <a class="nav-item-custom disabled-nav" data-section="section-supertimeline" href="#" id="nav-supertimeline">
+                <div class="nav-item-icon"><i class="bi bi-clock-history"></i></div>
+                <span>SuperTimeline v2</span>
+                <span class="nav-lock-badge" id="supertimeline-lock-badge"><i class="bi bi-lock-fill me-1"></i>Bloqueado</span>
+            </a>
             <a class="nav-item-custom" data-section="section-ia" href="#" id="nav-ia">
                 <div class="nav-item-icon"><i class="bi bi-robot"></i></div>
                 <span>Resultados IA</span>
@@ -2249,6 +2257,115 @@
                     </div>
                 </div>
             </section>
+            <!-- ============================================================
+                 SECTION SUPERTIMELINE
+                 ============================================================ -->
+            <section class="page-section" id="section-supertimeline">
+                <div class="section-header">
+                    <div class="section-title">SuperTimeline v2</div>
+                    <div class="section-subtitle">Visualización interactiva, motor de correlación y análisis asistido por IA (FTS5).</div>
+                </div>
+                
+                <div class="timeline-container" style="display: flex; gap: 16px; height: calc(100vh - 180px);">
+                    <!-- PANEL FILTROS -->
+                    <div class="fs-card" style="flex: 0 0 220px; display: flex; flex-direction: column;">
+                        <div class="fs-card-header"><i class="bi bi-funnel"></i> Filtros</div>
+                        <div class="p-3" style="overflow-y: auto;">
+                            <div class="mb-3">
+                                <label class="form-label-custom">Búsqueda Textual</label>
+                                <input type="text" id="tl-search" class="form-input-custom" placeholder="Buscar FTS...">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label-custom">Fuentes</label>
+                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="FS" checked> FS / TSK_REAL</div>
+                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="WEB" checked> WEB</div>
+                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="EVTX" checked> EVTX</div>
+                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="PERSIST" checked> PERSIST</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label-custom">Severidad</label>
+                                <select id="tl-severity" class="form-input-custom">
+                                    <option value="">Todas</option>
+                                    <option value="critical">Critical</option>
+                                    <option value="high">High</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="low">Low</option>
+                                </select>
+                            </div>
+                            <button id="tl-btn-apply" class="btn btn-outline-primary w-100 mb-2">Aplicar Filtros</button>
+                            <button id="tl-btn-correlate" class="btn btn-outline-warning w-100">Correlacionar Eventos</button>
+                        </div>
+                    </div>
+                    
+                    <!-- TIMELINE & TABLA -->
+                    <div class="fs-card" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
+                        <div class="fs-card-header d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-bar-chart-steps"></i> Eventos</span>
+                            <span id="tl-status" class="badge bg-secondary">0 eventos</span>
+                        </div>
+                        <div class="p-2" style="flex: 0 0 150px; border-bottom: 1px solid var(--border-dim); position: relative;">
+                            <canvas id="tl-histogram"></canvas>
+                        </div>
+                        <div class="p-0" style="flex: 0 0 200px; border-bottom: 1px solid var(--border-dim); overflow: hidden;" id="tl-vis-container">
+                            <!-- vis.js timeline injected here -->
+                        </div>
+                        <div style="flex: 1; overflow: auto; position: relative;" id="tl-table-container">
+                            <table class="table table-dark table-hover table-sm m-0" style="font-size: 0.8rem; background: transparent;">
+                                <thead style="position: sticky; top: 0; background: var(--bg-card-alt); z-index: 10;">
+                                    <tr>
+                                        <th style="width: 30px;"><input type="checkbox" id="tl-chk-all"></th>
+                                        <th style="width: 130px;">Timestamp</th>
+                                        <th style="width: 80px;">Fuente</th>
+                                        <th style="width: 80px;">Severidad</th>
+                                        <th>Descripción</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tl-tbody">
+                                    <!-- rows populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center p-2" style="background: var(--bg-card-alt); border-top: 1px solid var(--border-dim);">
+                            <button class="btn btn-sm btn-outline-secondary" id="tl-btn-prev">Anterior</button>
+                            <span id="tl-page-info" style="font-size: 0.8rem; color: var(--text-muted)">Página 1</span>
+                            <button class="btn btn-sm btn-outline-secondary" id="tl-btn-next">Siguiente</button>
+                        </div>
+                    </div>
+                    
+                    <!-- DETALLES Y ACCIONES -->
+                    <div class="fs-card" style="flex: 0 0 320px; display: flex; flex-direction: column;">
+                        <div class="fs-card-header"><i class="bi bi-info-square"></i> Detalles</div>
+                        <div class="p-3" style="flex: 1; overflow-y: auto;" id="tl-details-panel">
+                            <p class="text-muted small">Selecciona un evento para ver detalles.</p>
+                        </div>
+                        <div class="p-3" style="border-top: 1px solid var(--border-dim);">
+                            <button id="tl-btn-graph" class="btn btn-outline-info w-100 mb-2" style="display:none;" onclick="showCorrelationGraph()">
+                                <i class="bi bi-diagram-3"></i> Grafo de Correlación
+                            </button>
+                            <button id="tl-btn-analyze" class="btn btn-primary w-100" disabled>
+                                <i class="bi bi-robot"></i> Analizar Selección IA
+                            </button>
+                            <div id="tl-ia-status" class="mt-2 text-center small text-info" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Modal Cytoscape (Grafo de Correlación) -->
+            <div class="modal fade" id="modal-correlation-graph" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog modal-xl modal-dialog-centered">
+                    <div class="modal-content" style="background: var(--bg-card); border: 1px solid var(--border-mid);">
+                        <div class="modal-header border-bottom border-secondary">
+                            <h5 class="modal-title text-light"><i class="bi bi-diagram-3 me-2"></i> Grafo de Correlación</h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body p-0" style="height: 600px; background: #000; position: relative;">
+                            <div id="cy" style="width: 100%; height: 100%;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
 
             <!-- ============================================================
                  SECTION 5: RESULTADOS IA (DICTAMEN PERICIAL)
@@ -2946,6 +3063,9 @@ navItems.forEach(item => {
         // Update topbar title (strip icon text)
         topbarTitle.textContent = this.querySelector('span').textContent.trim();
         
+        // Special initializers
+        if (targetId === 'section-supertimeline') initSuperTimeline();
+
         // Save state to localStorage
         localStorage.setItem('forensys_active_section', targetId);
     });
@@ -2971,8 +3091,10 @@ const btnOpenCase     = document.getElementById('btn-open-case');
 const btnCloseCase    = document.getElementById('btn-close-case');
 const navOps          = document.getElementById('nav-ops');
 const navExplorer     = document.getElementById('nav-explorer');
+const navSuperTimeline = document.getElementById('nav-supertimeline');
 const opsLockBadge    = document.getElementById('ops-lock-badge');
 const explorerLockBadge = document.getElementById('explorer-lock-badge');
+const supertimelineLockBadge = document.getElementById('supertimeline-lock-badge');
 const caseIndicator   = document.getElementById('case-indicator');
 const caseIndValue    = document.getElementById('case-indicator-value');
 const activeCaseBar   = document.getElementById('active-case-topbar');
@@ -3076,6 +3198,17 @@ caseForm.addEventListener('submit', function(e) {
         explorerLockBadge.style.background = 'rgba(16,185,129,.15)';
         explorerLockBadge.style.borderColor = 'rgba(16,185,129,.3)';
         explorerLockBadge.style.color = 'var(--accent-green)';
+
+        // Unlock SuperTimeline nav
+        navSuperTimeline.classList.remove('disabled-nav');
+        supertimelineLockBadge.textContent = '';
+        const stIcon = document.createElement('i');
+        stIcon.className = 'bi bi-unlock-fill me-1';
+        supertimelineLockBadge.appendChild(stIcon);
+        supertimelineLockBadge.appendChild(document.createTextNode('Activo'));
+        supertimelineLockBadge.style.background = 'rgba(16,185,129,.15)';
+        supertimelineLockBadge.style.borderColor = 'rgba(16,185,129,.3)';
+        supertimelineLockBadge.style.color = 'var(--accent-green)';
 
         // Show case indicator in sidebar
         caseIndValue.textContent = data.caso_id + ' — ' + perito;
@@ -3588,6 +3721,16 @@ function loadCaseInUI(caso, notasTxt) {
     explorerLockBadge.style.background = 'rgba(16,185,129,.15)';
     explorerLockBadge.style.borderColor = 'rgba(16,185,129,.3)';
     explorerLockBadge.style.color = 'var(--accent-green)';
+
+    navSuperTimeline.classList.remove('disabled-nav');
+    supertimelineLockBadge.textContent = '';
+    const stIcon = document.createElement('i');
+    stIcon.className = 'bi bi-unlock-fill me-1';
+    supertimelineLockBadge.appendChild(stIcon);
+    supertimelineLockBadge.appendChild(document.createTextNode('Activo'));
+    supertimelineLockBadge.style.background = 'rgba(16,185,129,.15)';
+    supertimelineLockBadge.style.borderColor = 'rgba(16,185,129,.3)';
+    supertimelineLockBadge.style.color = 'var(--accent-green)';
 
     // Indicadores
     caseIndValue.textContent = caso.caso_id + ' — ' + caso.perito;
@@ -5070,6 +5213,350 @@ function switchTab(tab) {
             currentTimelineChart.resize(); // Fix Chart.js size when switching from display none
         }
     }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SUPERTIMELINE V2 LOGIC
+// ═══════════════════════════════════════════════════════════════════
+let tlState = {
+    offset: 0,
+    limit: 100,
+    events: [],
+    selectedIds: new Set(),
+    timelineInstance: null,
+    histogramChart: null,
+    cyInstance: null
+};
+
+function initSuperTimeline() {
+    if (!activeCaseNumber) return;
+    tlState.offset = 0;
+    fetchTimelineStats();
+    fetchTimelineEvents();
+}
+
+function getTimelineFilters() {
+    const q = document.getElementById('tl-search').value;
+    const severity = document.getElementById('tl-severity').value;
+    const srcChecks = document.querySelectorAll('.tl-src:checked');
+    const sources = Array.from(srcChecks).map(c => c.value);
+    
+    let url = `/api/case/${activeCaseNumber}/events?limit=${tlState.limit}&offset=${tlState.offset}`;
+    if (q) url += `&q=${encodeURIComponent(q)}`;
+    if (severity) url += `&severity=${severity}`;
+    sources.forEach(s => url += `&source=${s}`);
+    return url;
+}
+
+function fetchTimelineStats() {
+    fetch(`/api/case/${activeCaseNumber}/events/stats`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                document.getElementById('tl-status').innerText = `${data.total} eventos en DB`;
+                renderHistogram(data.histogram);
+            }
+        });
+}
+
+function fetchTimelineEvents() {
+    const url = getTimelineFilters();
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                tlState.events = data.events;
+                const totalPages = Math.ceil(data.total / data.limit);
+                const currPage = Math.floor(data.offset / data.limit) + 1;
+                document.getElementById('tl-page-info').innerText = `Página ${currPage} de ${totalPages || 1} (${data.total} filt.)`;
+                
+                renderTimelineTable();
+                renderVisTimeline();
+            } else {
+                alert("Error cargando eventos: " + data.message);
+            }
+        });
+}
+
+function renderTimelineTable() {
+    const tbody = document.getElementById('tl-tbody');
+    tbody.innerHTML = '';
+    tlState.events.forEach(ev => {
+        const tr = document.createElement('tr');
+        tr.style.cursor = 'pointer';
+        
+        let sevColor = 'text-secondary';
+        if (ev.severity === 'critical') sevColor = 'text-danger';
+        else if (ev.severity === 'high') sevColor = 'text-warning';
+        else if (ev.severity === 'medium') sevColor = 'text-info';
+        
+        const ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleString() : 'N/A';
+        
+        tr.innerHTML = `
+            <td onclick="event.stopPropagation()"><input type="checkbox" class="tl-row-chk" data-id="${ev.id}"></td>
+            <td>${ts}</td>
+            <td><span class="badge bg-secondary">${ev.source}</span></td>
+            <td><span class="fw-bold ${sevColor}">${ev.severity.toUpperCase()}</span></td>
+            <td class="text-truncate" style="max-width: 400px;" title="${ev.description}">${ev.description || ''}</td>
+        `;
+        
+        tr.onclick = () => selectTimelineEvent(ev.id);
+        
+        const chk = tr.querySelector('.tl-row-chk');
+        chk.checked = tlState.selectedIds.has(ev.id);
+        chk.onchange = (e) => {
+            if (e.target.checked) tlState.selectedIds.add(ev.id);
+            else tlState.selectedIds.delete(ev.id);
+            updateIAButton();
+        };
+        
+        tbody.appendChild(tr);
+    });
+}
+
+function updateIAButton() {
+    const btn = document.getElementById('tl-btn-analyze');
+    const cnt = tlState.selectedIds.size;
+    btn.disabled = cnt === 0 || cnt > 50;
+    btn.innerHTML = `<i class="bi bi-robot"></i> Analizar Selección (${cnt})`;
+}
+
+function renderVisTimeline() {
+    const container = document.getElementById('tl-vis-container');
+    if (!tlState.timelineInstance) {
+        tlState.timelineInstance = new vis.Timeline(container, new vis.DataSet([]), {
+            height: '100%',
+            margin: { item: 2 },
+            stack: true
+        });
+        tlState.timelineInstance.on('select', (props) => {
+            if (props.items.length > 0) selectTimelineEvent(props.items[0]);
+        });
+    }
+    
+    // limit to 500 for performance
+    const items = tlState.events.slice(0, 500).map(ev => {
+        let style = 'background-color: var(--bg-card-alt); border-color: var(--border-mid); color: var(--text-primary);';
+        if (ev.severity === 'critical') style = 'background-color: rgba(239, 68, 68, 0.2); border-color: var(--accent-red);';
+        else if (ev.severity === 'high') style = 'background-color: rgba(245, 158, 11, 0.2); border-color: var(--accent-yellow);';
+        
+        return {
+            id: ev.id,
+            content: ev.source,
+            start: new Date(ev.timestamp * 1000),
+            title: ev.description,
+            style: style
+        };
+    }).filter(ev => ev.start.getTime() > 0);
+    
+    tlState.timelineInstance.setItems(new vis.DataSet(items));
+    if (items.length > 0) {
+        tlState.timelineInstance.fit();
+    }
+}
+
+function renderHistogram(histData) {
+    const ctx = document.getElementById('tl-histogram').getContext('2d');
+    if (tlState.histogramChart) tlState.histogramChart.destroy();
+    
+    tlState.histogramChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: histData.map(d => d.date),
+            datasets: [{
+                label: 'Eventos por Día',
+                data: histData.map(d => d.count),
+                backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                borderColor: 'rgba(59, 130, 246, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { ticks: { color: '#64718f', font: {size: 10} }, grid: { display: false } },
+                y: { ticks: { color: '#64718f', font: {size: 10} }, grid: { color: '#1e2338' } }
+            }
+        }
+    });
+}
+
+function selectTimelineEvent(eventId) {
+    fetch(`/api/case/${activeCaseNumber}/events/${eventId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                const ev = data.event;
+                const panel = document.getElementById('tl-details-panel');
+                const ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleString() : 'N/A';
+                
+                let linksHtml = '';
+                if (data.correlation_links && data.correlation_links.length > 0) {
+                    linksHtml = `
+                        <h6 class="mt-3 text-info border-bottom border-secondary pb-1">Enlaces de Correlación (${data.correlation_links.length})</h6>
+                        <ul class="list-unstyled small">
+                            ${data.correlation_links.map(l => `<li><i class="bi bi-link-45deg"></i> [${l.rule}] -> Ev_${l.related_event || l.primary_event} (${(l.score*100).toFixed(0)}%)</li>`).join('')}
+                        </ul>
+                    `;
+                    document.getElementById('tl-btn-graph').style.display = 'block';
+                    document.getElementById('tl-btn-graph').dataset.eventId = eventId;
+                } else {
+                    document.getElementById('tl-btn-graph').style.display = 'none';
+                }
+                
+                let metaHtml = '';
+                if (ev.metadata && Object.keys(ev.metadata).length > 0) {
+                    metaHtml = `<h6 class="mt-3 border-bottom border-secondary pb-1">Metadatos (JSON)</h6>
+                                <pre class="bg-dark p-2 text-light rounded" style="font-size:0.75rem; white-space:pre-wrap;">${JSON.stringify(ev.metadata, null, 2)}</pre>`;
+                }
+                
+                panel.innerHTML = `
+                    <h6 class="border-bottom border-secondary pb-1">Información Básica</h6>
+                    <div class="mb-1"><small class="text-muted">ID:</small> ${ev.id}</div>
+                    <div class="mb-1"><small class="text-muted">Fecha:</small> ${ts}</div>
+                    <div class="mb-1"><small class="text-muted">Fuente:</small> <span class="badge bg-secondary">${ev.source}</span> ${ev.subtype ? `(${ev.subtype})` : ''}</div>
+                    <div class="mb-1"><small class="text-muted">Tipo:</small> ${ev.event_type}</div>
+                    <div class="mb-1"><small class="text-muted">Severidad:</small> <span class="fw-bold">${ev.severity.toUpperCase()}</span> (Conf: ${ev.confidence})</div>
+                    <div class="mb-1"><small class="text-muted">Hash:</small> <span style="font-family: monospace; font-size: 0.8rem;">${ev.file_hash || 'N/A'}</span></div>
+                    
+                    <h6 class="mt-3 border-bottom border-secondary pb-1">Descripción</h6>
+                    <p class="small" style="word-break: break-all;">${ev.description}</p>
+                    
+                    ${metaHtml}
+                    ${linksHtml}
+                    
+                    ${ev.stored_path ? `<div class="mt-3"><small class="text-muted">Ruta Extracción:</small><br><span class="text-info" style="font-size:0.8rem;">${ev.stored_path}</span></div>` : ''}
+                `;
+            }
+        });
+}
+
+function showCorrelationGraph() {
+    const eventId = document.getElementById('tl-btn-graph').dataset.eventId;
+    if (!eventId) return;
+    
+    const modal = new bootstrap.Modal(document.getElementById('modal-correlation-graph'));
+    modal.show();
+    
+    fetch(`/api/case/${activeCaseNumber}/events/${eventId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok' && data.correlation_links) {
+                const elements = [];
+                const nodes = new Set();
+                
+                elements.push({ data: { id: `e${data.event.id}`, label: `ID: ${data.event.id}\n${data.event.source}`, severity: data.event.severity }});
+                nodes.add(`e${data.event.id}`);
+                
+                data.correlation_links.forEach(l => {
+                    const targetId = l.related_event || l.primary_event;
+                    const tNode = `e${targetId}`;
+                    if (!nodes.has(tNode)) {
+                        elements.push({ data: { id: tNode, label: `ID: ${targetId}\n${l.source}`, severity: 'low' }});
+                        nodes.add(tNode);
+                    }
+                    elements.push({ data: { id: `edge_${data.event.id}_${targetId}`, source: `e${data.event.id}`, target: tNode, label: l.rule }});
+                });
+                
+                const cyContainer = document.getElementById('cy');
+                tlState.cyInstance = cytoscape({
+                    container: cyContainer,
+                    elements: elements,
+                    style: [
+                        { selector: 'node', style: {
+                            'label': 'data(label)',
+                            'text-valign': 'center', 'text-halign': 'center',
+                            'color': '#fff', 'text-outline-width': 2, 'text-outline-color': '#222',
+                            'font-size': '10px',
+                            'background-color': '#3b82f6',
+                            'width': '60px', 'height': '60px'
+                        }},
+                        { selector: 'edge', style: {
+                            'width': 2, 'line-color': '#64718f', 'target-arrow-color': '#64718f',
+                            'target-arrow-shape': 'triangle', 'curve-style': 'bezier',
+                            'label': 'data(label)', 'font-size': '10px', 'color': '#a855f7',
+                            'text-background-opacity': 1, 'text-background-color': '#0f1220'
+                        }},
+                        { selector: 'node[severity="critical"]', style: { 'background-color': '#ef4444' } },
+                        { selector: 'node[severity="high"]', style: { 'background-color': '#f59e0b' } }
+                    ],
+                    layout: { name: 'cose', animate: false }
+                });
+            }
+        });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('tl-btn-apply').addEventListener('click', () => { tlState.offset = 0; fetchTimelineEvents(); });
+    document.getElementById('tl-btn-next').addEventListener('click', () => { tlState.offset += tlState.limit; fetchTimelineEvents(); });
+    document.getElementById('tl-btn-prev').addEventListener('click', () => { tlState.offset = Math.max(0, tlState.offset - tlState.limit); fetchTimelineEvents(); });
+    document.getElementById('tl-chk-all').addEventListener('change', (e) => {
+        const c = e.target.checked;
+        document.querySelectorAll('.tl-row-chk').forEach(chk => {
+            chk.checked = c;
+            const id = parseInt(chk.dataset.id);
+            if(c) tlState.selectedIds.add(id); else tlState.selectedIds.delete(id);
+        });
+        updateIAButton();
+    });
+    
+    document.getElementById('tl-btn-correlate').addEventListener('click', () => {
+        const btn = document.getElementById('tl-btn-correlate');
+        btn.disabled = true;
+        btn.innerText = "Correlacionando...";
+        fetch(`/api/case/${activeCaseNumber}/events/correlate`, { method: 'POST' })
+            .then(r => r.json())
+            .then(data => {
+                btn.disabled = false;
+                btn.innerText = "Correlacionar Eventos";
+                if(data.status === 'ok') {
+                    alert(`Correlación finalizada. Creados ${data.links_created} enlaces.`);
+                } else alert("Error: " + data.message);
+            });
+    });
+    
+    document.getElementById('tl-btn-analyze').addEventListener('click', () => {
+        if(tlState.selectedIds.size === 0) return;
+        document.getElementById('tl-ia-status').style.display = 'block';
+        document.getElementById('tl-ia-status').innerText = "Enviando a IA...";
+        
+        fetch(`/api/ia/analyze_selection`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ case_id: activeCaseNumber, event_ids: Array.from(tlState.selectedIds) })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'ok') {
+                pollIAJob(data.job_id);
+            } else {
+                document.getElementById('tl-ia-status').innerText = "Error: " + data.message;
+            }
+        });
+    });
+});
+
+function pollIAJob(jobId) {
+    const statusDiv = document.getElementById('tl-ia-status');
+    const iv = setInterval(() => {
+        fetch(`/api/ia/jobs/${jobId}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    const job = data.job;
+                    statusDiv.innerText = `Analizando... ${job.progress}%`;
+                    if (job.status === 'done') {
+                        clearInterval(iv);
+                        statusDiv.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> Análisis listo</span><br><small><a href="#" onclick="alert('Resultados en: ${job.result_path}')">Ver Ruta</a></small>`;
+                    } else if (job.status === 'error') {
+                        clearInterval(iv);
+                        statusDiv.innerText = "Error IA: " + job.error_msg;
+                    }
+                }
+            });
+    }, 2000);
 }
 
 

@@ -1,0 +1,85 @@
+dc3dd 7.3.1
+DC3/TSD 
+2013-04-24
+
+Issues:
+-------
+When imaging to a device with verification under Mac OS X, verification
+can fail due to automatic mounting of the target device. One solution is
+to use Disk Arbitrator in conjunction with dc3dd on OS X.    
+
+New Features:
+-------------
+See the file "ChageLog" for a list of changes between versions.
+
+Building dc3dd:
+---------------
+dc3dd is distributed as source code and must be compiled before use.
+The default configuration can be built and installed to /usr/local/bin
+with the following commands:
+
+$ unzip dc3dd-7.3.1.zip
+$ cd dc3dd-7.3.1
+$ ./configure
+$ make
+$ sudo make install
+
+Note that autoconf-1.10.1 and gperf may need to be installed prior to
+execution of the above commands.
+
+dc3dd can be customized at compile-time with various options.
+The available options are as follows, and can be verified after
+compilation using the --flags command line option: 
+
+-DDEFAULT_HASH_MD5
+(equivalent to hash=md5 command-line option)
+
+-DDEFAULT_HASH_SHA1
+(equivalent to hash=sha1 command-line option)
+
+-DDEFAULT_HASH_SHA256
+(equivalent to hash=sha256 command-line option)
+
+-DDEFAULT_HASH_SHA512
+(equivalent to hash=sha512 command-line option)
+
+-DDEFAULT_OUTPUT_FILE_SIZE=BYTES
+(equivalent to ofsz=BYTES command-line option)
+
+-DDEFAULT_VERBOSE_REPORTING
+(equivalent to verb=on command-line option)
+
+-DDEFAULT_COMPACT_REPORTING
+(equivalent to nwspc=on command-line option)
+
+-DDEFAULT_DECIMAL_BYTES_REPORTING
+(equivalent to dbr=on command-line option)
+
+--enable-hpadco
+Enable checking ATA/SATA drives for hidden areas
+No command-line equivalent, cannot be overridden.
+WARNING: THIS OPTION IS AVAILABLE, BUT NOT FULLY IMPLEMENTED. SPECIFYING
+THIS OPTION WILL CAUSE COMPILATION TO FAIL.
+
+These options are enabled by including them in the CFLAGS argument to
+configure. For example, to enable MD5 hashing and default output file
+size:
+
+$ ./configure CFLAGS="-O2 -DDEFAULT_HASH_MD5 
+-DDEFAULT_OUTPUT_FILE_SIZE=1900M"
+
+The program can be statically linked by adding "-static" to the CFLAGS
+compile options:
+
+$ ./configure CFLAGS="-O2 -static"
+
+Portability Notes:
+------------------
+Mac OS X:
+To enable error recovery, use /dev/rdisk* instead of /dev/disk*
+
+Windows:
+dc3dd can be compiled using Cygwin, but bad sectors can put the program
+into an infinite loop due to bugs in Cygwin.
+
+Please send all correspondence to: dc3dd@dc3.mil
