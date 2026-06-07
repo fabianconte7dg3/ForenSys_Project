@@ -106,9 +106,20 @@ def generate_pdf(case_dir):
                 with open(ia_file, 'r') as f:
                     ia_data = json.load(f)
                 
+                t_ini = ia_data.get("timestamp_inicio_utc")
+                fecha_str = ""
+                if t_ini:
+                    try:
+                        from datetime import datetime as dt
+                        fmt = "%Y-%m-%dT%H:%M:%S.%f"
+                        d1 = dt.strptime(t_ini, fmt)
+                        fecha_str = f" - {d1.strftime('%Y-%m-%d %H:%M:%S')}"
+                    except:
+                        fecha_str = f" - {t_ini.split('.')[0].replace('T', ' ')}"
+
                 pdf.set_fill_color(240, 240, 240)
                 pdf.set_font("Arial", 'B', 12)
-                pdf.cell(0, 10, f"Módulo Evaluado: Auditoría de IA (Módulo 8)", border=1, ln=1, fill=True)
+                pdf.cell(0, 10, f"Auditoría de IA (Módulo 8){fecha_str}", border=1, ln=1, fill=True)
                 pdf.set_font("Arial", size=10)
                 
                 modelo = ia_data.get("modelo", "N/A")
