@@ -106,6 +106,34 @@ def main():
         texto_ia = texto_ia[:100000] + "\n\n[... TEXTO TRUNCADO POR TAMAÑO ...]"
         
     story.append(Preformatted(texto_ia, code_style))
+    story.append(PageBreak())
+
+    # SECCIÓN 3: DOCUMENTOS OFIMÁTICOS (IA)
+    import glob
+    docs_ia_files = glob.glob(os.path.join(carpeta_resultados, "Docs_IA_Completo_*.md"))
+    if docs_ia_files:
+        docs_ia_files.sort()
+        with open(docs_ia_files[-1], 'r', encoding='utf-8', errors='ignore') as f:
+            texto_docs = f.read()
+            story.append(Paragraph("3. Análisis Documental de Inteligencia (IA)", h1_style))
+            story.append(Spacer(1, 0.2 * inch))
+            if len(texto_docs) > 100000:
+                texto_docs = texto_docs[:100000] + "\n\n[... TEXTO TRUNCADO POR TAMAÑO ...]"
+            story.append(Preformatted(texto_docs, code_style))
+            story.append(PageBreak())
+
+    # SECCIÓN 4: VISIÓN ARTIFICIAL (IA)
+    vision_ia_files = glob.glob(os.path.join(carpeta_resultados, "Vision_IA_Completo_*.md"))
+    if vision_ia_files:
+        vision_ia_files.sort()
+        with open(vision_ia_files[-1], 'r', encoding='utf-8', errors='ignore') as f:
+            texto_vision = f.read()
+            story.append(Paragraph("4. Análisis de Visión Artificial (Imágenes)", h1_style))
+            story.append(Spacer(1, 0.2 * inch))
+            if len(texto_vision) > 100000:
+                texto_vision = texto_vision[:100000] + "\n\n[... TEXTO TRUNCADO POR TAMAÑO ...]"
+            story.append(Preformatted(texto_vision, code_style))
+            story.append(PageBreak())
 
     print(f"[PROGRESO:85] Construyendo PDF en disco...")
     
