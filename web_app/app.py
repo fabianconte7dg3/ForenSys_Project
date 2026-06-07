@@ -714,6 +714,9 @@ def run_ia():
         cmd = ['python3', script_path, '--caso', caso_id, '--dest', base_dest, '--motor', motor]
         if modelo:
             cmd.extend(['--model', modelo])
+        if motor == 'remoto':
+            cmd.append('--vision')
+
             
         push_log(f'[SISTEMA] Iniciando Módulo 8: Triaje IA para caso {caso_id}', 'warn')
         push_log(f'$ {" ".join(cmd)}', 'warn')

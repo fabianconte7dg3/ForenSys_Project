@@ -1,5 +1,7 @@
 import argparse
+import base64
 import csv
+import glob
 import hashlib
 import json
 import os
@@ -477,10 +479,186 @@ def recopilar_inteligencia(carpeta_resultados):
         evidencia_texto, presupuesto = _agregar_bloque(evidencia_texto, presupuesto, "MULTIMEDIA (EXIF/GPS)", texto_multi)
         fuentes_cargadas.append("Multimedia")
 
+    # 11. ANÁLISIS VISUAL IA (si existe reporte de imágenes previo del mismo caso)
+    reportes_vision = sorted(glob.glob(os.path.join(carpeta_resultados, 'Vision_IA_Completo_*.md')))
+    if reportes_vision and presupuesto > 500:
+        try:
+            with open(reportes_vision[-1], 'r', encoding='utf-8', errors='ignore') as f:
+                contenido_vision = f.read()
+            # Incluir hasta 2000 chars del reporte visual más reciente
+            evidencia_texto, presupuesto = _agregar_bloque(
+                evidencia_texto, presupuesto, "ANÁLISIS VISUAL DE IMÁGENES (IA)", contenido_vision[:2000])
+            fuentes_cargadas.append(f"Imágenes IA ({len(reportes_vision)} reportes)")
+        except Exception as e:
+            print(f"    [!] No se pudo leer reporte visual: {e}")
+
     caracteres_total = len(evidencia_texto)
     print(f"    [+] Fuentes cargadas: {', '.join(fuentes_cargadas)}")
     print(f"    [+] Evidencia empaquetada: {caracteres_total} caracteres (límite: {MAX_CARACTERES_EVIDENCIA})")
+
     return evidencia_texto
+
+
+# ==========================================
+# ANÁLISIS VISUAL MASIVO (VLM Multimodal)
+# ==========================================
+
+PROMPT_VISION_FORENSE = (
+    "Eres un asistente forense digital. Analiza esta imagen recuperada de un "
+    "dispositivo bajo investigación judicial. Describe con precisión:\n"
+    "1) Todo texto legible visible en la imagen\n"
+    "2) Objetos, personas o escenas identificables\n"
+    "3) Fechas, horas, nombres o datos personales visibles\n"
+    "4) Cualquier elemento que pueda ser relevante en una investigación\n\n"
+    "REGLA CRÍTICA: No inventes ni asumas información que no esté visible "
+    "claramente en la imagen. Si un elemento no es claro, indícalo explícitamente "
+    "con la frase 'No distinguible'. Responde en español, máximo 200 palabras."
+)
+
+FORMATOS_IMAGEN = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif', '.webp'}
+TAMANO_MINIMO_BYTES = 20 * 1024   # 20 KB — descarta íconos/caché
+MAX_IMAGENES_POR_CASO = 100
+RUTAS_EXCLUIDAS = ('cache', 'thumb', '.thumbnails', 'temp', '__pycache__')
+
+
+def _es_imagen_valida(ruta):
+    """Devuelve True si la ruta es una imagen analizable (extensión + tamaño mínimo)."""
+    if not os.path.isfile(ruta):
+        return False
+    if os.path.splitext(ruta)[1].lower() not in FORMATOS_IMAGEN:
+        return False
+    if os.path.getsize(ruta) < TAMANIO_MINIMO_BYTES:
+        return False
+    ruta_lower = ruta.lower()
+    if any(excl in ruta_lower for excl in RUTAS_EXCLUIDAS):
+        return False
+    return True
+
+
+def analizar_imagenes_en_masa(carpeta_caso, ollama_url_base, modelo_vlm):
+    """
+    Escanea TODAS las imágenes forenses del caso, las analiza con el VLM
+    remoto (gemma4:e4b u otro modelo multimodal) y guarda un reporte
+    visual consolidado. Retorna un resumen de los hallazgos para incluir
+    en la síntesis final.
+
+    SOLO disponible con motor remoto. Si se detecta localhost, retorna ''
+    con un aviso.
+
+    Args:
+        carpeta_caso: Ruta base del caso (contendrá subcarpetas con imágenes)
+        ollama_url_base: URL del servidor Ollama (ej. http://192.168.2.3:11434)
+        modelo_vlm: Nombre del modelo VLM a usar
+
+    Returns:
+        str: Texto con descripciones de todas las imágenes analizadas
+    """
+    # Seguridad: solo permitir en motor remoto
+    if 'localhost' in ollama_url_base or '127.0.0.1' in ollama_url_base:
+        print("[!] FASE VISUAL omitida: el análisis de imágenes requiere motor remoto (VLM no disponible en Raspberry Pi).")
+        return ''
+
+    print("[PROGRESO:35] FASE VISUAL: Escaneando imágenes del caso...")
+
+    # Recopilar imágenes recursivamente
+    imagenes_encontradas = []
+    for raiz, _, archivos in os.walk(carpeta_caso):
+        for archivo in archivos:
+            ruta_completa = os.path.join(raiz, archivo)
+            if _es_imagen_valida(ruta_completa):
+                imagenes_encontradas.append(ruta_completa)
+
+    if not imagenes_encontradas:
+        print("    [!] No se encontraron imágenes válidas en el caso (mín. 20 KB). Fase visual omitida.")
+        return ''
+
+    # Ordenar por tamaño descendente (las más grandes son más relevantes)
+    imagenes_encontradas.sort(key=lambda p: os.path.getsize(p), reverse=True)
+    imagenes_a_analizar = imagenes_encontradas[:MAX_IMAGENES_POR_CASO]
+
+    total = len(imagenes_a_analizar)
+    omitidas = len(imagenes_encontradas) - total
+    print(f"    [+] Imágenes encontradas: {len(imagenes_encontradas)} | A analizar: {total} | Omitidas por límite: {omitidas}")
+    if omitidas > 0:
+        print(f"    [!] Se omitieron {omitidas} imágenes menores por límite de seguridad ({MAX_IMAGENES_POR_CASO} max).")
+
+    url_generate = ollama_url_base.rstrip('/') + "/api/generate"
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    ruta_reporte_vision = os.path.join(
+        carpeta_caso,
+        "03_Results_(Resultados_Extraidos)",
+        f"Vision_IA_Completo_{ts}.md"
+    )
+
+    descripciones = []
+    errores = 0
+
+    for idx, ruta_img in enumerate(imagenes_a_analizar, 1):
+        nombre = os.path.basename(ruta_img)
+        pct = 35 + int((idx / total) * 20)  # Progreso de 35% a 55%
+        print(f"[PROGRESO:{pct}] Analizando imagen {idx}/{total}: {nombre}")
+
+        try:
+            with open(ruta_img, 'rb') as f:
+                img_b64 = base64.b64encode(f.read()).decode('utf-8')
+
+            payload = {
+                "model": modelo_vlm,
+                "prompt": PROMPT_VISION_FORENSE,
+                "images": [img_b64],
+                "stream": False,
+                "options": {
+                    "temperature": 0.0,
+                    "num_ctx": 2048  # Ventana reducida por imagen — el VLM procesa la imagen aparte
+                }
+            }
+
+            resp = requests.post(url_generate, json=payload, timeout=120)
+            resp.raise_for_status()
+            descripcion = resp.json().get('response', '').strip()
+
+            if descripcion:
+                ruta_relativa = os.path.relpath(ruta_img, carpeta_caso)
+                entrada = f"### Imagen: {nombre}\n**Ruta:** {ruta_relativa}\n\n{descripcion}\n"
+                descripciones.append(entrada)
+                print(f"    [+] Descripción obtenida ({len(descripcion)} chars)")
+            else:
+                print(f"    [!] Respuesta vacía para: {nombre}")
+                errores += 1
+
+        except requests.exceptions.Timeout:
+            print(f"    [-] Timeout analizando: {nombre} (imagen muy compleja o red lenta)")
+            errores += 1
+        except Exception as e:
+            print(f"    [-] Error en {nombre}: {e}")
+            errores += 1
+
+    # Guardar reporte visual consolidado
+    if descripciones:
+        cabecera = (
+            f"# Reporte Visual IA — Análisis de Imágenes Forenses\n"
+            f"**Caso:** {os.path.basename(carpeta_caso)}\n"
+            f"**Fecha:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+            f"**Modelo VLM:** {modelo_vlm}\n"
+            f"**Imágenes analizadas:** {len(descripciones)}/{total} "
+            f"({'con errores: ' + str(errores) if errores else 'sin errores'})\n\n"
+            f"---\n\n"
+        )
+        contenido_completo = cabecera + "\n".join(descripciones)
+        try:
+            os.makedirs(os.path.dirname(ruta_reporte_vision), exist_ok=True)
+            with open(ruta_reporte_vision, 'w', encoding='utf-8') as f:
+                f.write(contenido_completo)
+            print(f"[PROGRESO:55] [+] Reporte visual guardado: {ruta_reporte_vision}")
+        except Exception as e:
+            print(f"    [-] No se pudo guardar el reporte visual: {e}")
+
+        # Retornar resumen para incluir en prompt final (máx 3000 chars)
+        resumen = "\n".join(descripciones)
+        return resumen[:3000] if len(resumen) > 3000 else resumen
+    else:
+        print("    [-] No se obtuvo ninguna descripción visual válida.")
+        return ''
 
 
 def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido=None):
@@ -692,6 +870,8 @@ if __name__ == "__main__":
                         help="Ventana de contexto en tokens (sobreescribe el perfil del motor)")
     parser.add_argument("--threads", required=False, type=int, default=None,
                         help="Número de hilos CPU (sobreescribe el perfil del motor)")
+    parser.add_argument("--vision",  action="store_true", default=False,
+                        help="Activar análisis visual masivo de imágenes (requiere motor remoto VLM)")
     args = parser.parse_args()
 
     # Validar y limpiar ID de caso (anti path-traversal)
@@ -787,7 +967,24 @@ if __name__ == "__main__":
         print("[-] Advertencia: Poca evidencia disponible. ¿Ejecutaste el Módulo 7?")
         print("[-] Continuando con la evidencia disponible...")
 
-    # Análisis IA
+    # FASE 2 (OPCIONAL): Análisis Visual Masivo
+    resumen_visual = ''
+    if args.vision:
+        carpeta_caso_base = os.path.join(directorio_base_actual, caso_id)
+        resumen_visual = analizar_imagenes_en_masa(carpeta_caso_base, OLLAMA_BASE_URL, MODELO_LLM)
+        if resumen_visual:
+            # Inyectar el resumen visual en la evidencia textual antes de la síntesis
+            bloque_vision = (
+                "\n--- ANÁLISIS VISUAL DE IMÁGENES (IA) ---\n"
+                + resumen_visual
+                + "\n--- FIN ANÁLISIS VISUAL ---\n"
+            )
+            evidencia_filtrada += bloque_vision
+            print(f"[+] Análisis visual integrado en la evidencia ({len(resumen_visual)} chars adicionales).")
+    else:
+        print("[INFO] Análisis visual omitido (usa --vision para activarlo con motor remoto).")
+
+    # Análisis IA (FASE 3: Síntesis final)
     print(f"[PROGRESO:60] Transmitiendo evidencia al LLM (motor: {perfil_nombre})...")
     analizar_con_ia(evidencia_filtrada, ruta_sintesis, ruta_auditoria)
 
