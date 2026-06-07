@@ -627,6 +627,31 @@ def get_file_content(raw_caso_id):
         return jsonify({"status": "error", "message": str(e)}), 500
 
 
+@app.route('/api/case/<raw_caso_id>/ai_reports/list', methods=['GET'])
+def list_ai_reports(raw_caso_id):
+    """Devuelve una lista de los reportes de IA generados para el caso."""
+    caso_id = sanitize_case_id(raw_caso_id)
+    if not caso_id:
+        return jsonify({"status": "error", "message": "caso_id inválido."}), 400
+
+    ruta_results = get_case_results_path(caso_id)
+    if not ruta_results:
+        return jsonify({"status": "not_found", "reports": []})
+
+    import glob
+    patron = os.path.join(ruta_results, "Sintesis_IA_*.md")
+    archivos = glob.glob(patron)
+    reportes = []
+    for f in archivos:
+        nombre = os.path.basename(f)
+        tipo = "Dictamen Maestro" if "SELECTION" not in nombre else "Síntesis Rápida"
+        ts = os.path.getmtime(f)
+        reportes.append({"filename": nombre, "type": tipo, "timestamp": ts})
+    
+    reportes.sort(key=lambda x: x['timestamp'], reverse=True)
+    return jsonify({"status": "ok", "reports": reportes})
+
+
 @app.route('/api/case/<raw_caso_id>/ai_report', methods=['GET'])
 def get_ai_report(raw_caso_id):
     """Devuelve el contenido de la Síntesis IA (Markdown) del caso."""
@@ -638,12 +663,21 @@ def get_ai_report(raw_caso_id):
     if not ruta_results:
         return jsonify({"status": "not_found", "exists": False})
 
-    nombre_informe = f"Sintesis_IA_{caso_id}.md"
+    filename = request.args.get('file')
+    if filename:
+        # Prevención de path traversal
+        filename = os.path.basename(filename)
+        if not filename.startswith("Sintesis_IA_") or not filename.endswith(".md"):
+            return jsonify({"status": "error", "message": "Archivo no permitido."}), 403
+        nombre_informe = filename
+    else:
+        nombre_informe = f"Sintesis_IA_{caso_id}.md"
+
     ruta_informe = os.path.join(ruta_results, nombre_informe)
 
     if not os.path.exists(ruta_informe):
         return jsonify({"status": "not_found", "exists": False,
-                        "message": "La Síntesis IA aún no ha sido generada."})
+                        "message": f"El reporte {nombre_informe} no fue encontrado."})
 
     try:
         with open(ruta_informe, 'r', encoding='utf-8', errors='replace') as f:
@@ -763,28 +797,33 @@ def get_ia_models():
 
 @app.route('/api/config/ia', methods=['GET', 'POST'])
 def manage_ia_config():
-    """Gestiona la configuración del motor de IA."""
-    config_path = os.path.join(DESTINO_FORENSYS, ".ia_config.json")
+    """Gestiona la configuración del motor de IA.
+    Guarda en CASES_BASE_DIR que siempre existe localmente (no depende del disco externo).
+    """
+    # Siempre guardar en la carpeta local del proyecto, no en el disco externo
+    config_path = os.path.join(CASES_BASE_DIR, ".ia_config.json")
     
     if request.method == 'GET':
-        if not os.path.exists(config_path):
-            return jsonify({"remote_host": "", "ctx": 4096, "threads": 12})
-        try:
-            with open(config_path, 'r') as f:
-                return jsonify(json.load(f))
-        except Exception as e:
-            return jsonify({"status": "error", "message": str(e)}), 500
+        # Buscar en múltiples rutas por compatibilidad
+        for alt_path in [config_path, os.path.join(DESTINO_FORENSYS, ".ia_config.json")]:
+            if os.path.exists(alt_path):
+                try:
+                    with open(alt_path, 'r') as f:
+                        return jsonify(json.load(f))
+                except Exception:
+                    pass
+        return jsonify({"remote_host": "", "ctx": 4096, "threads": 12})
             
     if request.method == 'POST':
         data = request.json or {}
         try:
-            # Si el directorio no existe, se intenta crear
-            os.makedirs(DESTINO_FORENSYS, exist_ok=True)
+            os.makedirs(CASES_BASE_DIR, exist_ok=True)
             with open(config_path, 'w') as f:
                 json.dump(data, f, indent=4)
             return jsonify({"status": "success", "message": "Configuración guardada."})
         except Exception as e:
             return jsonify({"status": "error", "message": str(e)}), 500
+
 
 
 @app.route('/api/case/<raw_caso_id>/images', methods=['GET'])
@@ -1855,7 +1894,7 @@ _ia_jobs: dict = {}        # {job_id: {status, progress, result_path, ...}}
 _ia_semaphore = threading.Semaphore(1)  # 1 job a la vez en RPi
 
 
-def _run_ia_selection_job(job_id: str, caso_id: str, event_ids: list, note: str):
+def _run_ia_selection_job(job_id: str, caso_id: str, event_ids: list, note: str, modelo: str = None):
     """Worker thread: construye evidencia de eventos seleccionados y llama al IA."""
     _ia_semaphore.acquire()
     try:
@@ -1875,9 +1914,22 @@ def _run_ia_selection_job(job_id: str, caso_id: str, event_ids: list, note: str)
             conn.close()
             return
 
+        # Importar analizar_con_ia desde 08_analista_ia.py de forma temprana para leer OLLAMA_BASE_URL
+        scripts_dir = os.path.join(os.path.dirname(__file__), '..', 'scripts')
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import importlib.util as _ilu
+        spec = _ilu.spec_from_file_location('analista_ia', os.path.join(scripts_dir, '08_analista_ia.py'))
+        ia_mod = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(ia_mod)
+        
+        is_local = "localhost" in ia_mod.OLLAMA_BASE_URL or "127.0.0.1" in ia_mod.OLLAMA_BASE_URL
+        limit = 50 if is_local else 500
+        desc_len = 200 if is_local else 800
+
         placeholders = ','.join('?' * len(event_ids))
         rows = conn.execute(
-            f'SELECT timestamp,source,event_type,description,severity,metadata FROM eventos_v2 WHERE id IN ({placeholders}) LIMIT 50',
+            f'SELECT timestamp,source,event_type,description,severity,metadata FROM eventos_v2 WHERE id IN ({placeholders}) LIMIT {limit}',
             event_ids
         ).fetchall()
         conn.close()
@@ -1891,7 +1943,7 @@ def _run_ia_selection_job(job_id: str, caso_id: str, event_ids: list, note: str)
         for r in rows:
             ts_str = datetime.fromtimestamp(r['timestamp']).strftime('%Y-%m-%d %H:%M:%S') if r['timestamp'] else 'N/A'
             evidencia_lines.append(
-                f"[{ts_str}] [{r['source']}] [{r['severity'].upper()}] {r['event_type']}: {(r['description'] or '')[:200]}"
+                f"[{ts_str}] [{r['source']}] [{r['severity'].upper()}] {r['event_type']}: {(r['description'] or '')[:desc_len]}"
             )
 
         evidencia_cruda = '\n'.join(evidencia_lines)
@@ -1903,24 +1955,21 @@ def _run_ia_selection_job(job_id: str, caso_id: str, event_ids: list, note: str)
         ruta_sintesis  = os.path.join(results_path, f'Sintesis_IA_{caso_id}_SELECTION_{ts}.md')
         ruta_auditoria = os.path.join(results_path, f'Auditoria_IA_{caso_id}_SELECTION_{ts}.json')
 
-        # Importar analizar_con_ia desde 08_analista_ia.py
-        scripts_dir = os.path.join(os.path.dirname(__file__), '..', 'scripts')
-        if scripts_dir not in sys.path:
-            sys.path.insert(0, scripts_dir)
-
         try:
-            import importlib.util as _ilu
-            spec = _ilu.spec_from_file_location('analista_ia', os.path.join(scripts_dir, '08_analista_ia.py'))
-            ia_mod = _ilu.module_from_spec(spec)
-            spec.loader.exec_module(ia_mod)
             _ia_jobs[job_id]['progress'] = 60
-            ia_mod.analizar_con_ia(evidencia_cruda, ruta_sintesis, ruta_auditoria)
-            _ia_jobs[job_id].update({
-                'status': 'done',
-                'progress': 100,
-                'result_path': ruta_sintesis,
-                'audit_path': ruta_auditoria,
-            })
+            exito = ia_mod.analizar_con_ia(evidencia_cruda, ruta_sintesis, ruta_auditoria, modelo_elegido=modelo)
+            if exito:
+                _ia_jobs[job_id].update({
+                    'status': 'done',
+                    'progress': 100,
+                    'result_path': ruta_sintesis,
+                    'audit_path': ruta_auditoria,
+                })
+            else:
+                _ia_jobs[job_id].update({
+                    'status': 'error',
+                    'error_msg': 'Fallo en la generación IA. Revisa si Ollama está corriendo o si el modelo existe.'
+                })
         except Exception as e:
             _ia_jobs[job_id].update({'status': 'error', 'error_msg': str(e)})
 
@@ -1951,21 +2000,45 @@ def analyze_selection():
         return jsonify({'status': 'error', 'message': 'Máximo 50 eventos por análisis'}), 400
 
     job_id = str(_uuid.uuid4())
+    modelo = body.get('model', None)
     _ia_jobs[job_id] = {
         'status': 'queued', 'progress': 0,
         'result_path': None, 'audit_path': None, 'error_msg': None,
         'created_at': datetime.utcnow().isoformat(),
         'case_id': caso_id, 'event_count': len(event_ids),
+        'model': modelo
     }
 
     t = threading.Thread(
         target=_run_ia_selection_job,
-        args=(job_id, caso_id, [int(x) for x in event_ids], str(note)[:500]),
+        args=(job_id, caso_id, [int(x) for x in event_ids], str(note)[:500], modelo),
         daemon=True
     )
     t.start()
 
     return jsonify({'status': 'ok', 'job_id': job_id})
+
+@app.route('/api/ia/models', methods=['GET'])
+def list_ia_models():
+    """Devuelve la lista de modelos disponibles en Ollama local/remoto y el perfil de hardware."""
+    try:
+        scripts_dir = os.path.join(os.path.dirname(__file__), '..', 'scripts')
+        if scripts_dir not in sys.path:
+            sys.path.insert(0, scripts_dir)
+        import importlib.util as _ilu
+        spec = _ilu.spec_from_file_location('analista_ia', os.path.join(scripts_dir, '08_analista_ia.py'))
+        ia_mod = _ilu.module_from_spec(spec)
+        spec.loader.exec_module(ia_mod)
+        
+        modelos = ia_mod.obtener_lista_modelos_ia()
+        
+        # Determine hardware profile based on OLLAMA_BASE_URL
+        is_local = "localhost" in ia_mod.OLLAMA_BASE_URL or "127.0.0.1" in ia_mod.OLLAMA_BASE_URL
+        perfil = "local" if is_local else "remote"
+        
+        return jsonify({'status': 'ok', 'models': modelos, 'profile': perfil})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @app.route('/api/ia/jobs/<job_id>', methods=['GET'])

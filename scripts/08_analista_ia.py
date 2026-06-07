@@ -5,6 +5,8 @@ import json
 import os
 import re
 import sys
+import time
+import subprocess
 from datetime import datetime
 
 import requests
@@ -54,6 +56,8 @@ MODELOS_AUDITADOS = {
     'mistral:latest',
     'llama3:8b',
     'llama3:latest',
+    'phi3.5',
+    'phi3.5:latest',
 }
 
 # ==========================================
@@ -134,10 +138,11 @@ historial web, tipos de archivos. (Nivel de confianza a indicar)
 - Párrafo final resumiendo hallazgos y señalando qué áreas requieren \
 investigación adicional por parte del perito. Incluir nivel de confianza global.
 
-REGLAS CRÍTICAS:
-- NO inventes datos. Solo analiza lo proporcionado.
-- Si no hay información suficiente sobre un punto, indicar "Sin datos disponibles".
-- Tono formal y técnico. Indicar fuente de cada afirmación.
+REGLAS CRÍTICAS DE SEGURIDAD (GRADO 0.0 ALUCINACIONES):
+- NO inventes ni asumas datos, horas, archivos o usuarios. Solo analiza la evidencia proporcionada.
+- BAJO NINGUNA CIRCUNSTANCIA alteres o cambies la información técnica (hashes, IPs, rutas, fechas).
+- Si no hay información suficiente sobre un punto, indicar explícitamente "Sin datos disponibles".
+- Manten un tono estrictamente formal y técnico. Indicar la fuente exacta de cada afirmación.
 - Esta síntesis DEBE ser revisada y firmada por un perito antes de uso legal."""
 
 
@@ -157,31 +162,96 @@ def imprimir_banner():
 
 
 def comprobar_ollama():
-    """Verifica si el servidor de Ollama está encendido y el modelo existe."""
+    """Verifica si el servidor de Ollama está encendido y el modelo existe. Intenta auto-arrancar si es local y está caído."""
     print(f"[*] Conectando con el motor de IA en {OLLAMA_BASE_URL} (modelo: {MODELO_LLM})...")
+    
+    def _verificar_y_mostrar_modelos():
+        try:
+            modelos = requests.get(OLLAMA_BASE_URL + "/api/tags", timeout=10).json()
+            nombres = [m['name'] for m in modelos.get('models', [])]
+            if MODELO_LLM in nombres or any(MODELO_LLM.split(':')[0] in n for n in nombres):
+                print(f"[+] Modelo '{MODELO_LLM}': DISPONIBLE")
+            else:
+                print(f"[!] Advertencia: Modelo '{MODELO_LLM}' no encontrado.")
+                print(f"    Modelos disponibles: {', '.join(nombres) if nombres else 'Ninguno'}")
+        except Exception:
+            pass
+
     try:
-        respuesta = requests.get(OLLAMA_BASE_URL + "/", timeout=10)
+        respuesta = requests.get(OLLAMA_BASE_URL + "/", timeout=3)
         if respuesta.status_code == 200:
             print("[+] Servidor Ollama: EN LÍNEA")
-            try:
-                modelos = requests.get(OLLAMA_BASE_URL + "/api/tags", timeout=10).json()
-                nombres = [m['name'] for m in modelos.get('models', [])]
-                if MODELO_LLM in nombres or any(MODELO_LLM.split(':')[0] in n for n in nombres):
-                    print(f"[+] Modelo '{MODELO_LLM}': DISPONIBLE")
-                else:
-                    print(f"[!] Advertencia: Modelo '{MODELO_LLM}' no encontrado.")
-                    print(f"    Modelos disponibles: {', '.join(nombres) if nombres else 'Ninguno'}")
-                    print(f"    Ejecuta en el motor remoto: ollama pull {MODELO_LLM}")
-            except Exception:
-                pass
-            return True
+            _verificar_y_mostrar_modelos()
+            return "en_linea"
     except requests.exceptions.ConnectionError:
         print(f"[-] ERROR: No se pudo conectar a Ollama en {OLLAMA_BASE_URL}.")
-        print("    • Motor local (RPi5): sudo systemctl start ollama")
-        print("    • Motor remoto (PC):  Asegúrate de que Ollama está corriendo con OLLAMA_HOST=0.0.0.0")
+        
+        # Intentar auto-arranque solo si es un motor local
+        if "localhost" in OLLAMA_BASE_URL or "127.0.0.1" in OLLAMA_BASE_URL:
+            print("[*] Motor de IA apagado. Intentando auto-arranque (Systemd/Binario)...")
+            try:
+                subprocess.run(["sudo", "-n", "systemctl", "start", "ollama"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+            except Exception:
+                pass
+            try:
+                subprocess.Popen(["ollama", "serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            except Exception:
+                pass
+                
+            print("[*] Esperando a que el motor levante (max 15s)...")
+            for _ in range(15):
+                time.sleep(1)
+                try:
+                    if requests.get(OLLAMA_BASE_URL + "/", timeout=1).status_code == 200:
+                        print("[+] Motor auto-arrancado con éxito.")
+                        _verificar_y_mostrar_modelos()
+                        return "auto"
+                except Exception:
+                    pass
+            print("[-] ERROR CRÍTICO: Imposible arrancar Ollama. Verifica que el software esté instalado.")
+        else:
+            print("    • Motor local (RPi5): sudo systemctl start ollama")
+            print("    • Motor remoto (PC):  Asegúrate de que Ollama está corriendo con OLLAMA_HOST=0.0.0.0")
+        
         return False
     return False
 
+def obtener_modelo_disponible():
+    """Devuelve el modelo configurado si existe, o el primer modelo disponible como fallback."""
+    try:
+        modelos = requests.get(OLLAMA_BASE_URL + "/api/tags", timeout=5).json()
+        nombres = [m['name'] for m in modelos.get('models', [])]
+        if not nombres:
+            return None
+        if MODELO_LLM in nombres:
+            return MODELO_LLM
+        # Auto-selección del primero
+        return nombres[0]
+    except Exception:
+        return None
+
+def obtener_lista_modelos_ia():
+    """Comprueba que Ollama esté online (auto-arrancando si es necesario) y devuelve la lista de modelos instalados."""
+    estado = comprobar_ollama()
+    if not estado:
+        return []
+    
+    try:
+        modelos = requests.get(OLLAMA_BASE_URL + "/api/tags", timeout=5).json()
+        nombres = [m['name'] for m in modelos.get('models', [])]
+        
+        # Apagamos Ollama si lo acabamos de arrancar solo para listar los modelos
+        # Así no dejamos la memoria bloqueada
+        if estado == "auto":
+            try:
+                subprocess.run(["sudo", "-n", "systemctl", "stop", "ollama"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                subprocess.run(["pkill", "-f", "ollama serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+            except Exception:
+                pass
+                
+        return nombres
+    except Exception:
+        return []
 
 def validar_modelo_ollama(modelo_nombre):
     """
@@ -411,7 +481,7 @@ def recopilar_inteligencia(carpeta_resultados):
     return evidencia_texto
 
 
-def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria):
+def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido=None):
     """
     Envía el prompt y evidencia al LLM con streaming.
     Genera:
@@ -419,20 +489,48 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria):
       - Registro de auditoría JSON firmado con SHA-256 (ruta_auditoria)  [CRÍTICA 4]
     Aplica sanitización anti-prompt-injection antes de construir el prompt.  [CRÍTICA 6]
     Detecta posibles alucinaciones al finalizar.                             [CRÍTICA 7]
+    Retorna True si fue exitoso, False en caso contrario.
     """
+    global MODELO_LLM
+    
+    estado_motor = comprobar_ollama()
+    if not estado_motor:
+        print("[-] Abortando síntesis porque el motor IA no está disponible o no pudo arrancar.")
+        return False
+
+    fue_autoarrancado = (estado_motor == "auto")
+
+    # Override del modelo si se proporcionó uno válido, de lo contrario buscar automático
+    if modelo_elegido:
+        modelo_real = modelo_elegido
+    else:
+        modelo_real = obtener_modelo_disponible()
+        
+    if not modelo_real:
+        print("[-] Abortando síntesis: No hay modelos instalados en Ollama.")
+        return False
+    
+    MODELO_LLM = modelo_real
+
     # Sanitizar evidencia antes de inyectarla en el prompt
     evidencia_sanitizada = sanitizar_prompt_injection(evidencia_cruda)
 
     prompt_final = PROMPT_ASISTENTE.format(evidencia_cruda=evidencia_sanitizada)
+
+    # Dynamic hardware capacity check
+    is_local = "localhost" in OLLAMA_BASE_URL or "127.0.0.1" in OLLAMA_BASE_URL
+    current_ctx = RPI_CTX if is_local else PC_CTX
+    current_threads = RPI_THREAD if is_local else PC_THREAD
 
     carga_util = {
         "model": MODELO_LLM,
         "prompt": prompt_final,
         "stream": True,
         "options": {
-            "temperature": 0.2,
-            "num_ctx": NUM_CTX,
-            "num_thread": NUM_THREAD
+            "temperature": 0.0,
+            "top_p": 0.1,
+            "num_ctx": current_ctx,
+            "num_thread": current_threads
         },
         "keep_alive": KEEP_ALIVE
     }
@@ -443,9 +541,10 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria):
         "modelo": MODELO_LLM,
         "motor_url": OLLAMA_BASE_URL,
         "parametros": {
-            "temperature": 0.2,
-            "num_ctx": NUM_CTX,
-            "num_thread": NUM_THREAD,
+            "temperature": 0.0,
+            "top_p": 0.1,
+            "num_ctx": current_ctx,
+            "num_thread": current_threads,
         },
         "evidencia_sha256": hashlib.sha256(evidencia_cruda.encode('utf-8', errors='replace')).hexdigest(),
         "prompt_sha256":    hashlib.sha256(prompt_final.encode('utf-8', errors='replace')).hexdigest(),
@@ -519,19 +618,23 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria):
             print(f"\n[+] Síntesis completada. Guardada en:")
             print(f"    -> {ruta_salida}")
             print(f"[+] Confianza de síntesis: {nivel_confianza}")
+            exito = True
 
         else:
             print("[-] La IA no generó contenido. Verifica que el modelo esté correctamente instalado.")
             auditoria["estado"] = "SIN_CONTENIDO"
+            exito = False
 
     except requests.exceptions.Timeout:
         print(f"\n[-] TIMEOUT: La IA tardó más de {TIMEOUT_SOLICITUD // 60} minutos.")
         auditoria["estado"] = "TIMEOUT"
+        exito = False
     except requests.exceptions.ConnectionError:
         print("\n[-] Se perdió la conexión con Ollama durante la generación.")
-        print("    Posible causa: Ollama se quedó sin memoria RAM (OOM Killer).")
-        print("    Solución: Reduce NUM_CTX o usa un modelo más pequeño (Ej. gemma3:1b)")
+        print("    Posible causa: Ollama está apagado o se quedó sin memoria RAM (OOM Killer).")
+        print("    Solución: Inicia Ollama o usa un modelo más pequeño.")
         auditoria["estado"] = "ERROR_CONEXION"
+        exito = False
     except KeyboardInterrupt:
         print("\n\n[!] Generación cancelada por el usuario.")
         parcial = "".join(texto_completo)
@@ -541,9 +644,11 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria):
                 f.write(f"{DISCLAIMER_LEGAL}\n\n<!-- INFORME PARCIAL - Cancelado por usuario -->\n\n{parcial}")
             print(f"    Síntesis parcial guardada en: {ruta_parcial}")
         auditoria["estado"] = "CANCELADO"
+        exito = False
     except requests.exceptions.RequestException as e:
         print(f"[-] Error de comunicación con la IA: {e}")
         auditoria["estado"] = f"ERROR: {e}"
+        exito = False
     finally:
         # Siempre guardar la auditoría, independientemente del resultado [CRÍTICA 4]
         try:
@@ -554,6 +659,16 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria):
         except Exception as e:
             print(f"[!] No se pudo guardar la auditoría: {e}")
 
+        # Apagar Ollama si lo encendimos nosotros (para ahorrar RAM en la Raspberry Pi)
+        if fue_autoarrancado:
+            print("\n[*] Apagando el motor IA local para liberar memoria RAM...")
+            try:
+                subprocess.run(["sudo", "-n", "systemctl", "stop", "ollama"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+                subprocess.run(["pkill", "-f", "ollama serve"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=5)
+            except Exception as e:
+                print(f"[!] No se pudo detener Ollama automáticamente: {e}")
+
+    return exito
 
 # ==========================================
 # INICIO — Modo no interactivo (para Web o CLI)
@@ -595,10 +710,20 @@ if __name__ == "__main__":
         TIMEOUT_SOLICITUD = PC_TIMEOUT
         perfil_nombre     = f"Personalizado ({OLLAMA_BASE_URL})"
     elif args.motor == "remoto":
-        config_path = os.path.join(directorio_base_actual, ".ia_config.json")
-        if not os.path.exists(config_path):
+        config_paths = [
+            os.path.join(directorio_base_actual, ".ia_config.json"),
+            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "Casos_ForenSys", ".ia_config.json"),
+            "/mnt/Destino_ForenSys/.ia_config.json"
+        ]
+        config_path = None
+        for p in config_paths:
+            if os.path.exists(p):
+                config_path = p
+                break
+                
+        if not config_path:
             print("[-] ERROR: Motor remoto seleccionado pero no hay host configurado.")
-            print(f"    Crea {config_path} con la IP de tu PC de escritorio,")
+            print(f"    Crea un archivo .ia_config.json con la IP de tu PC de escritorio,")
             print("    o usa: --host http://192.168.X.X:11434")
             sys.exit(1)
         with open(config_path, 'r') as f:

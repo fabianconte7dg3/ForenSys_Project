@@ -2262,8 +2262,8 @@
                  ============================================================ -->
             <section class="page-section" id="section-supertimeline">
                 <div class="section-header">
-                    <div class="section-title">SuperTimeline v2</div>
-                    <div class="section-subtitle">Visualización interactiva, motor de correlación y análisis asistido por IA (FTS5).</div>
+                    <div class="section-title">Línea de Tiempo Analítica</div>
+                    <div class="section-subtitle">Plataforma avanzada para la reconstrucción de eventos, descubrimiento de vínculos y análisis automatizado.</div>
                 </div>
                 
                 <div class="timeline-container" style="display: flex; gap: 16px; height: calc(100vh - 180px);">
@@ -2272,18 +2272,18 @@
                         <div class="fs-card-header"><i class="bi bi-funnel"></i> Filtros</div>
                         <div class="p-3" style="overflow-y: auto;">
                             <div class="mb-3">
-                                <label class="form-label-custom">Búsqueda Textual</label>
-                                <input type="text" id="tl-search" class="form-input-custom" placeholder="Buscar FTS...">
+                                <label class="form-label-custom">Búsqueda Avanzada</label>
+                                <input type="text" id="tl-search" class="form-input-custom" placeholder="Palabras clave...">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label-custom">Fuentes</label>
-                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="FS" checked> FS / TSK_REAL</div>
-                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="WEB" checked> WEB</div>
-                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="EVTX" checked> EVTX</div>
-                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="PERSIST" checked> PERSIST</div>
+                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="FS,TSK_REAL" checked> Sistema de Archivos (FS)</div>
+                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="WEB" checked> Navegación y Red (WEB)</div>
+                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="EVTX" checked> Registros de SO (EVTX)</div>
+                                <div class="form-check"><input type="checkbox" class="form-check-input tl-src" value="PERSIST" checked> Mecanismos de Persistencia</div>
                             </div>
                             <div class="mb-3">
-                                <label class="form-label-custom">Severidad</label>
+                                <label class="form-label-custom">Nivel de Criticidad</label>
                                 <select id="tl-severity" class="form-input-custom">
                                     <option value="">Todas</option>
                                     <option value="critical">Critical</option>
@@ -2293,15 +2293,15 @@
                                 </select>
                             </div>
                             <button id="tl-btn-apply" class="btn btn-outline-primary w-100 mb-2">Aplicar Filtros</button>
-                            <button id="tl-btn-correlate" class="btn btn-outline-warning w-100">Correlacionar Eventos</button>
+                            <button id="tl-btn-correlate" class="btn btn-outline-warning w-100">Descubrir Relaciones</button>
                         </div>
                     </div>
                     
                     <!-- TIMELINE & TABLA -->
                     <div class="fs-card" style="flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0;">
                         <div class="fs-card-header d-flex justify-content-between align-items-center">
-                            <span><i class="bi bi-bar-chart-steps"></i> Eventos</span>
-                            <span id="tl-status" class="badge bg-secondary">0 eventos</span>
+                            <span><i class="bi bi-bar-chart-steps"></i> Eventos Registrados</span>
+                            <span id="tl-status" class="badge bg-secondary">0 registros</span>
                         </div>
                         <div class="p-2" style="flex: 0 0 150px; border-bottom: 1px solid var(--border-dim); position: relative;">
                             <canvas id="tl-histogram"></canvas>
@@ -2314,10 +2314,10 @@
                                 <thead style="position: sticky; top: 0; background: var(--bg-card-alt); z-index: 10;">
                                     <tr>
                                         <th style="width: 30px;"><input type="checkbox" id="tl-chk-all"></th>
-                                        <th style="width: 130px;">Timestamp</th>
+                                        <th style="width: 130px;">Fecha / Hora</th>
                                         <th style="width: 80px;">Fuente</th>
-                                        <th style="width: 80px;">Severidad</th>
-                                        <th>Descripción</th>
+                                        <th style="width: 80px;">Criticidad</th>
+                                        <th>Descripción del Evento</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tl-tbody">
@@ -2333,17 +2333,20 @@
                     </div>
                     
                     <!-- DETALLES Y ACCIONES -->
-                    <div class="fs-card" style="flex: 0 0 320px; display: flex; flex-direction: column;">
-                        <div class="fs-card-header"><i class="bi bi-info-square"></i> Detalles</div>
+                    <div class="fs-card" style="flex: 0 0 320px; display: flex; flex-direction: column; position: relative;">
+                        <div class="fs-card-header d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-info-square"></i> Panel de Detalles</span>
+                            <button type="button" class="btn-close btn-close-white" style="font-size: 0.6rem; opacity: 0.7;" onclick="clearTimelineDetails()" aria-label="Cerrar"></button>
+                        </div>
                         <div class="p-3" style="flex: 1; overflow-y: auto;" id="tl-details-panel">
                             <p class="text-muted small">Selecciona un evento para ver detalles.</p>
                         </div>
                         <div class="p-3" style="border-top: 1px solid var(--border-dim);">
                             <button id="tl-btn-graph" class="btn btn-outline-info w-100 mb-2" style="display:none;" onclick="showCorrelationGraph()">
-                                <i class="bi bi-diagram-3"></i> Grafo de Correlación
+                                <i class="bi bi-diagram-3"></i> Mapa de Relaciones
                             </button>
                             <button id="tl-btn-analyze" class="btn btn-primary w-100" disabled>
-                                <i class="bi bi-robot"></i> Analizar Selección IA
+                                <i class="bi bi-robot"></i> Síntesis Automática (IA)
                             </button>
                             <div id="tl-ia-status" class="mt-2 text-center small text-info" style="display: none;"></div>
                         </div>
@@ -2356,7 +2359,7 @@
                 <div class="modal-dialog modal-xl modal-dialog-centered">
                     <div class="modal-content" style="background: var(--bg-card); border: 1px solid var(--border-mid);">
                         <div class="modal-header border-bottom border-secondary">
-                            <h5 class="modal-title text-light"><i class="bi bi-diagram-3 me-2"></i> Grafo de Correlación</h5>
+                            <h5 class="modal-title text-light"><i class="bi bi-diagram-3 me-2"></i> Mapa de Relaciones Detectadas</h5>
                             <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                         </div>
                         <div class="modal-body p-0" style="height: 600px; background: #000; position: relative;">
@@ -2380,6 +2383,9 @@
                     <div class="fs-card-header">
                         <i class="bi bi-robot fs-card-header-icon"></i>
                         Síntesis de Inteligencia Forense (IA Asistida)
+                        <select id="ia-report-select" class="form-select ms-3" style="width: auto; display: inline-block; padding: 2px 24px 2px 8px; font-size: 0.8rem; background-color: var(--bg-body); color: var(--text-main); border-color: var(--border-dim);" onchange="loadRealIaReport(activeCaseNumber, this.value)">
+                            <option value="">Selecciona un reporte...</option>
+                        </select>
                         <button class="btn-secondary ms-auto" onclick="loadRealIaReport(activeCaseNumber)" style="padding:4px 8px; font-size:0.75rem;">
                             <i class="bi bi-arrow-clockwise me-1"></i>Actualizar
                         </button>
@@ -2661,6 +2667,18 @@ function initSSE() {
                 const execBtn = document.getElementById('btn-exec-proc');
                 if(killBtn) killBtn.style.display = 'none';
                 if(execBtn) execBtn.disabled = false;
+                
+                // Reset all pipeline states if they were running
+                if (typeof enableAllPipeBtns === 'function') enableAllPipeBtns();
+                document.querySelectorAll('.pipe-btn.running').forEach(b => b.classList.remove('running'));
+                
+                // Hide any stuck progress bars if the process died
+                const progressBars = document.querySelectorAll('sl-progress-bar');
+                progressBars.forEach(pb => {
+                    if (pb.style.display !== 'none' && pb.value < 100) {
+                        pb.style.display = 'none';
+                    }
+                });
             }
 
             if (isSystemMsg && !showSystemLogs) return; // Skip appending
@@ -4645,8 +4663,9 @@ function loadRealEvidence(casoId) {
         });
 }
 
-function loadRealIaReport(casoId) {
+function loadRealIaReport(casoId, filename = null) {
     const reportBox = document.getElementById('ia-real-report-content');
+    const selectBox = document.getElementById('ia-report-select');
     if (!reportBox) return;
 
     if (!casoId) {
@@ -4654,21 +4673,44 @@ function loadRealIaReport(casoId) {
         return;
     }
 
-    reportBox.textContent = "Cargando dictamen...";
+    reportBox.textContent = "Cargando lista de reportes...";
     
-    fetch(`/api/case/${casoId}/ai_report`)
+    fetch(`/api/case/${casoId}/ai_reports/list`)
         .then(r => r.json())
         .then(data => {
-            if (data.status === 'ok' && data.exists) {
-                reportBox.textContent = data.content;
-            } else if (data.status === 'not_found') {
-                reportBox.textContent = "El dictamen de IA aún no ha sido generado para este caso. Ejecuta el Módulo 8 primero.";
+            if (data.status === 'ok' && data.reports && data.reports.length > 0) {
+                selectBox.innerHTML = '';
+                data.reports.forEach(rep => {
+                    const opt = document.createElement('option');
+                    opt.value = rep.filename;
+                    const dateObj = new Date(rep.timestamp * 1000);
+                    opt.textContent = `${rep.type} - ${dateObj.toLocaleString()}`;
+                    selectBox.appendChild(opt);
+                });
+                
+                let targetFile = filename || selectBox.value;
+                if (!filename && data.reports.length > 0) {
+                    targetFile = data.reports[0].filename; 
+                }
+                selectBox.value = targetFile;
+                
+                reportBox.textContent = "Cargando dictamen...";
+                fetch(`/api/case/${casoId}/ai_report?file=${encodeURIComponent(targetFile)}`)
+                    .then(r => r.json())
+                    .then(res => {
+                        if (res.status === 'ok' && res.exists) {
+                            reportBox.textContent = res.content;
+                        } else {
+                            reportBox.textContent = `Error: ${res.message || 'Desconocido'}`;
+                        }
+                    });
             } else {
-                reportBox.textContent = `Error: ${data.message || 'Desconocido'}`;
+                if(selectBox) selectBox.innerHTML = '<option value="">No hay reportes</option>';
+                reportBox.textContent = "El dictamen de IA aún no ha sido generado para este caso. Ejecuta el Módulo 8 primero o genera una Síntesis Rápida desde la Línea de Tiempo.";
             }
         })
         .catch(err => {
-            reportBox.textContent = `Error de red al cargar el dictamen: ${err}`;
+            reportBox.textContent = `Error de red al cargar reportes: ${err}`;
         });
 }
 
@@ -5220,7 +5262,8 @@ function switchTab(tab) {
 // ═══════════════════════════════════════════════════════════════════
 let tlState = {
     offset: 0,
-    limit: 100,
+    limit: 500,
+    filterDate: null,
     events: [],
     selectedIds: new Set(),
     timelineInstance: null,
@@ -5239,12 +5282,23 @@ function getTimelineFilters() {
     const q = document.getElementById('tl-search').value;
     const severity = document.getElementById('tl-severity').value;
     const srcChecks = document.querySelectorAll('.tl-src:checked');
-    const sources = Array.from(srcChecks).map(c => c.value);
+    const sources = [];
+    Array.from(srcChecks).forEach(c => {
+        c.value.split(',').forEach(v => sources.push(v));
+    });
     
     let url = `/api/case/${activeCaseNumber}/events?limit=${tlState.limit}&offset=${tlState.offset}`;
     if (q) url += `&q=${encodeURIComponent(q)}`;
     if (severity) url += `&severity=${severity}`;
     sources.forEach(s => url += `&source=${s}`);
+    
+    if (tlState.filterDate) {
+        const d = new Date(tlState.filterDate + 'T00:00:00');
+        const tsFrom = Math.floor(d.getTime() / 1000);
+        const tsTo = tsFrom + 86399;
+        url += `&from=${tsFrom}&to=${tsTo}`;
+    }
+    
     return url;
 }
 
@@ -5253,7 +5307,7 @@ function fetchTimelineStats() {
         .then(r => r.json())
         .then(data => {
             if (data.status === 'ok') {
-                document.getElementById('tl-status').innerText = `${data.total} eventos en DB`;
+                document.getElementById('tl-status').innerText = `${data.total} registros`;
                 renderHistogram(data.histogram);
             }
         });
@@ -5273,9 +5327,22 @@ function fetchTimelineEvents() {
                 renderTimelineTable();
                 renderVisTimeline();
             } else {
-                alert("Error cargando eventos: " + data.message);
+                showToast("Error cargando eventos: " + data.message, "error");
             }
         });
+}
+
+const EXECUTIVE_SOURCES = {
+    'TSK_REAL': 'Extracción Forense de Disco',
+    'TSK_UNALLOC': 'Espacio No Asignado (Recuperado)',
+    'WIN_EVTX': 'Registro de Eventos de Windows',
+    'LINUX_SYSLOG': 'Registros de Sistema Operativo',
+    'NTFS_MFT': 'Tabla Maestra de Archivos (MFT)',
+    'FILE_META': 'Metadatos de Archivo',
+    'MEM_PROCESS': 'Volcado de Memoria RAM'
+};
+function getExecutiveSource(sourceCode) {
+    return EXECUTIVE_SOURCES[sourceCode] || sourceCode;
 }
 
 function renderTimelineTable() {
@@ -5295,7 +5362,7 @@ function renderTimelineTable() {
         tr.innerHTML = `
             <td onclick="event.stopPropagation()"><input type="checkbox" class="tl-row-chk" data-id="${ev.id}"></td>
             <td>${ts}</td>
-            <td><span class="badge bg-secondary">${ev.source}</span></td>
+            <td><span class="badge bg-secondary">${getExecutiveSource(ev.source)}</span></td>
             <td><span class="fw-bold ${sevColor}">${ev.severity.toUpperCase()}</span></td>
             <td class="text-truncate" style="max-width: 400px;" title="${ev.description}">${ev.description || ''}</td>
         `;
@@ -5317,8 +5384,13 @@ function renderTimelineTable() {
 function updateIAButton() {
     const btn = document.getElementById('tl-btn-analyze');
     const cnt = tlState.selectedIds.size;
-    btn.disabled = cnt === 0 || cnt > 50;
-    btn.innerHTML = `<i class="bi bi-robot"></i> Analizar Selección (${cnt})`;
+    btn.disabled = cnt === 0 || cnt > 500; // Increased to 500 for remote processing
+    
+    
+    // Safely update button text without innerHTML
+    const icon = document.createElement('i');
+    icon.className = 'bi bi-robot';
+    btn.replaceChildren(icon, document.createTextNode(` Síntesis Automática (${cnt})`));
 }
 
 function renderVisTimeline() {
@@ -5334,20 +5406,26 @@ function renderVisTimeline() {
         });
     }
     
-    // limit to 500 for performance
-    const items = tlState.events.slice(0, 500).map(ev => {
+    // limit to 500 for performance and filter out extreme outliers for better initial focus
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const items = tlState.events.filter(ev => {
+        const start = new Date(ev.timestamp * 1000);
+        const y = start.getFullYear();
+        return y > 1990; // Removed upper limit to correctly show future/2024 events if present
+    }).slice(0, 500).map(ev => {
         let style = 'background-color: var(--bg-card-alt); border-color: var(--border-mid); color: var(--text-primary);';
         if (ev.severity === 'critical') style = 'background-color: rgba(239, 68, 68, 0.2); border-color: var(--accent-red);';
         else if (ev.severity === 'high') style = 'background-color: rgba(245, 158, 11, 0.2); border-color: var(--accent-yellow);';
         
         return {
             id: ev.id,
-            content: ev.source,
+            content: getExecutiveSource(ev.source),
             start: new Date(ev.timestamp * 1000),
             title: ev.description,
             style: style
         };
-    }).filter(ev => ev.start.getTime() > 0);
+    });
     
     tlState.timelineInstance.setItems(new vis.DataSet(items));
     if (items.length > 0) {
@@ -5378,6 +5456,28 @@ function renderHistogram(histData) {
             scales: {
                 x: { ticks: { color: '#64718f', font: {size: 10} }, grid: { display: false } },
                 y: { ticks: { color: '#64718f', font: {size: 10} }, grid: { color: '#1e2338' } }
+            },
+            onClick: (e, activeElements) => {
+                if (activeElements.length > 0) {
+                    const idx = activeElements[0].index;
+                    const dateStr = histData[idx].date;
+                    
+                    if (tlState.filterDate === dateStr) {
+                        tlState.filterDate = null;
+                        showToast(`Filtro de fecha removido`, 'info');
+                    } else {
+                        tlState.filterDate = dateStr;
+                        showToast(`Filtrando tabla para el ${dateStr}`, 'info');
+                    }
+                    
+                    tlState.offset = 0;
+                    fetchTimelineEvents();
+                    
+                    const targetDate = new Date(dateStr);
+                    if (tlState.timelineInstance && !isNaN(targetDate)) {
+                        tlState.timelineInstance.moveTo(targetDate, { animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+                    }
+                }
             }
         }
     });
@@ -5392,12 +5492,22 @@ function selectTimelineEvent(eventId) {
                 const panel = document.getElementById('tl-details-panel');
                 const ts = ev.timestamp ? new Date(ev.timestamp * 1000).toLocaleString() : 'N/A';
                 
+                // Sync bottom timeline to the selected event
+                if (tlState.timelineInstance && ev.timestamp) {
+                    const targetDate = new Date(ev.timestamp * 1000);
+                    if (!isNaN(targetDate)) {
+                        tlState.timelineInstance.moveTo(targetDate, { animation: { duration: 500, easingFunction: 'easeInOutQuad' } });
+                        // Highlight it but without recursively triggering selectTimelineEvent
+                        tlState.timelineInstance.setSelection(eventId, { focus: false });
+                    }
+                }
+                
                 let linksHtml = '';
                 if (data.correlation_links && data.correlation_links.length > 0) {
                     linksHtml = `
-                        <h6 class="mt-3 text-info border-bottom border-secondary pb-1">Enlaces de Correlación (${data.correlation_links.length})</h6>
+                        <h6 class="mt-3 text-info border-bottom border-secondary pb-1">Vínculos Detectados (${data.correlation_links.length})</h6>
                         <ul class="list-unstyled small">
-                            ${data.correlation_links.map(l => `<li><i class="bi bi-link-45deg"></i> [${l.rule}] -> Ev_${l.related_event || l.primary_event} (${(l.score*100).toFixed(0)}%)</li>`).join('')}
+                            ${data.correlation_links.map(l => `<li><i class="bi bi-link-45deg"></i> [${l.rule.replace(/</g, '&lt;').replace(/>/g, '&gt;')}] -> Ev_${l.related_event || l.primary_event} (${(l.score*100).toFixed(0)}%)</li>`).join('')}
                         </ul>
                     `;
                     document.getElementById('tl-btn-graph').style.display = 'block';
@@ -5408,26 +5518,29 @@ function selectTimelineEvent(eventId) {
                 
                 let metaHtml = '';
                 if (ev.metadata && Object.keys(ev.metadata).length > 0) {
-                    metaHtml = `<h6 class="mt-3 border-bottom border-secondary pb-1">Metadatos (JSON)</h6>
-                                <pre class="bg-dark p-2 text-light rounded" style="font-size:0.75rem; white-space:pre-wrap;">${JSON.stringify(ev.metadata, null, 2)}</pre>`;
+                    const safeJson = JSON.stringify(ev.metadata, null, 2).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    metaHtml = `<h6 class="mt-3 border-bottom border-secondary pb-1">Detalles Técnicos Extendidos</h6>
+                                <pre class="bg-dark p-2 text-light rounded" style="font-size:0.75rem; white-space:pre-wrap;">${safeJson}</pre>`;
                 }
+                
+                const safeDesc = (ev.description || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 
                 panel.innerHTML = `
                     <h6 class="border-bottom border-secondary pb-1">Información Básica</h6>
                     <div class="mb-1"><small class="text-muted">ID:</small> ${ev.id}</div>
                     <div class="mb-1"><small class="text-muted">Fecha:</small> ${ts}</div>
-                    <div class="mb-1"><small class="text-muted">Fuente:</small> <span class="badge bg-secondary">${ev.source}</span> ${ev.subtype ? `(${ev.subtype})` : ''}</div>
-                    <div class="mb-1"><small class="text-muted">Tipo:</small> ${ev.event_type}</div>
-                    <div class="mb-1"><small class="text-muted">Severidad:</small> <span class="fw-bold">${ev.severity.toUpperCase()}</span> (Conf: ${ev.confidence})</div>
-                    <div class="mb-1"><small class="text-muted">Hash:</small> <span style="font-family: monospace; font-size: 0.8rem;">${ev.file_hash || 'N/A'}</span></div>
+                    <div class="mb-1"><small class="text-muted">Fuente:</small> <span class="badge bg-secondary">${ev.source}</span> ${ev.subtype ? `(${ev.subtype.replace(/</g, '&lt;').replace(/>/g, '&gt;')})` : ''}</div>
+                    <div class="mb-1"><small class="text-muted">Tipo:</small> ${(ev.event_type || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</div>
+                    <div class="mb-1"><small class="text-muted">Criticidad:</small> <span class="fw-bold">${ev.severity.toUpperCase()}</span> (Fiabilidad: ${ev.confidence})</div>
+                    <div class="mb-1"><small class="text-muted">Hash:</small> <span style="font-family: monospace; font-size: 0.8rem;">${(ev.file_hash || 'N/A').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span></div>
                     
-                    <h6 class="mt-3 border-bottom border-secondary pb-1">Descripción</h6>
-                    <p class="small" style="word-break: break-all;">${ev.description}</p>
+                    <h6 class="mt-3 border-bottom border-secondary pb-1">Descripción del Evento</h6>
+                    <p class="small" style="word-break: break-all;">${safeDesc}</p>
                     
                     ${metaHtml}
                     ${linksHtml}
                     
-                    ${ev.stored_path ? `<div class="mt-3"><small class="text-muted">Ruta Extracción:</small><br><span class="text-info" style="font-size:0.8rem;">${ev.stored_path}</span></div>` : ''}
+                    ${ev.stored_path ? `<div class="mt-3"><small class="text-muted">Ruta Extracción:</small><br><span class="text-info" style="font-size:0.8rem;">${ev.stored_path.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</span></div>` : ''}
                 `;
             }
         });
@@ -5488,6 +5601,56 @@ function showCorrelationGraph() {
         });
 }
 
+function clearTimelineDetails() {
+    document.getElementById('tl-details-panel').innerHTML = '<p class="text-muted small">Selecciona un evento para ver detalles.</p>';
+    document.getElementById('tl-btn-graph').style.display = 'none';
+    document.getElementById('tl-btn-graph').dataset.eventId = '';
+}
+
+function showToast(message, type = 'success') {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        container.className = 'position-fixed bottom-0 end-0 p-3';
+        container.style.zIndex = '9999';
+        document.body.appendChild(container);
+    }
+    
+    const bg = type === 'success' ? 'bg-success' : (type === 'error' ? 'bg-danger' : 'bg-primary');
+    
+    const toastEl = document.createElement('div');
+    toastEl.className = `toast align-items-center text-white ${bg} border-0`;
+    toastEl.setAttribute('role', 'alert');
+    toastEl.setAttribute('aria-live', 'assertive');
+    toastEl.setAttribute('aria-atomic', 'true');
+    
+    const dFlex = document.createElement('div');
+    dFlex.className = 'd-flex';
+    
+    const tBody = document.createElement('div');
+    tBody.className = 'toast-body';
+    tBody.textContent = message;
+    
+    const btnClose = document.createElement('button');
+    btnClose.type = 'button';
+    btnClose.className = 'btn-close btn-close-white me-2 m-auto';
+    btnClose.setAttribute('data-bs-dismiss', 'toast');
+    btnClose.setAttribute('aria-label', 'Close');
+    
+    dFlex.appendChild(tBody);
+    dFlex.appendChild(btnClose);
+    toastEl.appendChild(dFlex);
+    
+    container.appendChild(toastEl);
+    const toast = new bootstrap.Toast(toastEl, { delay: 5000 });
+    toast.show();
+    
+    toastEl.addEventListener('hidden.bs.toast', () => {
+        toastEl.remove();
+    });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('tl-btn-apply').addEventListener('click', () => { tlState.offset = 0; fetchTimelineEvents(); });
     document.getElementById('tl-btn-next').addEventListener('click', () => { tlState.offset += tlState.limit; fetchTimelineEvents(); });
@@ -5505,35 +5668,111 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('tl-btn-correlate').addEventListener('click', () => {
         const btn = document.getElementById('tl-btn-correlate');
         btn.disabled = true;
-        btn.innerText = "Correlacionando...";
+        btn.innerText = "Descubriendo Vínculos...";
         fetch(`/api/case/${activeCaseNumber}/events/correlate`, { method: 'POST' })
             .then(r => r.json())
             .then(data => {
                 btn.disabled = false;
-                btn.innerText = "Correlacionar Eventos";
+                btn.innerText = "Descubrir Relaciones";
                 if(data.status === 'ok') {
-                    alert(`Correlación finalizada. Creados ${data.links_created} enlaces.`);
-                } else alert("Error: " + data.message);
+                    showToast(`Proceso completado. Se han detectado ${data.links_created} relaciones entre eventos.`, "success");
+                } else showToast("Error: " + data.message, "error");
             });
     });
     
     document.getElementById('tl-btn-analyze').addEventListener('click', () => {
         if(tlState.selectedIds.size === 0) return;
-        document.getElementById('tl-ia-status').style.display = 'block';
-        document.getElementById('tl-ia-status').innerText = "Enviando a IA...";
         
-        fetch(`/api/ia/analyze_selection`, {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ case_id: activeCaseNumber, event_ids: Array.from(tlState.selectedIds) })
-        })
-        .then(r => r.json())
-        .then(data => {
-            if (data.status === 'ok') {
-                pollIAJob(data.job_id);
-            } else {
-                document.getElementById('tl-ia-status').innerText = "Error: " + data.message;
-            }
+        const modalEl = document.getElementById('modal-ia-model-select');
+        const modal = new bootstrap.Modal(modalEl);
+        
+        document.getElementById('ia-model-loading').style.display = 'block';
+        document.getElementById('ia-model-form').style.display = 'none';
+        document.getElementById('ia-model-error').style.display = 'none';
+        const startBtn = document.getElementById('btn-start-ia-sintesis');
+        startBtn.disabled = true;
+        const selectBox = document.getElementById('ia-model-dropdown');
+        selectBox.innerHTML = '';
+        
+        modal.show();
+        
+        const newStartBtn = startBtn.cloneNode(true);
+        startBtn.parentNode.replaceChild(newStartBtn, startBtn);
+        
+        fetch('/api/ia/models')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('ia-model-loading').style.display = 'none';
+                if(data.status === 'ok' && data.models && data.models.length > 0) {
+                    const isLocal = data.profile === 'local';
+                    const numSelected = tlState.selectedIds.size;
+                    
+                    if (isLocal && numSelected > 50) {
+                        document.getElementById('ia-model-form').style.display = 'block';
+                        selectBox.innerHTML = `<option value="">[BLOQUEADO] Límite Excedido</option>`;
+                        selectBox.disabled = true;
+                        newStartBtn.disabled = true;
+                        
+                        const helper = document.getElementById('ia-model-helper') || document.createElement('div');
+                        helper.id = 'ia-model-helper';
+                        helper.className = 'mt-3 p-2 bg-danger bg-opacity-10 border border-danger rounded text-danger small';
+                        helper.innerHTML = `<i class="bi bi-shield-exclamation me-1"></i> <b>Protección Activa:</b> Has seleccionado ${numSelected} eventos, pero el motor local (Raspberry Pi) tiene un límite seguro de 50. Conecta un PC Remoto o reduce tu selección.`;
+                        if (!document.getElementById('ia-model-helper')) document.getElementById('ia-model-form').appendChild(helper);
+                        return;
+                    }
+
+                    document.getElementById('ia-model-form').style.display = 'block';
+                    data.models.forEach(model => {
+                        const opt = document.createElement('option');
+                        opt.value = model;
+                        opt.innerText = model;
+                        selectBox.appendChild(opt);
+                    });
+                    newStartBtn.disabled = false;
+                    
+                    const helper = document.getElementById('ia-model-helper') || document.createElement('div');
+                    helper.id = 'ia-model-helper';
+                    helper.className = 'mt-3 small';
+                    helper.innerHTML = isLocal 
+                        ? `<span class="text-muted">Modo Local Activo (Límite: 50 eventos).</span>`
+                        : `<span class="text-success"><i class="bi bi-lightning-charge-fill me-1"></i> Modo Remoto Alta Capacidad Activo (Límite: 500 eventos).</span>`;
+                    if (!document.getElementById('ia-model-helper')) document.getElementById('ia-model-form').appendChild(helper);
+                    
+                } else {
+                    document.getElementById('ia-model-error').style.display = 'block';
+                    document.getElementById('ia-model-error').innerText = "No se encontraron modelos instalados en Ollama.";
+                }
+            })
+            .catch(e => {
+                document.getElementById('ia-model-loading').style.display = 'none';
+                document.getElementById('ia-model-error').style.display = 'block';
+                document.getElementById('ia-model-error').innerText = "Error de conexión al escanear Ollama.";
+            });
+            
+        newStartBtn.addEventListener('click', () => {
+            const selectedModel = document.getElementById('ia-model-dropdown').value;
+            modal.hide();
+            
+            document.getElementById('tl-ia-status').style.display = 'block';
+            document.getElementById('tl-ia-status').innerText = `Enviando a IA (${selectedModel})...`;
+            
+            fetch(`/api/ia/analyze_selection`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ 
+                    case_id: activeCaseNumber, 
+                    event_ids: Array.from(tlState.selectedIds),
+                    model: selectedModel
+                })
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'ok') {
+                    pollIAJob(data.job_id);
+                } else {
+                    document.getElementById('tl-ia-status').innerText = "Error: " + data.message;
+                }
+            });
         });
     });
 });
@@ -5549,7 +5788,9 @@ function pollIAJob(jobId) {
                     statusDiv.innerText = `Analizando... ${job.progress}%`;
                     if (job.status === 'done') {
                         clearInterval(iv);
-                        statusDiv.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> Análisis listo</span><br><small><a href="#" onclick="alert('Resultados en: ${job.result_path}')">Ver Ruta</a></small>`;
+                        const fileName = job.result_path ? job.result_path.split(/[\\/]/).pop() : '';
+                        statusDiv.innerHTML = `<span class="text-success"><i class="bi bi-check-circle"></i> Síntesis completada</span> <br><button class="btn btn-sm btn-outline-success mt-2" onclick="document.querySelector('a[data-section=\\'section-ia\\']').click(); if(typeof loadRealIaReport === 'function') loadRealIaReport(activeCaseNumber, '${fileName}');">Ver Síntesis</button>`;
+                        showToast(`Síntesis generada exitosamente. Haz clic en 'Ver Síntesis' para leerla.`, "success");
                     } else if (job.status === 'error') {
                         clearInterval(iv);
                         statusDiv.innerText = "Error IA: " + job.error_msg;
@@ -5569,14 +5810,46 @@ function exitKiosk() {
             if(data.status === 'success') {
                 document.body.innerHTML = "<h2 style='color:white;text-align:center;margin-top:20%;'>Kiosko finalizado.<br>Cerrando sesión gráfica...</h2>";
             } else {
-                alert("Error al intentar cerrar el Kiosko: " + data.message);
+                showToast("Error al intentar cerrar el Kiosko: " + data.message, "error");
             }
         })
-        .catch(err => alert("Error de red al intentar salir: " + err));
+        .catch(err => showToast("Error de red al intentar salir: " + err, "error"));
     }
 }
-
 </script>
+
+<!-- Modal Selección Modelo IA -->
+<div class="modal fade" id="modal-ia-model-select" tabindex="-1" aria-hidden="true" data-bs-theme="dark">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content text-light bg-dark" style="border: 1px solid var(--border-color);">
+      <div class="modal-header" style="border-bottom: 1px solid var(--border-color);">
+        <h5 class="modal-title"><i class="bi bi-cpu text-primary"></i> Seleccionar Modelo IA</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-secondary small mb-3">Elige el motor de IA que se encargará de procesar tu síntesis. Asegúrate de que el equipo tenga suficiente memoria (RAM) para el modelo seleccionado.</p>
+        <div id="ia-model-loading" class="text-center py-3">
+            <div class="spinner-border text-primary spinner-border-sm" role="status"></div>
+            <span class="ms-2">Buscando modelos (despertando motor si es necesario)...</span>
+        </div>
+        <div id="ia-model-form" style="display: none;">
+            <label for="ia-model-dropdown" class="form-label">Modelos Instalados:</label>
+            <select class="form-select bg-dark text-light border-secondary" id="ia-model-dropdown">
+            </select>
+        </div>
+        <div id="ia-model-error" class="alert alert-danger mt-3" style="display: none;">
+            No se pudo conectar con Ollama.
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top: 1px solid var(--border-color);">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="btn-start-ia-sintesis" disabled>
+            <i class="bi bi-play-fill"></i> Empezar Análisis
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
 
 <script>
