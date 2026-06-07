@@ -527,7 +527,7 @@ def _es_imagen_valida(ruta):
         return False
     if os.path.splitext(ruta)[1].lower() not in FORMATOS_IMAGEN:
         return False
-    if os.path.getsize(ruta) < TAMANIO_MINIMO_BYTES:
+    if os.path.getsize(ruta) < TAMANO_MINIMO_BYTES:
         return False
     ruta_lower = ruta.lower()
     if any(excl in ruta_lower for excl in RUTAS_EXCLUIDAS):
@@ -599,8 +599,18 @@ def analizar_imagenes_en_masa(carpeta_caso, ollama_url_base, modelo_vlm):
         print(f"[PROGRESO:{pct}] Analizando imagen {idx}/{total}: {nombre}")
 
         try:
-            with open(ruta_img, 'rb') as f:
-                img_b64 = base64.b64encode(f.read()).decode('utf-8')
+            from PIL import Image
+            import io
+            with Image.open(ruta_img) as img:
+                # Convertir a RGB por si tiene transparencia (PNG) o es CMYK/BMP
+                if img.mode != 'RGB':
+                    img = img.convert('RGB')
+                # Redimensionar si es extremadamente grande para no saturar VRAM
+                img.thumbnail((1920, 1920))
+                
+                img_byte_arr = io.BytesIO()
+                img.save(img_byte_arr, format='JPEG', quality=85)
+                img_b64 = base64.b64encode(img_byte_arr.getvalue()).decode('utf-8')
 
             payload = {
                 "model": modelo_vlm,
