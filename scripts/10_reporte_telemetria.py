@@ -55,9 +55,18 @@ def generate_pdf(case_dir):
             ram_max = data.get("ram_mb_max", 0)
             temp_max = data.get("temp_c_max", 0)
             
+            start_time = data.get("start_time")
+            fecha_str = ""
+            if start_time:
+                try:
+                    from datetime import datetime as dt
+                    fecha_str = f" - {dt.fromtimestamp(start_time).strftime('%Y-%m-%d %H:%M:%S')}"
+                except:
+                    pass
+
             pdf.set_fill_color(240, 240, 240)
             pdf.set_font("Arial", 'B', 12)
-            pdf.cell(0, 10, f"Módulo Evaluado: {module}", border=1, ln=1, fill=True)
+            pdf.cell(0, 10, f"Módulo Evaluado: {module}{fecha_str}", border=1, ln=1, fill=True)
             
             pdf.set_font("Arial", size=10)
             
