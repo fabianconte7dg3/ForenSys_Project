@@ -2720,8 +2720,12 @@ function initSSE() {
                         if (pct < prev) return;
                         window[key] = pct;
 
+                        const pBar = document.getElementById(`${prefix}-progress-bar`);
+                        const pText = document.getElementById(`${prefix}-progress-text`);
+                        const pDetail = document.getElementById(`${prefix}-progress-detail`);
+
                         if (pBar)    pBar.style.width    = pct + '%';
-                        if (pText)   pText.textContent   = 'Progreso: ' + pct + '%';
+                        if (pText)   pText.textContent   = pct + '%';
                         if (pDetail) pDetail.textContent = detailStr;
 
                         if (pct >= 100) {
