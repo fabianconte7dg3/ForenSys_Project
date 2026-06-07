@@ -732,7 +732,8 @@ def run_ia():
             
             if telemetry:
                 logger_script = os.path.join(SCRIPTS_DIR, '10_telemetry_logger.py')
-                subprocess.Popen([sys.executable, logger_script, '--pid', str(proc.pid), '--module', 'Modulo_8_IA', '--case_dir', base_dest], start_new_session=True)
+                actual_case_dir = os.path.join(base_dest, caso_id)
+                subprocess.Popen([sys.executable, logger_script, '--pid', str(proc.pid), '--module', 'Modulo_8_IA', '--case_dir', actual_case_dir], start_new_session=True)
                 
             for line in iter(proc.stdout.readline, ''):
                 line = line.rstrip('\n')
