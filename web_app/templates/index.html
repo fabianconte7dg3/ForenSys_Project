@@ -4899,10 +4899,13 @@ function loadIaModels() {
         });
 }
 
-function updateIaModelDropdown() {
+function updateIaModelDropdown(forceModel) {
     const motor = document.getElementById('ia-motor-select').value;
     const select = document.getElementById('ia-model-input');
     const models = motor === 'local' ? iaModels.local : iaModels.remote;
+    
+    // Remember what was selected BEFORE rebuilding
+    const previousModel = forceModel || select.value;
     
     select.innerHTML = '';
     if (models.length === 0) {
@@ -4914,10 +4917,13 @@ function updateIaModelDropdown() {
         const opt = document.createElement('option');
         opt.value = m;
         opt.textContent = m;
-        // Seleccionar gemma:4b o similares por defecto si existe
-        if(m.includes('gemma4:e4b') || m.includes('gemma3:4b')) opt.selected = true;
         select.appendChild(opt);
     });
+    
+    // Restore previously selected model if still available
+    if (previousModel && [...select.options].some(o => o.value === previousModel)) {
+        select.value = previousModel;
+    }
 }
 
 function toggleIaRemoteHost() {
@@ -4934,6 +4940,17 @@ function loadIaConfig() {
             if (data.remote_host) {
                 document.getElementById('ia-host-input').value = data.remote_host;
             }
+            // Restaurar modelo preferido si estaba guardado
+            if (data.preferred_model) {
+                const sel = document.getElementById('ia-model-input');
+                // Intentar seleccionar de inmediato (si ya está en el dropdown)
+                if ([...sel.options].some(o => o.value === data.preferred_model)) {
+                    sel.value = data.preferred_model;
+                } else {
+                    // Guardarlo para cuando se carguen los modelos
+                    sel.dataset.pendingModel = data.preferred_model;
+                }
+            }
         })
         .catch(err => console.error("Error loading IA config:", err));
 }
@@ -4944,16 +4961,35 @@ function saveIaConfig() {
         addLogEntry('[ERROR] Ingresa una URL válida para el motor remoto.', 'log-error');
         return;
     }
+    // Capturar el modelo seleccionado ANTES de que el refresco lo resetee
+    const selectedModel = document.getElementById('ia-model-input').value;
+    
     fetch('/api/config/ia', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ remote_host: host, ctx: 4096, threads: 12 })
+        body: JSON.stringify({ remote_host: host, preferred_model: selectedModel, ctx: 8192, threads: 12 })
     })
     .then(r => r.json())
     .then(data => {
         if (data.status === 'success') {
-            addLogEntry('[OK] Configuración IA remota guardada en el disco externo.', 'log-success');
-            loadIaModels(); // Refrescar modelos del nuevo host
+            addLogEntry(`[OK] Configuración guardada. Modelo: ${selectedModel || '(auto)'}`, 'log-success');
+            // Refrescar modelos Y restaurar el modelo seleccionado
+            const btn = document.querySelector('button[onclick="loadIaModels()"]');
+            if (btn) btn.innerHTML = '<i class="bi bi-hourglass-split"></i>...';
+            const hostVal = document.getElementById('ia-host-input').value;
+            const url = '/api/config/ia/models' + (hostVal ? '?remote_host=' + encodeURIComponent(hostVal) : '');
+            fetch(url)
+                .then(r => r.json())
+                .then(scanData => {
+                    if (scanData.status === 'success') {
+                        iaModels.local = scanData.local;
+                        iaModels.remote = scanData.remote;
+                        // Pasar el modelo guardado para que se restaure
+                        updateIaModelDropdown(selectedModel);
+                        addLogEntry('[OK] Modelos IA detectados con éxito.', 'log-success');
+                    }
+                })
+                .finally(() => { if (btn) btn.innerHTML = '<i class="bi bi-search"></i> Escanear'; });
         } else {
             addLogEntry('[ERROR] ' + data.message, 'log-error');
         }
