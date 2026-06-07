@@ -861,6 +861,170 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido
     return exito
 
 # ==========================================
+# ANÁLISIS DOCUMENTAL INTELIGENTE (Document Intelligence)
+# ==========================================
+
+PROMPT_DOCS_FORENSE = (
+    "Eres un perito informático forense. Analiza el siguiente texto extraído de un documento "
+    "recuperado de una evidencia digital. Resume los puntos clave y extrae cualquier dato "
+    "de posible interés judicial (nombres de personas, empresas, correos, teléfonos, fechas, transacciones "
+    "o intenciones ocultas).\n\n"
+    "REGLA CRÍTICA: Sé conciso y objetivo. No alucines información.\n\n"
+    "Texto del documento:\n"
+    "{texto_documento}"
+)
+
+def _extraer_texto_documento(ruta):
+    """Intenta extraer texto de varios formatos ofimáticos y bases de datos."""
+    ext = os.path.splitext(ruta)[1].lower()
+    texto_extraido = ""
+    try:
+        if ext == '.pdf':
+            import PyPDF2
+            with open(ruta, 'rb') as f:
+                reader = PyPDF2.PdfReader(f)
+                for i in range(min(len(reader.pages), 50)): # Max 50 paginas
+                    t = reader.pages[i].extract_text()
+                    if t: texto_extraido += t + "\n"
+        elif ext == '.docx':
+            import docx
+            doc = docx.Document(ruta)
+            texto_extraido = "\n".join([p.text for p in doc.paragraphs])
+        elif ext == '.xlsx':
+            import openpyxl
+            wb = openpyxl.load_workbook(ruta, data_only=True, read_only=True)
+            for sheet in wb.worksheets:
+                for row in sheet.iter_rows(values_only=True):
+                    row_vals = [str(v) for v in row if v is not None]
+                    if row_vals: texto_extraido += " | ".join(row_vals) + "\n"
+        elif ext == '.pptx':
+            import pptx
+            prs = pptx.Presentation(ruta)
+            for slide in prs.slides:
+                for shape in slide.shapes:
+                    if hasattr(shape, "text"):
+                        texto_extraido += shape.text + "\n"
+        elif ext == '.msg':
+            import extract_msg
+            msg = extract_msg.Message(ruta)
+            texto_extraido = f"De: {msg.sender}\nPara: {msg.to}\nFecha: {msg.date}\nAsunto: {msg.subject}\n\n{msg.body}"
+        elif ext == '.eml':
+            import email
+            with open(ruta, 'rb') as f:
+                msg = email.message_from_binary_file(f)
+                texto_extraido = f"De: {msg.get('From')}\nPara: {msg.get('To')}\nAsunto: {msg.get('Subject')}\n\n"
+                for part in msg.walk():
+                    if part.get_content_type() == "text/plain":
+                        texto_extraido += part.get_payload(decode=True).decode(errors='ignore')
+        elif ext in ['.db', '.sqlite', '.sqlite3']:
+            import sqlite3
+            conn = sqlite3.connect(ruta)
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
+            tablas = cursor.fetchall()
+            for t in tablas:
+                tabla = t[0]
+                texto_extraido += f"--- TABLA: {tabla} ---\n"
+                cursor.execute(f"PRAGMA table_info({tabla});")
+                cols = [c[1] for c in cursor.fetchall()]
+                texto_extraido += "Columnas: " + ", ".join(cols) + "\n"
+                cursor.execute(f"SELECT * FROM {tabla} LIMIT 20;")
+                filas = cursor.fetchall()
+                for fila in filas:
+                    texto_extraido += str(fila) + "\n"
+            conn.close()
+        elif ext in ['.txt', '.csv', '.json', '.xml']:
+            with open(ruta, 'r', encoding='utf-8', errors='ignore') as f:
+                texto_extraido = f.read()
+    except Exception as e:
+        return f"[Error extrayendo texto: {e}]"
+    
+    return texto_extraido[:100000]  # Limite máximo de caracteres por documento
+
+def analizar_documentos_en_masa(carpeta_caso, ollama_url_base, modelo_llm):
+    """
+    Escanea documentos en el caso, extrae texto y lo envía a la IA remota para su resumen.
+    Aprovecha la ventana de contexto masiva de 65536 tokens.
+    """
+    if 'localhost' in ollama_url_base or '127.0.0.1' in ollama_url_base:
+        print("[!] FASE DOCUMENTAL omitida: requiere motor remoto (PC Potente) para manejar contextos grandes.")
+        return ''
+
+    print("[PROGRESO:36] FASE DOCUMENTAL: Escaneando documentos ofimáticos, correos y BDs...")
+    formatos_soportados = {'.pdf', '.docx', '.xlsx', '.pptx', '.msg', '.eml', '.db', '.sqlite', '.sqlite3', '.txt', '.csv'}
+    rutas_excluidas = ('cache', 'temp', '__pycache__', 'system32')
+    
+    docs_encontrados = []
+    for raiz, _, archivos in os.walk(carpeta_caso):
+        for archivo in archivos:
+            ruta_completa = os.path.join(raiz, archivo)
+            ext = os.path.splitext(ruta_completa)[1].lower()
+            if ext in formatos_soportados and os.path.getsize(ruta_completa) > 100:
+                if not any(excl in ruta_completa.lower() for excl in rutas_excluidas):
+                    docs_encontrados.append(ruta_completa)
+    
+    if not docs_encontrados:
+        print("    [!] No se encontraron documentos analizables. Fase omitida.")
+        return ''
+        
+    docs_encontrados.sort(key=lambda p: os.path.getsize(p), reverse=True)
+    docs_a_analizar = docs_encontrados[:20] # Max 20 documentos más grandes
+    
+    total = len(docs_a_analizar)
+    print(f"    [+] Documentos encontrados: {len(docs_encontrados)} | A analizar por IA: {total}")
+    
+    url_generate = ollama_url_base.rstrip('/') + "/api/generate"
+    descripciones = []
+    
+    for idx, ruta_doc in enumerate(docs_a_analizar, 1):
+        nombre = os.path.basename(ruta_doc)
+        pct = 36 + int((idx / total) * 15) # Progreso de 36 a 51%
+        print(f"[PROGRESO:{pct}] Analizando documento {idx}/{total}: {nombre}")
+        
+        texto_crudo = _extraer_texto_documento(ruta_doc)
+        if not texto_crudo.strip():
+            print("        [-] No se pudo extraer texto. Omitido.")
+            continue
+            
+        payload = {
+            "model": modelo_llm,
+            "prompt": PROMPT_DOCS_FORENSE.format(texto_documento=texto_crudo),
+            "stream": False,
+            "options": {
+                "temperature": 0.0,
+                "num_ctx": 65536, # Ventana máxima
+            }
+        }
+        
+        try:
+            resp = requests.post(url_generate, json=payload, timeout=300)
+            if resp.status_code == 200:
+                res_json = resp.json()
+                analisis = res_json.get("response", "").strip()
+                descripciones.append(f"**Documento:** {nombre}\n**Ruta:** {ruta_doc.replace(carpeta_caso, '')}\n**Análisis Inteligente:**\n{analisis}\n")
+                print(f"        [+] Resumen de {len(analisis)} caracteres generado.")
+            else:
+                print(f"        [-] Error de motor: {resp.status_code}")
+        except Exception as e:
+            print(f"        [-] Error de red/timeout: {e}")
+            
+    if not descripciones:
+        return ''
+        
+    ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+    ruta_reporte = os.path.join(carpeta_caso, "03_Results_(Resultados_Extraidos)", f"Docs_IA_Completo_{ts}.md")
+    contenido_final = "# ANÁLISIS DOCUMENTAL INTELIGENTE (DOCUMENT INTELLIGENCE)\n\n" + "\n---\n".join(descripciones)
+    
+    try:
+        with open(ruta_reporte, 'w', encoding='utf-8') as f:
+            f.write(contenido_final)
+        print(f"[PROGRESO:52] [+] Reporte documental guardado: {ruta_reporte}")
+    except Exception as e:
+        print(f"    [!] No se pudo guardar reporte documental: {e}")
+        
+    return contenido_final
+
+# ==========================================
 # INICIO — Modo no interactivo (para Web o CLI)
 # ==========================================
 if __name__ == "__main__":
@@ -882,6 +1046,8 @@ if __name__ == "__main__":
                         help="Número de hilos CPU (sobreescribe el perfil del motor)")
     parser.add_argument("--vision",  action="store_true", default=False,
                         help="Activar análisis visual masivo de imágenes (requiere motor remoto VLM)")
+    parser.add_argument("--docs",  action="store_true", default=False,
+                        help="Activar análisis inteligente de documentos, bases de datos y correos (extrae texto y resume)")
     args = parser.parse_args()
 
     # Validar y limpiar ID de caso (anti path-traversal)
@@ -993,6 +1159,23 @@ if __name__ == "__main__":
             print(f"[+] Análisis visual integrado en la evidencia ({len(resumen_visual)} chars adicionales).")
     else:
         print("[INFO] Análisis visual omitido (usa --vision para activarlo con motor remoto).")
+
+    # FASE 2.5 (OPCIONAL): Análisis Documental Masivo
+    resumen_documental = ''
+    if args.docs:
+        carpeta_caso_base = os.path.join(directorio_base_actual, caso_id)
+        resumen_documental = analizar_documentos_en_masa(carpeta_caso_base, OLLAMA_BASE_URL, MODELO_LLM)
+        if resumen_documental:
+            # Inyectar el resumen documental en la evidencia textual antes de la síntesis
+            bloque_docs = (
+                "\n--- ANÁLISIS DE DOCUMENTOS (IA) ---\n"
+                + resumen_documental
+                + "\n--- FIN ANÁLISIS DE DOCUMENTOS ---\n"
+            )
+            evidencia_filtrada += bloque_docs
+            print(f"[+] Análisis documental integrado en la evidencia ({len(resumen_documental)} chars adicionales).")
+    else:
+        print("[INFO] Análisis documental omitido (usa --docs para activarlo con motor remoto).")
 
     # Análisis IA (FASE 3: Síntesis final)
     print(f"[PROGRESO:60] Transmitiendo evidencia al LLM (motor: {perfil_nombre})...")
