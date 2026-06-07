@@ -98,6 +98,64 @@ def generate_pdf(case_dir):
         except Exception as e:
             print(f"[TELEMETRÍA] Error leyendo {j_file}: {e}")
 
+    # ===== AUDITORÍA DE IA (MÓDULO 8) =====
+    ia_files = glob.glob(os.path.join(case_dir, "03_Results_(Resultados_Extraidos)", "Auditoria_IA_*.json"))
+    if ia_files:
+        for ia_file in sorted(ia_files):
+            try:
+                with open(ia_file, 'r') as f:
+                    ia_data = json.load(f)
+                
+                pdf.set_fill_color(240, 240, 240)
+                pdf.set_font("Arial", 'B', 12)
+                pdf.cell(0, 10, f"Módulo Evaluado: Auditoría de IA (Módulo 8)", border=1, ln=1, fill=True)
+                pdf.set_font("Arial", size=10)
+                
+                modelo = ia_data.get("modelo", "N/A")
+                motor_url = ia_data.get("motor_url", "N/A")
+                tokens = ia_data.get("tokens_count", 0)
+                estado = ia_data.get("estado", "N/A")
+                confianza = ia_data.get("alucinaciones", {}).get("confianza", "N/A")
+                
+                pdf.cell(50, 8, "Modelo LLM:", 0, 0)
+                pdf.cell(0, 8, f"{modelo}", 0, 1)
+                
+                pdf.cell(50, 8, "Motor:", 0, 0)
+                pdf.cell(0, 8, f"{motor_url}", 0, 1)
+                
+                pdf.cell(50, 8, "Tokens Procesados:", 0, 0)
+                pdf.cell(0, 8, f"{tokens} tokens", 0, 1)
+                
+                pdf.cell(50, 8, "Nivel de Confianza:", 0, 0)
+                pdf.cell(0, 8, f"{confianza}", 0, 1)
+                
+                pdf.cell(50, 8, "Estado del Análisis:", 0, 0)
+                pdf.cell(0, 8, f"{estado}", 0, 1)
+                
+                # Calcular tiempo si tenemos timestamps
+                t_ini = ia_data.get("timestamp_inicio_utc")
+                t_fin = ia_data.get("timestamp_fin_utc")
+                if t_ini and t_fin:
+                    try:
+                        from datetime import datetime as dt
+                        fmt = "%Y-%m-%dT%H:%M:%S.%f"
+                        d1 = dt.strptime(t_ini, fmt)
+                        d2 = dt.strptime(t_fin, fmt)
+                        dur = (d2 - d1).total_seconds()
+                        pdf.cell(50, 8, "Tiempo de Inferencia:", 0, 0)
+                        pdf.cell(0, 8, f"{dur:.2f} segundos", 0, 1)
+                        if dur > 0:
+                            speed = tokens / dur
+                            pdf.cell(50, 8, "Velocidad de Generación:", 0, 0)
+                            pdf.cell(0, 8, f"{speed:.2f} tokens/s", 0, 1)
+                    except Exception:
+                        pass
+                
+                pdf.ln(5)
+            except Exception as e:
+                print(f"[TELEMETRÍA] Error leyendo {ia_file}: {e}")
+
+
     out_pdf = os.path.join(case_dir, "Reporte_Rendimiento_Hardware.pdf")
     try:
         pdf.output(out_pdf)
