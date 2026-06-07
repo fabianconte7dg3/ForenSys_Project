@@ -3949,7 +3949,7 @@ function runOperation(btnId) {
             addLogEntry('[ERROR] No hay caso activo.', 'log-error');
             return;
         }
-        command = `/home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/09_reporte_pdf.py --caso ${activeCaseNumber}`;
+        command = `/home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/09_reporte_pdf.py --caso ${activeCaseNumber} --dest /home/ciber-admin/ForenSys_Project/Casos_ForenSys`;
         const pReportContainer = document.getElementById('report-progress-container');
         if (pReportContainer) {
             pReportContainer.style.display = 'block';
