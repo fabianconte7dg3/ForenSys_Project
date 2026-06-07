@@ -619,7 +619,11 @@ def analizar_imagenes_en_masa(carpeta_caso, ollama_url_base, modelo_vlm):
                 "stream": False,
                 "options": {
                     "temperature": 0.0,
-                    "num_ctx": 2048  # Ventana reducida por imagen — el VLM procesa la imagen aparte
+                    "num_ctx": 98304,
+                    "num_gpu": 42,
+                    "top_k": 10,
+                    "top_p": 0.5,
+                    "repeat_penalty": 1.2
                 }
             }
 
@@ -709,19 +713,26 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido
 
     # Dynamic hardware capacity check
     is_local = "localhost" in OLLAMA_BASE_URL or "127.0.0.1" in OLLAMA_BASE_URL
-    current_ctx = RPI_CTX if is_local else PC_CTX
+    current_ctx = RPI_CTX if is_local else 98304
     current_threads = RPI_THREAD if is_local else PC_THREAD
+
+    options = {
+        "temperature": 0.0,
+        "top_p": 0.5,
+        "num_ctx": current_ctx,
+        "num_thread": current_threads
+    }
+    
+    if not is_local:
+        options["num_gpu"] = 42
+        options["top_k"] = 10
+        options["repeat_penalty"] = 1.2
 
     carga_util = {
         "model": MODELO_LLM,
         "prompt": prompt_final,
         "stream": True,
-        "options": {
-            "temperature": 0.0,
-            "top_p": 0.1,
-            "num_ctx": current_ctx,
-            "num_thread": current_threads
-        },
+        "options": options,
         "keep_alive": KEEP_ALIVE
     }
 
@@ -730,12 +741,7 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido
         "timestamp_inicio_utc": datetime.utcnow().isoformat(),
         "modelo": MODELO_LLM,
         "motor_url": OLLAMA_BASE_URL,
-        "parametros": {
-            "temperature": 0.0,
-            "top_p": 0.1,
-            "num_ctx": current_ctx,
-            "num_thread": current_threads,
-        },
+        "parametros": options,
         "evidencia_sha256": hashlib.sha256(evidencia_cruda.encode('utf-8', errors='replace')).hexdigest(),
         "prompt_sha256":    hashlib.sha256(prompt_final.encode('utf-8', errors='replace')).hexdigest(),
         "tokens_count":     0,
@@ -992,7 +998,11 @@ def analizar_documentos_en_masa(carpeta_caso, ollama_url_base, modelo_llm):
             "stream": False,
             "options": {
                 "temperature": 0.0,
-                "num_ctx": 65536, # Ventana máxima
+                "num_ctx": 98304,
+                "num_gpu": 42,
+                "top_k": 10,
+                "top_p": 0.5,
+                "repeat_penalty": 1.2
             }
         }
         
