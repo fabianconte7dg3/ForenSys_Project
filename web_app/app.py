@@ -456,60 +456,60 @@ def list_case_results(raw_caso_id):
                         continue
                         
                     ruta_completa = os.path.join(root, f)
-                try:
-                    stat = os.stat(ruta_completa)
-                    size_kb = round(stat.st_size / 1024, 1)
-                    if size_kb == 0: continue # Skip empty files
+                    try:
+                        stat = os.stat(ruta_completa)
+                        size_kb = round(stat.st_size / 1024, 1)
+                        if size_kb == 0: continue # Skip empty files
                     
-                    ext = os.path.splitext(f)[1].lower()
-                    tipo = "binario"
-                    categoria = "Evidencia: Otros"
-                    icono = "bi-file-earmark-binary"
-                    color = "#94a3b8"
+                        ext = os.path.splitext(f)[1].lower()
+                        tipo = "binario"
+                        categoria = "Evidencia: Otros"
+                        icono = "bi-file-earmark-binary"
+                        color = "#94a3b8"
 
-                    if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg']:
-                        tipo = "imagen"
-                        categoria = "Evidencia: Imágenes"
-                        icono = "bi-image"
-                        color = "#f472b6"
-                    elif ext in ['.mp4', '.mkv', '.avi', '.mov', '.wmv']:
-                        tipo = "video"
-                        categoria = "Evidencia: Videos"
-                        icono = "bi-film"
-                        color = "#38bdf8"
-                    elif ext in ['.mp3', '.wav', '.ogg', '.flac']:
-                        tipo = "audio"
-                        categoria = "Evidencia: Audios"
-                        icono = "bi-music-note-beamed"
-                        color = "#a78bfa"
-                    elif ext in ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt']:
-                        tipo = "documento"
-                        categoria = "Evidencia: Documentos"
-                        icono = "bi-file-earmark-text"
-                        color = "#fbbf24"
-                    elif ext in ['.exe', '.dll', '.bat', '.ps1', '.sh']:
-                        tipo = "ejecutable"
-                        categoria = "Evidencia: Ejecutables"
-                        icono = "bi-file-earmark-code"
-                        color = "#ef4444"
-                    
-                    # Guardamos ruta relativa para el endpoint de descarga
-                    rel_path = os.path.relpath(ruta_completa, os.path.join(CASES_BASE_DIR, caso_id))
-                    
-                    resultado.append({
-                        "key":      f"recuperado_{archivos_encontrados}",
-                        "filename": f,
-                        "filepath": rel_path,
-                        "tipo":     tipo,
-                        "categoria":categoria,
-                        "icono":    icono,
-                        "color":    color,
-                        "size_kb":  size_kb,
-                        "ruta_abs": ruta_completa,
-                    })
-                    archivos_encontrados += 1
-                except Exception:
-                    pass
+                        if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg']:
+                            tipo = "imagen"
+                            categoria = "Evidencia: Imágenes"
+                            icono = "bi-image"
+                            color = "#f472b6"
+                        elif ext in ['.mp4', '.mkv', '.avi', '.mov', '.wmv']:
+                            tipo = "video"
+                            categoria = "Evidencia: Videos"
+                            icono = "bi-film"
+                            color = "#38bdf8"
+                        elif ext in ['.mp3', '.wav', '.ogg', '.flac']:
+                            tipo = "audio"
+                            categoria = "Evidencia: Audios"
+                            icono = "bi-music-note-beamed"
+                            color = "#a78bfa"
+                        elif ext in ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt']:
+                            tipo = "documento"
+                            categoria = "Evidencia: Documentos"
+                            icono = "bi-file-earmark-text"
+                            color = "#fbbf24"
+                        elif ext in ['.exe', '.dll', '.bat', '.ps1', '.sh']:
+                            tipo = "ejecutable"
+                            categoria = "Evidencia: Ejecutables"
+                            icono = "bi-file-earmark-code"
+                            color = "#ef4444"
+                        
+                        # Guardamos ruta relativa para el endpoint de descarga
+                        rel_path = os.path.relpath(ruta_completa, os.path.join(CASES_BASE_DIR, caso_id))
+                        
+                        resultado.append({
+                            "key":      f"recuperado_{archivos_encontrados}",
+                            "filename": f,
+                            "filepath": rel_path,
+                            "tipo":     tipo,
+                            "categoria":categoria,
+                            "icono":    icono,
+                            "color":    color,
+                            "size_kb":  size_kb,
+                            "ruta_abs": ruta_completa,
+                        })
+                        archivos_encontrados += 1
+                    except Exception:
+                        pass
 
     if request.headers.get('HX-Request'):
         if not resultado:
