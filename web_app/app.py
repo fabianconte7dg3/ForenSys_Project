@@ -711,7 +711,7 @@ def run_ia():
 
     def run_in_thread():
         global running_proc
-        cmd = ['python3', script_path, '--caso', caso_id, '--dest', base_dest, '--motor', motor]
+        cmd = [sys.executable, script_path, '--caso', caso_id, '--dest', base_dest, '--motor', motor]
         if modelo:
             cmd.extend(['--model', modelo])
         if motor == 'remoto':
@@ -1198,7 +1198,7 @@ def set_readonly():
         
     try:
         # Ejecuta el script de python con sudo que ya está autorizado en sudoers sin contraseña
-        subprocess.run(['sudo', 'python3', '/home/ciber-admin/ForenSys_Project/scripts/02_deadbox_v2.py', '-t', target_disk, '--set-readonly-only'], check=True, capture_output=True, text=True)
+        subprocess.run(['sudo', sys.executable, '/home/ciber-admin/ForenSys_Project/scripts/02_deadbox_v2.py', '-t', target_disk, '--set-readonly-only'], check=True, capture_output=True, text=True)
         return jsonify({"status": "success", "message": "Bloqueador activado."})
     except subprocess.CalledProcessError as e:
         push_log(f'[ERROR] Falló activación readonly: {e.stderr}', 'error')
@@ -1222,7 +1222,7 @@ def run_timeline():
 
     try:
         # Iniciamos el proceso inyectando los argumentos recogidos de la web
-        comando = ['sudo', 'python3', script_path, '--caso', caso_id, '--ruta', ruta_evidencia]
+        comando = ['sudo', sys.executable, script_path, '--caso', caso_id, '--ruta', ruta_evidencia]
         proceso = subprocess.Popen(comando, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         
         return jsonify({
