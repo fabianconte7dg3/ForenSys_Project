@@ -15,4 +15,5 @@ fi
 echo "[*] Levantando aplicación web..."
 cd "$PROJECT_DIR"
 source venv/bin/activate
+pip install -q -r requirements.txt
 python3 web_app/app.py
