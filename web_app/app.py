@@ -399,6 +399,8 @@ def list_case_results(raw_caso_id):
         {"key": "archivos_borrados",       "filename": "Archivos_Borrados_Recuperados.jsonl", "tipo": "jsonl","categoria": "Recuperación y Anomalías","icono": "bi-trash3-fill",            "color": "#fcd34d"},
         {"key": "metadatos_multimedia",    "filename": "Metadatos_Multimedia.csv",             "tipo": "csv",  "categoria": "Recuperación y Anomalías","icono": "bi-camera-fill",            "color": "#fcd34d"},
         {"key": "sintesis_ia",              "filename": f"Sintesis_IA_{caso_id}.md",         "tipo": "md",   "categoria": "Síntesis IA",           "icono": "bi-robot",                  "color": "#fca5a5"},
+        {"key": "vision_ia",                "filename": f"Vision_IA_Completo_{caso_id}_*.md", "tipo": "md",   "categoria": "Visión Artificial (IA)",  "icono": "bi-eye-fill",               "color": "#fb7185"},
+        {"key": "docs_ia",                  "filename": f"Docs_IA_Completo_{caso_id}_*.md",   "tipo": "md",   "categoria": "Document Intelligence (IA)", "icono": "bi-file-earmark-text-fill", "color": "#fb7185"},
         {"key": "auditoria_ia",             "filename": f"Auditoria_IA_{caso_id}_*.json",    "tipo": "json", "categoria": "Síntesis IA",           "icono": "bi-filetype-json",          "color": "#fb923c"},
     ]
 
