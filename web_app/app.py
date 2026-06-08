@@ -436,16 +436,26 @@ def list_case_results(raw_caso_id):
             "size_kb":  size_kb,
         })
 
-    ruta_recuperados = os.path.join(CASES_BASE_DIR, caso_id, "02_Views_(Vistas)", "File_Types")
-    if os.path.exists(ruta_recuperados):
-        archivos_encontrados = 0
-        for root, dirs, files in os.walk(ruta_recuperados):
-            if archivos_encontrados >= 1000:
-                break
-            for f in files:
+    rutas_a_buscar = [
+        os.path.join(CASES_BASE_DIR, caso_id, "02_Views_(Vistas)", "File_Types"),
+        os.path.join(CASES_BASE_DIR, caso_id, "01_Images_(Fuentes_de_datos)")
+    ]
+    archivos_encontrados = 0
+    for ruta_recuperados in rutas_a_buscar:
+        if os.path.exists(ruta_recuperados):
+            for root, dirs, files in os.walk(ruta_recuperados):
                 if archivos_encontrados >= 1000:
                     break
-                ruta_completa = os.path.join(root, f)
+                for f in files:
+                    if archivos_encontrados >= 1000:
+                        break
+                    
+                    # Ignorar las imágenes de disco grandes o bases de datos de extracción
+                    ext_check = os.path.splitext(f)[1].lower()
+                    if ext_check in ['.dd', '.e01', '.s01', '.raw', '.img', '.sqlite']:
+                        continue
+                        
+                    ruta_completa = os.path.join(root, f)
                 try:
                     stat = os.stat(ruta_completa)
                     size_kb = round(stat.st_size / 1024, 1)
