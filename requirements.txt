@@ -58,4 +58,4 @@ PyMuPDF==1.24.4
 regipy==6.2.1
 pefile==2024.8.26
 maigret==0.6.1
-reportlab==4.3.0
+reportlab==4.4.3
