@@ -43,6 +43,8 @@ ExecStart=/usr/bin/cage -s -- \
     --disable-software-rasterizer \
     --ignore-gpu-blocklist \
     --use-gl=egl \
+    --touch-events=enabled \
+    --enable-features=TouchpadOverscrollHistoryNavigation \
     http://127.0.0.1:5000
 
 Restart=on-failure

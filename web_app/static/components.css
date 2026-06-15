@@ -47,6 +47,15 @@
             background-color: var(--bg-root);
             color: var(--text-primary);
             overflow: hidden;
+            /* Optimizacion Pantalla Tactil Kiosco */
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: pan-y;
+        }
+
+        input, textarea {
+            user-select: text;
+            -webkit-user-select: text;
         }
 
         /* ================================================================

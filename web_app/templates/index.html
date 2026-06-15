@@ -18,6 +18,8 @@
     <script src="{{ url_for('static', filename='vendor/vis-timeline/vis-timeline-graph2d.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/cytoscape/cytoscape.min.js') }}"></script>
     <script src="{{ url_for('static', filename='web-components.js') }}"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='simple-keyboard/index.css') }}">
+    <script src="{{ url_for('static', filename='simple-keyboard/index.js') }}"></script>
     <style>
         /* Fallback offline robusto para reemplazar Google Fonts cuando no hay internet */
         :root {
@@ -5922,6 +5924,132 @@ if ('serviceWorker' in navigator) {
       });
   });
 }
+</script>
+<div id="keyboard-container" class="simple-keyboard-container" style="display: none; position: fixed; bottom: 0; left: 0; width: 100%; z-index: 1050; background: #0b0e18; padding: 10px; border-top: 1px solid #2a3050; box-shadow: 0 -5px 20px rgba(0,0,0,0.5);">
+    <div class="d-flex justify-content-end mb-2">
+        <button id="close-keyboard-btn" class="btn btn-sm btn-outline-secondary">Cerrar Teclado ▼</button>
+    </div>
+    <div class="simple-keyboard"></div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const Keyboard = window.SimpleKeyboard.default;
+    let selectedInput = null;
+
+    const keyboard = new Keyboard({
+        onChange: input => onChange(input),
+        onKeyPress: button => onKeyPress(button),
+        layout: {
+            'default': [
+                "1 2 3 4 5 6 7 8 9 0 - {bksp}",
+                "q w e r t y u i o p",
+                "a s d f g h j k l",
+                "{shift} z x c v b n m , .",
+                "{space}"
+            ],
+            'shift': [
+                "! @ # $ % ^ & * ( ) _ {bksp}",
+                "Q W E R T Y U I O P",
+                "A S D F G H J K L",
+                "{shift} Z X C V B N M < >",
+                "{space}"
+            ]
+        },
+        theme: "hg-theme-default hg-layout-default myTheme",
+        display: {
+            '{bksp}': 'Borrar ⌫',
+            '{enter}': 'Intro ↵',
+            '{shift}': 'Shift ⇧',
+            '{space}': 'Espacio',
+            '{tab}': 'Tab ⇥',
+            '{lock}': 'Mayús ⇪'
+        }
+    });
+
+    const keyboardContainer = document.getElementById('keyboard-container');
+    const closeBtn = document.getElementById('close-keyboard-btn');
+
+    closeBtn.addEventListener('click', () => {
+        keyboardContainer.style.display = 'none';
+        selectedInput = null;
+    });
+
+    // Detect all text inputs to trigger the keyboard
+    document.querySelectorAll('input[type="text"], textarea').forEach(input => {
+        input.addEventListener('focus', onInputFocus);
+        input.addEventListener('input', onInputChange);
+        input.addEventListener('click', onInputFocus); // Help with touch devices
+    });
+
+    function onInputFocus(event) {
+        selectedInput = event.target;
+        // Don't open if input is readonly
+        if (selectedInput.readOnly || selectedInput.disabled) return;
+
+        // Set the internal value of the keyboard to match the input
+        keyboard.setInput(event.target.value);
+        keyboardContainer.style.display = 'block';
+        
+        // Scroll slightly so the keyboard doesn't hide the input
+        setTimeout(() => {
+            selectedInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+    }
+
+    function onInputChange(event) {
+        if (selectedInput === event.target) {
+            keyboard.setInput(event.target.value);
+        }
+    }
+
+    function onChange(input) {
+        if (selectedInput) {
+            selectedInput.value = input;
+            selectedInput.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    }
+
+    function onKeyPress(button) {
+        if (button === "{shift}" || button === "{lock}") {
+            handleShift();
+        }
+    }
+
+    function handleShift() {
+        const currentLayout = keyboard.options.layoutName;
+        const shiftToggle = currentLayout === "default" ? "shift" : "default";
+
+        keyboard.setOptions({
+            layoutName: shiftToggle
+        });
+    }
+
+    // Custom CSS injection for the keyboard to match ForenSys dark theme
+    const style = document.createElement('style');
+    style.innerHTML = `
+        .myTheme {
+            background-color: transparent;
+        }
+        .myTheme .hg-button {
+            background: #131727;
+            color: #d8dff5;
+            border-bottom: 1px solid #2a3050;
+            box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+            height: 55px;
+            font-size: 1.2rem;
+            border-radius: 8px;
+        }
+        .myTheme .hg-button:active {
+            background: #3b82f6;
+            color: white;
+        }
+        .simple-keyboard-container {
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+    `;
+    document.head.appendChild(style);
+});
 </script>
 </body>
 </html>
