@@ -508,7 +508,7 @@ def list_case_results(raw_caso_id):
                             color = "#ef4444"
                         
                         # Guardamos ruta relativa para el endpoint de descarga
-                        rel_path = os.path.relpath(ruta_completa, os.path.join(CASES_BASE_DIR, caso_id))
+                        rel_path = os.path.relpath(ruta_completa, caso_dir)
                         
                         resultado.append({
                             "key":      f"recuperado_{archivos_encontrados}",

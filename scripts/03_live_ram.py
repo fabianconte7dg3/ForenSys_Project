@@ -319,7 +319,7 @@ def analizar_ram(mem_file, caso_id, perito):
 
     for carpeta in [carpeta_images, carpeta_views, carpeta_results]:
         os.makedirs(carpeta, exist_ok=True)
-        os.chmod(carpeta, 0o700)  # Seguridad: Restricción de permisos (CRÍTICA 3)
+        os.chmod(carpeta, 0o755)  # Seguridad: Read-only para web app, write para root
 
     log(f"\n[*] Caso:   {caso_id}")
     log(f"[*] Perito: {perito}")
