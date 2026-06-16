@@ -641,32 +641,39 @@ def recopilar_inteligencia_ram(carpeta_resultados, es_local=True):
     # Procesar en orden de relevancia primero, luego el resto
     nombres_ordenados = ORDEN_RELEVANCIA + [k for k in sorted(archivos_ram.keys())
                                              if k not in ORDEN_RELEVANCIA]
+    # Solo los que realmente existen en el caso
+    nombres_a_procesar = [n for n in nombres_ordenados if n in archivos_ram]
+    total_plugins = len(nombres_a_procesar)
 
-    for nombre_base in nombres_ordenados:
-        if nombre_base not in archivos_ram:
-            continue
+    for idx, nombre_base in enumerate(nombres_a_procesar):
         ruta_txt = archivos_ram[nombre_base]
-        
-        # Reservamos al menos 200 chars para no cortar a la mitad
-        if presupuesto <= 200:
-            print(f"    [!] Presupuesto de contexto agotado. Omitiendo: {nombre_base}")
+
+        # Reservamos siempre 100 chars de margen
+        if presupuesto <= 100:
+            print(f"    [!] Presupuesto agotado. Omitiendo: {nombre_base}")
             continue
-            
+
         try:
             with open(ruta_txt, 'r', encoding='utf-8', errors='ignore') as f:
                 contenido = f.read().strip()
             if not contenido:
                 continue
             etiqueta = PLUGIN_LABELS.get(nombre_base, f"Plugin RAM: {nombre_base}")
-            
-            # Algunos plugins como pslist o pstree son inmensos.
-            # Diferenciamos el límite si es la RPi5 local o un PC Remoto
-            tope_chars = 1500 if es_local else 8000
-            limite_por_plugin = min(presupuesto - 150, tope_chars)
-            
+
+            # Repartir presupuesto restante proporcionalmente entre los plugins pendientes.
+            # Esto garantiza que TODOS los plugins relevantes (netscan, malfind, etc.)
+            # siempre tengan espacio, independientemente del motor (local o remoto).
+            plugins_pendientes = max(total_plugins - idx, 1)
+            cuota_equitativa = presupuesto // plugins_pendientes
+
+            # Para el motor local (RPi5), la cuota máxima es 1500 por plugin.
+            # Para el motor remoto, la cuota es generosa (25000) para aprovechar el contexto largo.
+            cuota_maxima = 1500 if es_local else 25000
+            limite_por_plugin = min(cuota_equitativa, cuota_maxima)
+
             if len(contenido) > limite_por_plugin:
-                contenido = contenido[:limite_por_plugin] + "\n[...TRUNCADO para permitir otros plugins...]"
-                
+                contenido = contenido[:limite_por_plugin] + "\n[...TRUNCADO — contenido completo disponible en el archivo .txt del caso...]"
+
             evidencia_texto, presupuesto = _agregar_bloque(
                 evidencia_texto, presupuesto, etiqueta, contenido + "\n")
             fuentes_cargadas.append(nombre_base)
@@ -675,7 +682,7 @@ def recopilar_inteligencia_ram(carpeta_resultados, es_local=True):
 
     caracteres_total = len(evidencia_texto)
     if fuentes_cargadas:
-        print(f"    [+] Plugins cargados: {', '.join(fuentes_cargadas)}")
+        print(f"    [+] Plugins cargados ({len(fuentes_cargadas)}/{total_plugins}): {', '.join(fuentes_cargadas)}")
         print(f"    [+] Evidencia RAM empaquetada: {caracteres_total} caracteres (límite: {MAX_CARACTERES_EVIDENCIA})")
     else:
         print("    [!] ADVERTENCIA: No se encontraron reportes .txt de plugins RAM.")
@@ -1305,9 +1312,15 @@ if __name__ == "__main__":
     if args.model:
         MODELO_LLM = args.model.strip()
 
-    # Escalar presupuesto de evidencia según el contexto (NUM_CTX) del motor elegido
-    # 1 token ≈ 3.5 caracteres. Dejamos 30% reservado para el prompt y la respuesta del LLM.
-    MAX_CARACTERES_EVIDENCIA = int(NUM_CTX * 3.5 * 0.70)
+    # Escalar el presupuesto de evidencia según el contexto real del motor elegido.
+    # Si la ia_config.json tiene ctx configurado se usa ese, si no se aplica un mínimo seguro.
+    # Motor remoto sin 'ctx' en config: usamos 50k como piso mínimo (conservador pero útil).
+    if "localhost" in OLLAMA_BASE_URL or "127.0.0.1" in OLLAMA_BASE_URL:
+        # RPi5 local: 2048 tokens * 3.5 chars/token * 70% libre = ~5000 chars
+        MAX_CARACTERES_EVIDENCIA = int(NUM_CTX * 3.5 * 0.70)
+    else:
+        # PC Remoto: usar el contexto configurado o un mínimo de 50,000 chars seguros
+        MAX_CARACTERES_EVIDENCIA = max(int(NUM_CTX * 3.5 * 0.70), 50000)
 
     imprimir_banner()
     print(f"[PROGRESO:5] Iniciando Análisis Asistido por IA para el caso: {caso_id}")
