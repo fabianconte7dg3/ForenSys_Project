@@ -436,9 +436,13 @@ def list_case_results(raw_caso_id):
             "size_kb":  size_kb,
         })
 
+    # Directorios adicionales a escanear dinámicamente
     rutas_a_buscar = [
         os.path.join(CASES_BASE_DIR, caso_id, "02_Views_(Vistas)", "File_Types"),
-        os.path.join(CASES_BASE_DIR, caso_id, "01_Images_(Fuentes_de_datos)")
+        os.path.join(CASES_BASE_DIR, caso_id, "01_Images_(Fuentes_de_datos)"),
+        os.path.join(CASES_BASE_DIR, caso_id, "03_Results_(Resultados_Extraidos)", "RAM"),
+        os.path.join(CASES_BASE_DIR, caso_id, "03_Results_(Resultados_Extraidos)", "Mobile"),
+        os.path.join(CASES_BASE_DIR, caso_id, "03_Results_(Resultados_Extraidos)", "OSINT"),
     ]
     archivos_encontrados = 0
     for ruta_recuperados in rutas_a_buscar:
@@ -459,7 +463,7 @@ def list_case_results(raw_caso_id):
                     try:
                         stat = os.stat(ruta_completa)
                         size_kb = round(stat.st_size / 1024, 1)
-                        if size_kb == 0: continue # Skip empty files
+                        # No omitir archivos vacíos (size_kb == 0) porque en informática forense un archivo de log vacío es un hallazgo válido (ej. sin malware detectado).
                     
                         ext = os.path.splitext(f)[1].lower()
                         tipo = "binario"
