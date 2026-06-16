@@ -814,6 +814,29 @@
             box-shadow: 0 0 20px rgba(239,68,68,.15);
         }
 
+        #btn-unload-case {
+            display: none;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 28px;
+            background: linear-gradient(135deg, rgba(100,116,139,.15), rgba(15,23,42,.1));
+            border: 1px solid rgba(100,116,139,.35);
+            border-radius: var(--radius-sm);
+            color: #cbd5e1;
+            font-size: 0.88rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer;
+            transition: all var(--transition);
+            margin-left: 10px;
+        }
+        #btn-unload-case.visible { display: inline-flex; }
+        #btn-unload-case:hover {
+            background: linear-gradient(135deg, rgba(100,116,139,.25), rgba(15,23,42,.2));
+            box-shadow: 0 0 20px rgba(100,116,139,.15);
+        }
+
         /* ================================================================
            SHA-256 MODAL
            ================================================================ */

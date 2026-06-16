@@ -1292,8 +1292,12 @@
 
                             <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:8px;">
                                 <button type="button" class="" id="btn-close-case">
-                                    <i class="bi bi-lock-fill"></i>
-                                    <span>Cerrar y Exportar Caso</span>
+                                    <i class="bi bi-shield-lock-fill"></i>
+                                    <span>Cerrar con Hash Maestro</span>
+                                </button>
+                                <button type="button" class="" id="btn-unload-case">
+                                    <i class="bi bi-box-arrow-right"></i>
+                                    <span>Desmontar Expediente</span>
                                 </button>
                                 <button type="submit" class="btn-open-case" id="btn-open-case">
                                     <i class="bi bi-unlock-fill"></i>
@@ -3131,6 +3135,7 @@ document.addEventListener('DOMContentLoaded', () => {
 const caseForm        = document.getElementById('case-form');
 const btnOpenCase     = document.getElementById('btn-open-case');
 const btnCloseCase    = document.getElementById('btn-close-case');
+const btnUnloadCase   = document.getElementById('btn-unload-case');
 const navOps          = document.getElementById('nav-ops');
 const navExplorer     = document.getElementById('nav-explorer');
 const navSuperTimeline = document.getElementById('nav-supertimeline');
@@ -3218,6 +3223,7 @@ caseForm.addEventListener('submit', function(e) {
         btnOpenCase.appendChild(lockIcon);
         btnOpenCase.appendChild(lockSpan);
         btnCloseCase.classList.add('visible');
+        btnUnloadCase.classList.add('visible');
 
         // Unlock Operaciones nav
         navOps.classList.remove('disabled-nav');
@@ -3321,6 +3327,68 @@ btnCloseCase.addEventListener('click', function() {
     .catch(err => {
         addLogEntry('[ERROR] Fallo al cerrar caso: ' + err, 'log-error');
     });
+});
+
+// ── Unload Case (Desmontar Expediente) ──────────────────────────
+btnUnloadCase.addEventListener('click', function() {
+    if (!confirm("¿Deseas desmontar este caso de la interfaz visual? El caso quedará intacto en disco y podrás importarlo luego.")) return;
+    
+    // Clear locals and localStorage
+    activeCaseNumber = null;
+    activeCasePerito = null;
+    activeCasePath = null;
+    localStorage.removeItem('forensys_active_case_path');
+
+    // Reset Form Fields
+    const caseNumEl   = document.getElementById('case-number');
+    const peritoEl    = document.getElementById('investigator-name');
+    const classEl     = document.getElementById('case-class');
+    const notesEl     = document.getElementById('case-notes');
+    
+    [caseNumEl, peritoEl, classEl, notesEl].forEach(el => {
+        el.removeAttribute('readonly');
+        el.value = '';
+    });
+
+    // Reset Buttons
+    btnOpenCase.disabled = false;
+    btnOpenCase.replaceChildren();
+    const unlockIcon = document.createElement('i');
+    unlockIcon.className = 'bi bi-unlock-fill';
+    const unlockSpan = document.createElement('span');
+    unlockSpan.textContent = 'Crear Expediente Seguro';
+    btnOpenCase.appendChild(unlockIcon);
+    btnOpenCase.appendChild(unlockSpan);
+
+    btnCloseCase.classList.remove('visible');
+    btnUnloadCase.classList.remove('visible');
+
+    // Hide Topbar items
+    activeCaseBar.classList.remove('visible');
+    caseIndicator.classList.remove('visible');
+    custodyBanner.classList.remove('visible');
+
+    // Lock Navigation Tabs
+    const tabsToLock = [
+        {nav: navOps, badge: opsLockBadge},
+        {nav: navExplorer, badge: explorerLockBadge},
+        {nav: navSuperTimeline, badge: supertimelineLockBadge}
+    ];
+
+    tabsToLock.forEach(t => {
+        t.nav.classList.add('disabled-nav');
+        t.badge.textContent = '';
+        t.badge.removeAttribute('style'); // Reset inline styles
+        const lIcon = document.createElement('i');
+        lIcon.className = 'bi bi-lock-fill me-1';
+        t.badge.appendChild(lIcon);
+        t.badge.appendChild(document.createTextNode('Bloqueado'));
+    });
+
+    // Switch view to Case management tab
+    document.querySelector('.nav-item-custom[data-section="section-case"]').click();
+
+    addLogEntry('[SISTEMA] Expediente desmontado de la vista. Listo para un nuevo caso.', 'log-info');
 });
 
 function closeHashModal() {
@@ -3742,6 +3810,7 @@ function loadCaseInUI(caso, notasTxt) {
     } else {
         btnCloseCase.classList.remove('visible');
     }
+    btnUnloadCase.classList.add('visible');
 
     // Desbloquear navegación
     navOps.classList.remove('disabled-nav');
