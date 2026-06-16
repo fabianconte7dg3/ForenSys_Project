@@ -7,5 +7,5 @@ export WLR_RENDERER=pixman
 # ^^^ Forzar renderizado por software (pixman) — evita pantalla azul por crash EGL/GPU en RPi5
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 700 "$XDG_RUNTIME_DIR"
-exec cage -s -- chromium-browser --kiosk --noerrdialogs --disable-infobars --no-sandbox --disable-dev-shm-usage --ozone-platform=wayland --disable-gpu --disable-software-rasterizer --use-gl=egl --touch-events=enabled --enable-features=TouchpadOverscrollHistoryNavigation http://127.0.0.1:5000
+exec cage -s -- chromium-browser --kiosk --noerrdialogs --disable-infobars --disable-translate --disable-features=Translate --no-sandbox --disable-dev-shm-usage --ozone-platform=wayland --disable-gpu --disable-software-rasterizer --use-gl=egl --touch-events=enabled --enable-features=TouchpadOverscrollHistoryNavigation http://127.0.0.1:5000
 
