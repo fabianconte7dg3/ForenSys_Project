@@ -481,6 +481,10 @@ def list_case_results(raw_caso_id):
                         icono = "bi-file-earmark-binary"
                         color = "#94a3b8"
 
+                        # Contexto del subdirectorio para clasificación semántica
+                        sub_rel = os.path.relpath(root, ruta_recuperados)
+                        in_ram_dir = 'RAM' in ruta_recuperados
+
                         if ext in ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg']:
                             tipo = "imagen"
                             categoria = "Evidencia: Imágenes"
@@ -496,16 +500,53 @@ def list_case_results(raw_caso_id):
                             categoria = "Evidencia: Audios"
                             icono = "bi-music-note-beamed"
                             color = "#a78bfa"
-                        elif ext in ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt']:
-                            tipo = "documento"
-                            categoria = "Evidencia: Documentos"
-                            icono = "bi-file-earmark-text"
-                            color = "#fbbf24"
                         elif ext in ['.exe', '.dll', '.bat', '.ps1', '.sh']:
                             tipo = "ejecutable"
                             categoria = "Evidencia: Ejecutables"
                             icono = "bi-file-earmark-code"
                             color = "#ef4444"
+                        elif in_ram_dir and ext in ['.txt', '.json', '.jsonl']:
+                            # Archivos de plugins de Volatility3 — clasificar por nombre
+                            tipo = "ram_plugin"
+                            nombre_base = os.path.splitext(f)[0].lower()
+                            if any(k in nombre_base for k in ['netscan', 'netscan', 'sockstat', 'netstat', 'netfilter']):
+                                categoria = "RAM: Conexiones de Red"
+                                icono = "bi-diagram-3-fill"
+                                color = "#38bdf8"
+                            elif any(k in nombre_base for k in ['pslist', 'pstree', 'cmdline']):
+                                categoria = "RAM: Procesos"
+                                icono = "bi-cpu-fill"
+                                color = "#a78bfa"
+                            elif any(k in nombre_base for k in ['malfind', 'dlllist']):
+                                categoria = "RAM: Malware / Código"
+                                icono = "bi-bug-fill"
+                                color = "#ef4444"
+                            elif any(k in nombre_base for k in ['hashdump', 'credentials']):
+                                categoria = "RAM: Credenciales"
+                                icono = "bi-key-fill"
+                                color = "#fcd34d"
+                            elif any(k in nombre_base for k in ['bash', 'lsof', 'info']):
+                                categoria = "RAM: Sistema"
+                                icono = "bi-terminal-fill"
+                                color = "#6ee7b7"
+                            elif 'resumen' in nombre_base:
+                                categoria = "RAM: Resumen del Análisis"
+                                icono = "bi-clipboard2-data-fill"
+                                color = "#93c5fd"
+                            else:
+                                categoria = "RAM: Análisis de Memoria"
+                                icono = "bi-memory"
+                                color = "#93c5fd"
+                        elif ext in ['.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.txt']:
+                            tipo = "documento"
+                            categoria = "Evidencia: Documentos"
+                            icono = "bi-file-earmark-text"
+                            color = "#fbbf24"
+                        elif ext in ['.json', '.jsonl', '.csv']:
+                            tipo = "datos"
+                            categoria = "Evidencia: Datos"
+                            icono = "bi-filetype-json"
+                            color = "#c4b5fd"
                         
                         # Guardamos ruta relativa para el endpoint de descarga
                         rel_path = os.path.relpath(ruta_completa, caso_dir)

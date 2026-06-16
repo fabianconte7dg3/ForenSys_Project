@@ -220,23 +220,23 @@ def ejecutar_plugin_aislado(vol_path, args_list, timeout=300):
 def run_plugin(vol_path, mem_file, plugin, output_base, timeout=300):
     """
     Ejecuta un plugin de Volatility3.
-    Guarda salida en JSON (.json) y texto legible (.txt).
+    Guarda salida en texto (.txt) y JSON (.json).
     Retorna (exito, mensaje_error).
     """
-    # 1. Formato JSON
-    result = ejecutar_plugin_aislado(vol_path, ['-f', mem_file, '--output-format', 'json', plugin], timeout)
-    if result.returncode == 0 and result.stdout.strip():
-        with open(output_base + '.json', 'w', encoding='utf-8') as f:
-            f.write(result.stdout)
-    elif result.returncode != 0:
-        error_msg = (result.stderr or result.stdout or 'Sin detalles')[:500]
-        return False, error_msg
-
-    # 2. Formato texto legible
+    # 1. Formato texto legible (el primero, más confiable)
     result_txt = ejecutar_plugin_aislado(vol_path, ['-f', mem_file, plugin], timeout)
     if result_txt.returncode == 0 and result_txt.stdout.strip():
         with open(output_base + '.txt', 'w', encoding='utf-8') as f:
             f.write(result_txt.stdout)
+    elif result_txt.returncode != 0:
+        error_msg = (result_txt.stderr or result_txt.stdout or 'Sin detalles')[:500]
+        return False, error_msg
+
+    # 2. Formato JSON (Volatility 3 usa -r json, NO --output-format)
+    result_json = ejecutar_plugin_aislado(vol_path, ['-f', mem_file, '-r', 'json', plugin], timeout)
+    if result_json.returncode == 0 and result_json.stdout.strip():
+        with open(output_base + '.json', 'w', encoding='utf-8') as f:
+            f.write(result_json.stdout)
 
     return True, None
 
