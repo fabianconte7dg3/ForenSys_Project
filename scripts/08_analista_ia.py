@@ -897,16 +897,13 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido
     prompt_plantilla = PROMPT_RAM_FORENSE if modo_ram else PROMPT_ASISTENTE
     prompt_final = prompt_plantilla.format(evidencia_cruda=evidencia_sanitizada)
 
-    # Dynamic hardware capacity check
     is_local = "localhost" in OLLAMA_BASE_URL or "127.0.0.1" in OLLAMA_BASE_URL
-    current_ctx = RPI_CTX if is_local else 98304
-    current_threads = RPI_THREAD if is_local else PC_THREAD
 
     options = {
         "temperature": 0.0,
         "top_p": 0.5,
-        "num_ctx": current_ctx,
-        "num_thread": current_threads
+        "num_ctx": NUM_CTX,
+        "num_thread": NUM_THREAD
     }
     
     if not is_local:
