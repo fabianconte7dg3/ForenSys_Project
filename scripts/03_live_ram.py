@@ -23,6 +23,12 @@ from datetime import datetime
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa, padding
 
+# ── Python del entorno virtual (tiene todos los plugins Volatility3) ────────
+VENV_PYTHON = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'venv', 'bin', 'python3')
+# Si el venv no existe (ej. en CI), fallback al python del sistema
+if not os.path.exists(VENV_PYTHON):
+    VENV_PYTHON = sys.executable
+
 # ── Configuración de rutas ─────────────────────────────────────────
 def cargar_config():
     """Cargar rutas desde archivo de configuración o usar defaults seguros."""
@@ -60,20 +66,26 @@ def get_case_base(caso_id):
 # ── Plugins por SO ─────────────────────────────────────────────────
 PLUGIN_SETS = {
     'windows': [
-        ('windows.info.Info',         'info',         'Informacion del sistema Windows'),
-        ('windows.pslist.PsList',     'pslist',       'Lista de procesos activos'),
-        ('windows.pstree.PsTree',     'pstree',       'Arbol jerarquico de procesos'),
-        ('windows.cmdline.CmdLine',   'cmdline',      'Lineas de comando ejecutadas'),
-        ('windows.netscan.NetScan',   'netscan',      'Conexiones de red activas'),
-        ('windows.malfind.Malfind',   'malfind',      'Inyecciones de codigo (shellcode)'),
-        ('windows.dlllist.DllList',   'dlllist',      'DLLs cargadas por proceso'),
-        ('windows.hashdump.Hashdump', 'hashdump',     'Hashes NTLM de contrasenas'),
+        ('windows.info.Info',                   'info',               'Informacion del sistema Windows'),
+        ('windows.pslist.PsList',               'pslist',             'Lista de procesos activos'),
+        ('windows.pstree.PsTree',               'pstree',             'Arbol jerarquico de procesos'),
+        ('windows.cmdline.CmdLine',             'cmdline',            'Lineas de comando ejecutadas'),
+        ('windows.netscan.NetScan',             'netscan',            'Conexiones de red activas (netscan)'),
+        ('windows.netstat.NetStat',             'netstat',            'Conexiones de red (netstat)'),
+        ('windows.malfind.Malfind',             'malfind',            'Inyecciones de codigo (shellcode)'),
+        ('windows.dlllist.DllList',             'dlllist',            'DLLs cargadas por proceso'),
+        ('windows.hashdump.Hashdump',           'hashdump',           'Hashes NTLM de contrasenas'),
+        ('windows.registry.hivelist.HiveList',  'registry_hivelist',  'Lista de colmenas del registro'),
+        ('windows.registry.userassist.UserAssist', 'userassist',      'Actividad del usuario (UserAssist)'),
+        ('windows.svcscan.SvcScan',             'svcscan',            'Servicios del sistema'),
+        ('windows.filescan.FileScan',           'filescan',           'Archivos abiertos en memoria'),
+        ('windows.handles.Handles',             'handles',            'Handles de procesos'),
     ],
     'linux': [
         ('linux.pslist.PsList',       'pslist',       'Lista de procesos activos'),
         ('linux.pstree.PsTree',       'pstree',       'Arbol jerarquico de procesos'),
         ('linux.bash.Bash',           'bash_history', 'Historial de comandos bash'),
-        ('linux.netfilter.NetFilter', 'netfilter',    'Reglas de firewall en memoria'),
+        ('linux.netfilter.Netfilter', 'netfilter',    'Reglas de firewall en memoria'),
         ('linux.malfind.Malfind',     'malfind',      'Inyecciones de codigo'),
         ('linux.lsof.Lsof',          'lsof',         'Archivos abiertos por proceso'),
         ('linux.sockstat.Sockstat',   'sockstat',     'Estado de sockets de red'),
@@ -150,7 +162,7 @@ def verificar_integridad_volatility(vol_path):
 
 def validar_plugins_volatility(vol_path):
     """Verificar que los plugins básicos pueden cargar sin errores fatal."""
-    result = subprocess.run(['python3', vol_path, '-h'], capture_output=True, text=True)
+    result = subprocess.run([VENV_PYTHON, vol_path, '-h'], capture_output=True, text=True)
     if result.returncode != 0:
          print("[X] ALERTA: Volatility3 no pudo inicializarse. Plugins corruptos o faltantes.")
          sys.exit(1)
@@ -199,7 +211,7 @@ def ejecutar_plugin_aislado(vol_path, args_list, timeout=300):
 
     try:
         result = subprocess.run(
-            ['python3', vol_path] + args_list,
+            [VENV_PYTHON, vol_path] + args_list,
             preexec_fn=limitar_recursos,
             capture_output=True, text=True, timeout=timeout
         )
@@ -251,7 +263,7 @@ def detect_os(vol_path, mem_file):
     # Intento 1: Windows
     try:
         result = subprocess.run(
-            ['python3', vol_path, '-f', mem_file, 'windows.info.Info'],
+            [VENV_PYTHON, vol_path, '-f', mem_file, 'windows.info.Info'],
             capture_output=True, text=True, timeout=60
         )
         if result.returncode == 0 and ('NtBuildLab' in result.stdout or 'KdDebuggerData' in result.stdout):
@@ -263,7 +275,7 @@ def detect_os(vol_path, mem_file):
     # Intento 2: Banners (Linux/macOS)
     try:
         result = subprocess.run(
-            ['python3', vol_path, '-f', mem_file, 'banners.Banners'],
+            [VENV_PYTHON, vol_path, '-f', mem_file, 'banners.Banners'],
             capture_output=True, text=True, timeout=60
         )
         if result.returncode == 0:
@@ -280,7 +292,7 @@ def detect_os(vol_path, mem_file):
     # Intento 3: Linux pslist directo
     try:
         result = subprocess.run(
-            ['python3', vol_path, '-f', mem_file, 'linux.pslist.PsList'],
+            [VENV_PYTHON, vol_path, '-f', mem_file, 'linux.pslist.PsList'],
             capture_output=True, text=True, timeout=60
         )
         if result.returncode == 0 and result.stdout.strip():
