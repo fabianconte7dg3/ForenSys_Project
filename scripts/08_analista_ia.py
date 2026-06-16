@@ -102,7 +102,10 @@ PROMPT_ASISTENTE = """Eres un ASISTENTE DE ANÁLISIS FORENSE (no un perito certi
 
 Tu rol es sintetizar y organizar la evidencia digital para facilitar el trabajo del perito humano. NO emites conclusiones legales ni reemplazas el análisis de un perito.
 
-INSTRUCCIONES (máximo 1000 palabras, formato Markdown):
+INSTRUCCIONES ESTRICTAS (máximo 1000 palabras, formato Markdown):
+TU TAREA ES EJECUTAR EL ANÁLISIS TÚ MISMO, LEYENDO LA EVIDENCIA RECOPILADA.
+ESTÁ ESTRICTAMENTE PROHIBIDO DAR METODOLOGÍAS, GUÍAS O DECIRLE AL USUARIO LO QUE DEBE HACER.
+DEBES EXTRAER, ENLISTAR Y REPORTAR LOS DATOS REALES PRESENTES EN LA EVIDENCIA.
 
 ## 1. Identificación del Equipo
 - Nombre del equipo, zona horaria, sistema operativo detectado.
@@ -129,8 +132,8 @@ INSTRUCCIONES (máximo 1000 palabras, formato Markdown):
 - Cámaras/dispositivos detectados en metadatos EXIF.
 
 ## 7. Síntesis Final (NO es conclusión pericial)
-- Párrafo final resumiendo hallazgos y señalando qué áreas requieren \
-investigación adicional por parte del perito. Incluir nivel de confianza global.
+- Párrafo final resumiendo las anomalías técnicas o hallazgos relevantes extraídos de la evidencia.
+- Basa esta síntesis ÚNICAMENTE en los datos que pudiste extraer. Incluir nivel de confianza global.
 
 REGLAS CRÍTICAS DE SEGURIDAD (GRADO 0.0 ALUCINACIONES):
 - NO inventes ni asumas datos, horas, archivos o usuarios. Solo analiza la evidencia proporcionada.
@@ -145,7 +148,7 @@ EVIDENCIA RECOPILADA:
 {evidencia_cruda}
 
 ---
-Basado estrictamente en las INSTRUCCIONES y la EVIDENCIA proporcionada arriba, genera AHORA la síntesis forense paso a paso en formato Markdown:
+Basado estrictamente en las INSTRUCCIONES y la EVIDENCIA proporcionada arriba, genera AHORA la síntesis forense paso a paso en formato Markdown. RECUERDA: NO des metodologías, ENLISTA LOS DATOS REALES EXTRAÍDOS DE LA EVIDENCIA:
 """
 
 
@@ -160,11 +163,14 @@ La ÚNICA fuente de evidencia disponible en este análisis es el volcado de memo
 NO existen datos de disco, historial web, registro de Windows ni otros artefactos de disco.
 Tu análisis DEBE limitarse estrictamente a lo que los reportes de Volatility3 muestran a continuación.
 
-INSTRUCCIONES (máximo 1000 palabras, formato Markdown):
+INSTRUCCIONES ESTRICTAS (máximo 1000 palabras, formato Markdown):
+TU TAREA ES EJECUTAR EL ANÁLISIS TÚ MISMO, LEYENDO LA EVIDENCIA CRUDA PROPORCIONADA AL FINAL.
+ESTÁ ESTRICTAMENTE PROHIBIDO DAR METODOLOGÍAS O GUÍAS. NO LE DIGAS AL USUARIO LO QUE DEBE HACER.
+DEBES EXTRAER, ENLISTAR Y REPORTAR LOS DATOS TÉCNICOS REALES PRESENTES EN LA EVIDENCIA.
 
 ## 1. Perfil del Sistema en Memoria
-- Sistema operativo detectado (versión de kernel, build).
-- Arquitectura del sistema (32/64 bits) si es observable.
+- Extrae y enlista el sistema operativo detectado (versión de kernel, build).
+- Extrae la arquitectura del sistema (32/64 bits) si es observable.
 - Fuente: windows.info.Info o banners.Banners de Volatility3.
 
 ## 2. Árbol de Procesos
@@ -190,9 +196,8 @@ INSTRUCCIONES (máximo 1000 palabras, formato Markdown):
 - Fuente: windows.svcscan.SvcScan / windows.dlllist.DllList.
 
 ## 6. Síntesis de Amenazas (NO es conclusión pericial)
-- Párrafo final indicando si hay señales de: malware activo, C2 (Command & Control),
-  movimiento lateral, exfiltración de datos, o uso de herramientas de post-explotación.
-- Indicar explícitamente qué hallazgos requieren análisis adicional por el perito.
+- Párrafo final resumiendo las amenazas técnicas reales encontradas en la evidencia (malware activo, C2, etc).
+- Basa esta síntesis ÚNICAMENTE en los datos técnicos que pudiste extraer y enlistar arriba.
 - Nivel de confianza global del análisis.
 
 REGLAS CRÍTICAS DE INTEGRIDAD FORENSE (GRADO 0.0 ALUCINACIONES):
@@ -209,7 +214,7 @@ EVIDENCIA DE MEMORIA VOLÁTIL (Volatility3):
 {evidencia_cruda}
 
 ---
-Basado estrictamente en las INSTRUCCIONES y la EVIDENCIA proporcionada arriba, genera AHORA el reporte forense paso a paso en formato Markdown:
+Basado estrictamente en las INSTRUCCIONES y la EVIDENCIA proporcionada arriba, genera AHORA el reporte forense paso a paso en formato Markdown. RECUERDA: NO des metodologías, ENLISTA LOS DATOS REALES EXTRAÍDOS DE LA EVIDENCIA:
 """
 
 
