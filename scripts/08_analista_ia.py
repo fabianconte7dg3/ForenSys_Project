@@ -150,6 +150,70 @@ REGLAS CRÍTICAS DE SEGURIDAD (GRADO 0.0 ALUCINACIONES):
 - Esta síntesis DEBE ser revisada y firmada por un perito antes de uso legal."""
 
 
+# ==========================================
+# PROMPT ESPECIALIZADO PARA ANÁLISIS EXCLUSIVO DE MEMORIA RAM
+# Se activa cuando NO hay normalización de disco previa.
+# Orienta al LLM exclusivamente hacia artefactos de memoria volátil.
+# ==========================================
+PROMPT_RAM_FORENSE = """Eres un ASISTENTE DE ANÁLISIS FORENSE DE MEMORIA RAM (no un perito certificado).
+
+La ÚNICA fuente de evidencia disponible en este análisis es el volcado de memoria RAM.
+NO existen datos de disco, historial web, registro de Windows ni otros artefactos de disco.
+Tu análisis DEBE limitarse estrictamente a lo que los reportes de Volatility3 muestran.
+
+Cada hallazgo debe indicar:
+1. Plugin de Volatility3 que aportó el dato (pslist, netscan, malfind, etc.)
+2. Nivel de confianza: BAJO / MEDIO / ALTO
+3. Si requiere validación manual por el perito
+
+EVIDENCIA DE MEMORIA VOLÁTIL (Volatility3):
+{evidencia_cruda}
+
+INSTRUCCIONES (máximo 1000 palabras, formato Markdown):
+
+## 1. Perfil del Sistema en Memoria
+- Sistema operativo detectado (versión de kernel, build).
+- Arquitectura del sistema (32/64 bits) si es observable.
+- Fuente: windows.info.Info o banners.Banners de Volatility3.
+
+## 2. Árbol de Procesos
+- Listar procesos activos con su PID, PPID y ruta de ejecutable.
+- Marcar procesos sospechosos: nombres ofuscados, rutas inusuales, procesos huérfanos.
+- Fuente: windows.pslist / windows.pstree.
+
+## 3. Conexiones de Red en Memoria
+- IPs locales y remotas con puertos activos al momento del volcado.
+- Identificar conexiones ESTABLISHED, LISTENING y CLOSE_WAIT.
+- Marcar IPs que no corresponden a rangos privados (RFC 1918) como potencialmente externas.
+- Fuente: windows.netscan.NetScan / windows.netstat.NetStat.
+
+## 4. Indicadores de Compromiso (IoC) en Memoria
+- Regiones de memoria sospechosas detectadas por malfind (shellcode, PE inyectado).
+- Procesos con código ejecutable en zonas no mapeadas (PAGE_EXECUTE_READWRITE).
+- Hashes NTLM de credenciales si hashdump tuvo éxito.
+- Fuente: windows.malfind.Malfind / windows.hashdump.Hashdump.
+
+## 5. Servicios y DLLs Cargadas
+- Servicios activos en memoria (svcscan) con estado y binario.
+- DLLs inusuales o cargadas en procesos no relacionados (dlllist).
+- Fuente: windows.svcscan.SvcScan / windows.dlllist.DllList.
+
+## 6. Síntesis de Amenazas (NO es conclusión pericial)
+- Párrafo final indicando si hay señales de: malware activo, C2 (Command & Control),
+  movimiento lateral, exfiltración de datos, o uso de herramientas de post-explotación.
+- Indicar explícitamente qué hallazgos requieren análisis adicional por el perito.
+- Nivel de confianza global del análisis.
+
+REGLAS CRÍTICAS DE INTEGRIDAD FORENSE (GRADO 0.0 ALUCINACIONES):
+- NO inventes procesos, IPs, rutas ni hashes que no estén en la evidencia proporcionada.
+- TRANSCRIBA los valores técnicos (PIDs, IPs, hashes, rutas) EXACTAMENTE como aparecen en la evidencia.
+- NO inferas usuarios, historial web ni datos de disco — esa fuente NO está disponible.
+- Si un plugin no produjo resultados o falló, indicar "Sin datos disponibles (plugin no ejecutado o fallido)".
+- Esta síntesis DEBE ser revisada y firmada por un perito antes de uso legal.
+- Toda afirmación DEBE tener referencia explícita al plugin de Volatility3 que la respalda."""
+
+
+
 def imprimir_banner():
     print("""
     ========================================================
@@ -500,8 +564,116 @@ def recopilar_inteligencia(carpeta_resultados):
 
 
 # ==========================================
-# ANÁLISIS VISUAL MASIVO (VLM Multimodal)
+# RECOPILADOR EXCLUSIVO DE MEMORIA RAM
+# Empaqueta solo los resultados de Volatility3 sin buscar
+# artefactos de disco. Cada bloque incluye el nombre del plugin
+# como fuente explícita (requisito de integridad forense).
 # ==========================================
+def recopilar_inteligencia_ram(carpeta_resultados):
+    """
+    Lee todos los reportes .txt de la subcarpeta RAM/ y los empaqueta
+    como evidencia para el LLM, identificando cada bloque con el plugin
+    de Volatility3 que lo generó.
+    Retorna el texto de evidencia o '' si no hay nada.
+    """
+    carpeta_ram = os.path.join(carpeta_resultados, "RAM")
+    if not os.path.exists(carpeta_ram):
+        print(f"    [!] Carpeta RAM no encontrada en: {carpeta_ram}")
+        return ""
+
+    print(f"[*] Modo RAM-SOLO: Empaquetando reportes de Volatility3 desde {carpeta_ram}...")
+
+    # Mapa de nombre de archivo → descripción del plugin (para la etiqueta del bloque)
+    PLUGIN_LABELS = {
+        'info':              'windows.info.Info (Sistema operativo / versión kernel)',
+        'pslist':            'windows.pslist.PsList (Lista de procesos activos)',
+        'pstree':            'windows.pstree.PsTree (Árbol jerárquico de procesos)',
+        'cmdline':           'windows.cmdline.CmdLine (Líneas de comando de procesos)',
+        'netscan':           'windows.netscan.NetScan (Conexiones de red — escaneado)',
+        'netstat':           'windows.netstat.NetStat (Conexiones de red — estado)',
+        'malfind':           'windows.malfind.Malfind (Inyecciones de código en memoria)',
+        'dlllist':           'windows.dlllist.DllList (DLLs cargadas por proceso)',
+        'hashdump':          'windows.hashdump.Hashdump (Hashes NTLM de contraseñas)',
+        'registry_hivelist': 'windows.registry.hivelist.HiveList (Colmenas del registro en memoria)',
+        'userassist':        'windows.registry.userassist.UserAssist (Actividad del usuario en memoria)',
+        'svcscan':           'windows.svcscan.SvcScan (Servicios del sistema)',
+        'filescan':          'windows.filescan.FileScan (Archivos abiertos en memoria)',
+        'handles':           'windows.handles.Handles (Handles de procesos)',
+        'resumen_analisis_ram': 'Resumen general del análisis RAM (metadata)',
+    }
+
+    evidencia_texto = ""
+    presupuesto = MAX_CARACTERES_EVIDENCIA
+    fuentes_cargadas = []
+
+    # Primero: leer el resumen JSON si existe (datos de firma del volcado)
+    ruta_resumen_json = os.path.join(carpeta_ram, "resumen_analisis_ram.json")
+    if os.path.exists(ruta_resumen_json):
+        try:
+            with open(ruta_resumen_json, 'r', encoding='utf-8', errors='ignore') as f:
+                resumen = json.load(f)
+            # Extraer datos clave del JSON sin alucinaciones
+            resumen_texto = (
+                f"Archivo volcado: {resumen.get('archivo', 'Desconocido')}\n"
+                f"SHA-256 del volcado: {resumen.get('sha256', 'No calculado')}\n"
+                f"SO detectado: {resumen.get('so_detectado', 'Desconocido')}\n"
+                f"Fecha de análisis: {resumen.get('fecha_analisis', 'Desconocida')}\n"
+                f"Plugins exitosos: {resumen.get('plugins_exitosos', '?')} / "
+                f"Plugins fallidos: {resumen.get('plugins_fallidos', '?')}\n"
+            )
+            evidencia_texto, presupuesto = _agregar_bloque(
+                evidencia_texto, presupuesto, "METADATOS DEL VOLCADO RAM", resumen_texto)
+            fuentes_cargadas.append("Metadatos volcado")
+        except Exception as e:
+            print(f"    [!] No se pudo leer resumen JSON: {e}")
+
+    # Segundo: leer cada reporte .txt en orden de relevancia forense
+    ORDEN_RELEVANCIA = ['info', 'pslist', 'pstree', 'netscan', 'netstat', 'malfind',
+                        'cmdline', 'hashdump', 'svcscan', 'dlllist', 'filescan',
+                        'handles', 'registry_hivelist', 'userassist']
+
+    archivos_ram = {
+        os.path.splitext(f)[0]: os.path.join(carpeta_ram, f)
+        for f in os.listdir(carpeta_ram) if f.endswith('.txt')
+    }
+
+    # Procesar en orden de relevancia primero, luego el resto
+    nombres_ordenados = ORDEN_RELEVANCIA + [k for k in sorted(archivos_ram.keys())
+                                             if k not in ORDEN_RELEVANCIA]
+
+    for nombre_base in nombres_ordenados:
+        if nombre_base not in archivos_ram:
+            continue
+        ruta_txt = archivos_ram[nombre_base]
+        if presupuesto <= 100:
+            print("    [!] Presupuesto de caracteres agotado. Plugins restantes omitidos.")
+            break
+        try:
+            with open(ruta_txt, 'r', encoding='utf-8', errors='ignore') as f:
+                contenido = f.read().strip()
+            if not contenido:
+                continue
+            etiqueta = PLUGIN_LABELS.get(nombre_base, f"Plugin RAM: {nombre_base}")
+            # Respetar presupuesto: truncar si es necesario pero dejar siempre la cabecera
+            if len(contenido) > presupuesto - 200:
+                contenido = contenido[:presupuesto - 250] + "\n[...TRUNCADO por presupuesto de contexto...]"
+            evidencia_texto, presupuesto = _agregar_bloque(
+                evidencia_texto, presupuesto, etiqueta, contenido + "\n")
+            fuentes_cargadas.append(nombre_base)
+        except Exception as e:
+            print(f"    [!] Error leyendo {nombre_base}.txt: {e}")
+
+    caracteres_total = len(evidencia_texto)
+    if fuentes_cargadas:
+        print(f"    [+] Plugins cargados: {', '.join(fuentes_cargadas)}")
+        print(f"    [+] Evidencia RAM empaquetada: {caracteres_total} caracteres (límite: {MAX_CARACTERES_EVIDENCIA})")
+    else:
+        print("    [!] ADVERTENCIA: No se encontraron reportes .txt de plugins RAM.")
+
+    return evidencia_texto
+
+
+
 
 PROMPT_VISION_FORENSE = (
     "Eres un asistente forense digital. Analiza esta imagen recuperada de un "
@@ -675,7 +847,7 @@ def analizar_imagenes_en_masa(carpeta_caso, ollama_url_base, modelo_vlm):
         return ''
 
 
-def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido=None):
+def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido=None, modo_ram=False):
     """
     Envía el prompt y evidencia al LLM con streaming.
     Genera:
@@ -683,8 +855,10 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido
       - Registro de auditoría JSON firmado con SHA-256 (ruta_auditoria)  [CRÍTICA 4]
     Aplica sanitización anti-prompt-injection antes de construir el prompt.  [CRÍTICA 6]
     Detecta posibles alucinaciones al finalizar.                             [CRÍTICA 7]
+    Parámetro modo_ram: si True, usa PROMPT_RAM_FORENSE (sin referencias a disco).
     Retorna True si fue exitoso, False en caso contrario.
     """
+
     global MODELO_LLM
     
     estado_motor = comprobar_ollama()
@@ -709,7 +883,9 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido
     # Sanitizar evidencia antes de inyectarla en el prompt
     evidencia_sanitizada = sanitizar_prompt_injection(evidencia_cruda)
 
-    prompt_final = PROMPT_ASISTENTE.format(evidencia_cruda=evidencia_sanitizada)
+    # Selección del prompt según el modo (RAM exclusivo vs. disco completo)
+    prompt_plantilla = PROMPT_RAM_FORENSE if modo_ram else PROMPT_ASISTENTE
+    prompt_final = prompt_plantilla.format(evidencia_cruda=evidencia_sanitizada)
 
     # Dynamic hardware capacity check
     is_local = "localhost" in OLLAMA_BASE_URL or "127.0.0.1" in OLLAMA_BASE_URL
@@ -741,6 +917,8 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido
         "timestamp_inicio_utc": datetime.utcnow().isoformat(),
         "modelo": MODELO_LLM,
         "motor_url": OLLAMA_BASE_URL,
+        "modo_analisis": "RAM_EXCLUSIVO" if modo_ram else "DISCO_COMPLETO",
+        "prompt_usado": "PROMPT_RAM_FORENSE" if modo_ram else "PROMPT_ASISTENTE",
         "parametros": options,
         "evidencia_sha256": hashlib.sha256(evidencia_cruda.encode('utf-8', errors='replace')).hexdigest(),
         "prompt_sha256":    hashlib.sha256(prompt_final.encode('utf-8', errors='replace')).hexdigest(),
@@ -1058,6 +1236,9 @@ if __name__ == "__main__":
                         help="Activar análisis visual masivo de imágenes (requiere motor remoto VLM)")
     parser.add_argument("--docs",  action="store_true", default=False,
                         help="Activar análisis inteligente de documentos, bases de datos y correos (extrae texto y resume)")
+    parser.add_argument("--ram-only", action="store_true", default=False,
+                        help="Analizar EXCLUSIVAMENTE los resultados de RAM (sin normalización de disco). "
+                             "Usa el prompt forense especializado en memoria volátil.")
     args = parser.parse_args()
 
     # Validar y limpiar ID de caso (anti path-traversal)
@@ -1138,20 +1319,44 @@ if __name__ == "__main__":
     carpeta_resultados = os.path.join(directorio_base_actual, caso_id, "03_Results_(Resultados_Extraidos)")
     if not os.path.exists(carpeta_resultados):
         print(f"[-] ERROR: No se encontró la carpeta de resultados en: {carpeta_resultados}")
-        print("    Asegúrate de haber ejecutado el Módulo 7 (Normalización) primero.")
+        print("    Asegúrate de haber ejecutado el Módulo 6 (Normalización) o el Módulo 3 (RAM) primero.")
         sys.exit(1)
+
+    # Determinar modo de análisis
+    carpeta_ram = os.path.join(carpeta_resultados, "RAM")
+    ram_disponible = os.path.exists(carpeta_ram) and bool([
+        f for f in os.listdir(carpeta_ram) if f.endswith('.txt')
+    ]) if os.path.exists(carpeta_ram) else False
+    maestro_disponible = os.path.exists(os.path.join(carpeta_resultados, "Reporte_Forense_Maestro.txt"))
+
+    # --ram-only forzado por el usuario, o auto-detectado si solo hay RAM y no hay normalización
+    modo_ram_exclusivo = getattr(args, 'ram_only', False)
+    if not modo_ram_exclusivo and ram_disponible and not maestro_disponible:
+        print("[*] Auto-detección: Solo se encontraron resultados de RAM (sin normalización de disco).")
+        print("    Activando modo RAM-SOLO automáticamente.")
+        modo_ram_exclusivo = True
 
     # Rutas de salida: síntesis + auditoría [CRÍTICA 4]
     ts = datetime.now().strftime('%Y%m%d_%H%M%S')
-    ruta_sintesis  = os.path.join(carpeta_resultados, f"Sintesis_IA_{caso_id}.md")
-    ruta_auditoria = os.path.join(carpeta_resultados, f"Auditoria_IA_{caso_id}_{ts}.json")
+    sufijo_modo = "_RAM" if modo_ram_exclusivo else ""
+    ruta_sintesis  = os.path.join(carpeta_resultados, f"Sintesis_IA{sufijo_modo}_{caso_id}.md")
+    ruta_auditoria = os.path.join(carpeta_resultados, f"Auditoria_IA{sufijo_modo}_{caso_id}_{ts}.json")
 
-    # Recopilar evidencia
-    print("[PROGRESO:30] Recopilando y filtrando evidencia de los módulos anteriores...")
-    evidencia_filtrada = recopilar_inteligencia(carpeta_resultados)
-    if len(evidencia_filtrada) < 50:
-        print("[-] Advertencia: Poca evidencia disponible. ¿Ejecutaste el Módulo 7?")
-        print("[-] Continuando con la evidencia disponible...")
+    # Recopilar evidencia según el modo
+    print("[PROGRESO:30] Recopilando y filtrando evidencia...")
+    if modo_ram_exclusivo:
+        print("    [*] Modo: ANÁLISIS EXCLUSIVO DE MEMORIA RAM")
+        evidencia_filtrada = recopilar_inteligencia_ram(carpeta_resultados)
+        if not evidencia_filtrada:
+            print("[-] ERROR: No se encontraron reportes de RAM. "
+                  "Asegúrate de haber ejecutado el Módulo 3 (Extracción RAM) primero.")
+            sys.exit(1)
+    else:
+        print("    [*] Modo: ANÁLISIS DE DISCO COMPLETO (con integración de RAM si existe)")
+        evidencia_filtrada = recopilar_inteligencia(carpeta_resultados)
+        if len(evidencia_filtrada) < 50:
+            print("[-] Advertencia: Poca evidencia disponible. ¿Ejecutaste el Módulo 6?")
+            print("[-] Continuando con la evidencia disponible...")
 
     # FASE 2 (OPCIONAL): Análisis Visual Masivo
     resumen_visual = ''
@@ -1189,7 +1394,9 @@ if __name__ == "__main__":
 
     # Análisis IA (FASE 3: Síntesis final)
     print(f"[PROGRESO:60] Transmitiendo evidencia al LLM (motor: {perfil_nombre})...")
-    analizar_con_ia(evidencia_filtrada, ruta_sintesis, ruta_auditoria)
+    if modo_ram_exclusivo:
+        print("    [*] Usando prompt especializado: PROMPT_RAM_FORENSE")
+    analizar_con_ia(evidencia_filtrada, ruta_sintesis, ruta_auditoria, modo_ram=modo_ram_exclusivo)
 
     if os.path.exists(ruta_sintesis):
         print(f"[PROGRESO:100] Síntesis de inteligencia guardada en: {ruta_sintesis}")

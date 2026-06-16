@@ -777,13 +777,25 @@ def run_ia():
     motor = data.get('motor', 'local').strip()
     modelo = data.get('modelo', '').strip()
     telemetry = data.get('telemetry', False)
+    ram_only = data.get('ram_only', False)  # Modo análisis exclusivo de RAM
+
+    # Auto-detectar modo RAM si no hay Reporte Maestro pero sí hay resultados RAM
+    if not ram_only:
+        carpeta_results = os.path.join(base_dest, caso_id, '03_Results_(Resultados_Extraidos)')
+        carpeta_ram = os.path.join(carpeta_results, 'RAM')
+        maestro = os.path.join(carpeta_results, 'Reporte_Forense_Maestro.txt')
+        if os.path.exists(carpeta_ram) and not os.path.exists(maestro):
+            ram_only = True
+            push_log(f'[INFO] Auto-detectado modo RAM-SOLO para caso {caso_id} (sin normalización de disco)', 'warn')
 
     def run_in_thread():
         global running_proc
         cmd = [sys.executable, script_path, '--caso', caso_id, '--dest', base_dest, '--motor', motor]
         if modelo:
             cmd.extend(['--model', modelo])
-        if motor == 'remoto':
+        if ram_only:
+            cmd.append('--ram-only')
+        elif motor == 'remoto':
             cmd.append('--vision')
             cmd.append('--docs')
             
