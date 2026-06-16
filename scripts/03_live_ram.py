@@ -34,13 +34,28 @@ def cargar_config():
             'volatility_path': config.get('tools', 'volatility_path', fallback=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'volatility3', 'vol.py')),
         }
     return {
-        'cases_base_dir': '/home/ciber-admin/ForenSys_Project/Casos_ForenSys', # Mantenemos retrocompatibilidad si no hay config
+        'cases_base_dir': '/mnt/Destino_ForenSys', # Default alineado con Kiosco y USB seguro
         'volatility_path': os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'volatility3', 'vol.py')
     }
 
 config_data = cargar_config()
-CASES_BASE_DIR = config_data['cases_base_dir']
 VOLATILITY_PATH = config_data['volatility_path']
+
+def get_case_base(caso_id):
+    """Obtiene la ruta base del caso desde el registro (puede ser ext. o local)."""
+    registry_file = '/mnt/Destino_ForenSys/casos_registro.json'
+    if os.path.exists(registry_file):
+        try:
+            with open(registry_file, 'r', encoding='utf-8') as f:
+                casos = json.load(f)
+                for caso in casos:
+                    if caso.get('caso_id') == caso_id:
+                        ruta = caso.get('ruta', '')
+                        if ruta:
+                            return os.path.dirname(ruta)
+        except Exception:
+            pass
+    return config_data['cases_base_dir']
 
 # ── Plugins por SO ─────────────────────────────────────────────────
 PLUGIN_SETS = {
@@ -295,7 +310,8 @@ def analizar_ram(mem_file, caso_id, perito):
     validar_plugins_volatility(VOLATILITY_PATH)
 
     # Preparar carpetas del caso
-    carpeta_caso    = os.path.join(CASES_BASE_DIR, caso_id)
+    base_dir = get_case_base(caso_id)
+    carpeta_caso    = os.path.join(base_dir, caso_id)
     carpeta_images  = os.path.join(carpeta_caso, '01_Images_(Fuentes_de_datos)', 'RAM')
     carpeta_views   = os.path.join(carpeta_caso, '02_Views_(Vistas)', 'RAM')
     carpeta_results = os.path.join(carpeta_caso, '03_Results_(Resultados_Extraidos)', 'RAM')
@@ -453,9 +469,10 @@ def main():
     # Validar archivo fuente y caso
     validar_archivo_memoria(args.archivo)
 
-    carpeta_caso = os.path.join(CASES_BASE_DIR, args.caso)
+    base_dir = get_case_base(args.caso)
+    carpeta_caso = os.path.join(base_dir, args.caso)
     if not os.path.exists(carpeta_caso):
-        print(f"[X] Caso '{args.caso}' no existe en {CASES_BASE_DIR}.")
+        print(f"[X] Caso '{args.caso}' no existe en {base_dir}.")
         print("    Abra primero el caso desde la interfaz web.")
         sys.exit(1)
         
