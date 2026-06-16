@@ -37,7 +37,7 @@ NUM_THREAD = RPI_THREAD
 KEEP_ALIVE = "0"     # Descargar modelo tras responder
 TIMEOUT_SOLICITUD = RPI_TIMEOUT
 
-# Presupuesto de caracteres del prompt
+# Presupuesto de caracteres del prompt (Valor inicial, se escala dinámicamente)
 MAX_CARACTERES_EVIDENCIA = 6000
 
 # ==========================================
@@ -645,18 +645,26 @@ def recopilar_inteligencia_ram(carpeta_resultados):
         if nombre_base not in archivos_ram:
             continue
         ruta_txt = archivos_ram[nombre_base]
-        if presupuesto <= 100:
-            print("    [!] Presupuesto de caracteres agotado. Plugins restantes omitidos.")
-            break
+        
+        # Reservamos al menos 200 chars para no cortar a la mitad
+        if presupuesto <= 200:
+            print(f"    [!] Presupuesto de contexto agotado. Omitiendo: {nombre_base}")
+            continue
+            
         try:
             with open(ruta_txt, 'r', encoding='utf-8', errors='ignore') as f:
                 contenido = f.read().strip()
             if not contenido:
                 continue
             etiqueta = PLUGIN_LABELS.get(nombre_base, f"Plugin RAM: {nombre_base}")
-            # Respetar presupuesto: truncar si es necesario pero dejar siempre la cabecera
-            if len(contenido) > presupuesto - 200:
-                contenido = contenido[:presupuesto - 250] + "\n[...TRUNCADO por presupuesto de contexto...]"
+            
+            # Algunos plugins como pslist o pstree son inmensos.
+            # Limitar el tamaño por plugin para que NO se devoren todo el presupuesto de una
+            limite_por_plugin = min(presupuesto - 150, 4000) # Máximo 4000 chars por archivo
+            
+            if len(contenido) > limite_por_plugin:
+                contenido = contenido[:limite_por_plugin] + "\n[...TRUNCADO para permitir otros plugins...]"
+                
             evidencia_texto, presupuesto = _agregar_bloque(
                 evidencia_texto, presupuesto, etiqueta, contenido + "\n")
             fuentes_cargadas.append(nombre_base)
@@ -1297,6 +1305,11 @@ if __name__ == "__main__":
 
     if args.model:
         MODELO_LLM = args.model.strip()
+
+    # Escalar presupuesto de evidencia según el contexto (NUM_CTX) para motores remotos
+    global MAX_CARACTERES_EVIDENCIA
+    # Asumimos que 1 token ≈ 3.5 a 4 caracteres. Reservamos tokens para prompt y salida.
+    MAX_CARACTERES_EVIDENCIA = int(NUM_CTX * 3.5)
 
     imprimir_banner()
     print(f"[PROGRESO:5] Iniciando Análisis Asistido por IA para el caso: {caso_id}")
