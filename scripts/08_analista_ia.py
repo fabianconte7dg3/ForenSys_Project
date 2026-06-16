@@ -653,9 +653,10 @@ def recopilar_inteligencia_ram(carpeta_resultados, es_local=True):
     for idx, nombre_base in enumerate(nombres_a_procesar):
         ruta_txt = archivos_ram[nombre_base]
 
-        # Evitar sobrepasar el límite físico absoluto de memoria de contexto
-        if presupuesto <= 500:
-            print(f"    [!] Límite estricto de contexto (ctx) alcanzado. Omitiendo: {nombre_base}")
+        # Para modo local (RPi5), evitamos saturar su poca memoria.
+        # Para modo remoto, NO HAY LÍMITE (el usuario solicitó análisis completo de todos los archivos).
+        if es_local and presupuesto <= 500:
+            print(f"    [!] Límite estricto de contexto local alcanzado. Omitiendo: {nombre_base}")
             continue
 
         try:
@@ -665,9 +666,8 @@ def recopilar_inteligencia_ram(carpeta_resultados, es_local=True):
                 continue
             etiqueta = PLUGIN_LABELS.get(nombre_base, f"Plugin RAM: {nombre_base}")
 
-            # Sin límites artificiales por plugin. El usuario solicitó el análisis completo.
-            # Solo cortamos si el plugin es más grande que el presupuesto restante.
-            if len(contenido) > presupuesto:
+            # En motor remoto, metemos el archivo completo sin importar su tamaño
+            if es_local and len(contenido) > presupuesto:
                 contenido = contenido[:presupuesto] + "\n[...TRUNCADO por límite físico de tokens (num_ctx)...]"
 
             evidencia_texto, presupuesto = _agregar_bloque(
@@ -1299,8 +1299,14 @@ if __name__ == "__main__":
             sys.exit(1)
         OLLAMA_BASE_URL   = host_remoto
         OLLAMA_URL        = OLLAMA_BASE_URL + "/api/generate"
-        NUM_CTX           = args.ctx     or ia_cfg.get('ctx',     PC_CTX)
-        NUM_THREAD        = args.threads or ia_cfg.get('threads', PC_THREAD)
+        
+        # Leer 'num_ctx' o 'ctx' del json
+        config_ctx = ia_cfg.get('num_ctx') or ia_cfg.get('ctx')
+        NUM_CTX = args.ctx or (int(config_ctx) if config_ctx else PC_CTX)
+        
+        config_thread = ia_cfg.get('num_thread') or ia_cfg.get('threads')
+        NUM_THREAD = args.threads or (int(config_thread) if config_thread else PC_THREAD)
+        
         TIMEOUT_SOLICITUD = ia_cfg.get('timeout', PC_TIMEOUT)
         perfil_nombre     = f"PC Escritorio Remoto ({OLLAMA_BASE_URL})"
     else:
@@ -1321,8 +1327,9 @@ if __name__ == "__main__":
         # RPi5 local: 2048 tokens * 3.5 chars/token * 70% libre = ~5000 chars
         MAX_CARACTERES_EVIDENCIA = int(NUM_CTX * 3.5 * 0.70)
     else:
-        # PC Remoto: usar el contexto configurado o un mínimo de 50,000 chars seguros
-        MAX_CARACTERES_EVIDENCIA = max(int(NUM_CTX * 3.5 * 0.70), 50000)
+        # PC Remoto: Se desactiva el límite de recolección según instrucción del usuario
+        # Se pone un número gigante para que recopilar_inteligencia no trunque.
+        MAX_CARACTERES_EVIDENCIA = 50_000_000
 
     imprimir_banner()
     print(f"[PROGRESO:5] Iniciando Análisis Asistido por IA para el caso: {caso_id}")
