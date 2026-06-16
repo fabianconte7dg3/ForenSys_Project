@@ -4513,7 +4513,8 @@ if (origConfirmExplorer) {
 const btnBrowseRam = document.getElementById('btn-browse-ram');
 if (btnBrowseRam) {
     btnBrowseRam.addEventListener('click', () => {
-        openFileBrowser('/media', (path) => {
+        // Redirigido a /mnt porque las evidencias USB se montan ahí como /mnt/Evidencia_sda1
+        openFileBrowser('/mnt', (path) => {
             selectedFiles.ram = path;
             const display = document.getElementById('ram-file-display');
             display.style.color = 'var(--text-main)';
