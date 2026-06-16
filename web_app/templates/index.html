@@ -1587,8 +1587,8 @@
                             
                             <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                                 <button class="btn-primary" id="btn-run-wiping" style="background: var(--accent-red); border-color: var(--accent-red);"><i class="bi bi-play-fill me-2"></i>Ejecutar Wiping</button>
-                                <button class="btn-secondary" onclick="window.open('/api/logs/wiping', '_blank')"><i class="bi bi-journal-text me-2"></i>Log Forense (NIST)</button>
-                                <button class="btn-secondary" onclick="window.open('/api/logs/coc', '_blank')"><i class="bi bi-shield-check me-2"></i>Cadena de Custodia</button>
+                                <button class="btn-secondary" onclick="openViewerModal('/api/logs/wiping')"><i class="bi bi-journal-text me-2"></i>Log Forense (NIST)</button>
+                                <button class="btn-secondary" onclick="openViewerModal('/api/logs/coc')"><i class="bi bi-shield-check me-2"></i>Cadena de Custodia</button>
                             </div>
 
                             <!-- Progress Bar -->
@@ -1630,8 +1630,8 @@
 
                             <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                                 <button class="btn-primary" id="btn-run-disk" style="display:none;"><i class="bi bi-play-fill me-2"></i>Ejecutar Extracción Forense</button>
-                                <button class="btn-secondary" id="btn-view-report-deadbox" onclick="window.open('/api/deadbox/report/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-file-earmark-code me-2"></i>Ver Reporte JSON</button>
-                                <button class="btn-secondary" id="btn-view-sig-deadbox" onclick="window.open('/api/deadbox/signature/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-key me-2"></i>Descargar Firma RSA</button>
+                                <button class="btn-secondary" id="btn-view-report-deadbox" onclick="openViewerModal('/api/deadbox/report/' + document.getElementById('case-number').value.trim())"><i class="bi bi-file-earmark-code me-2"></i>Ver Reporte JSON</button>
+                                <button class="btn-secondary" id="btn-view-sig-deadbox" onclick="openViewerModal('/api/deadbox/signature/' + document.getElementById('case-number').value.trim())"><i class="bi bi-key me-2"></i>Descargar Firma RSA</button>
                             </div>
                         </div>
 
@@ -1772,8 +1772,8 @@
                                 <button class="btn-primary" id="btn-run-mobile" style="background: var(--accent-yellow); border-color: var(--accent-yellow); color: #000;">
                                     <i class="bi bi-phone-vibrate-fill me-2"></i>Iniciar Extracción Forense
                                 </button>
-                                <button class="btn-secondary" id="btn-view-report-mobile" onclick="window.open('/api/mobile/report/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-file-earmark-code me-2"></i>Ver Reporte JSON</button>
-                                <button class="btn-secondary" id="btn-view-sig-mobile" onclick="window.open('/api/mobile/signature/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-key me-2"></i>Descargar Firma RSA</button>
+                                <button class="btn-secondary" id="btn-view-report-mobile" onclick="openViewerModal('/api/mobile/report/' + document.getElementById('case-number').value.trim())"><i class="bi bi-file-earmark-code me-2"></i>Ver Reporte JSON</button>
+                                <button class="btn-secondary" id="btn-view-sig-mobile" onclick="openViewerModal('/api/mobile/signature/' + document.getElementById('case-number').value.trim())"><i class="bi bi-key me-2"></i>Descargar Firma RSA</button>
                             </div>
 
                             <!-- Progress Bar -->
@@ -1995,7 +1995,7 @@
                             <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Consolidación de cadena de custodia, hash maestro, hallazgos de IA y anexos en un único documento legal.</p>
                             <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
                                 <button class="btn-primary" id="btn-run-report" style="background: var(--accent-purple); border-color: var(--accent-purple);"><i class="bi bi-play-fill me-2"></i>Generar y Sellar Reporte PDF</button>
-                                <button class="btn-secondary" id="btn-view-pdf" style="display: none; border-color: var(--accent-purple); color: var(--accent-purple);" onclick="window.open('/api/case/' + activeCaseNumber + '/download?filepath=03_Results_(Resultados_Extraidos)/Reporte_Legal_Final_' + activeCaseNumber + '.pdf', '_blank')"><i class="bi bi-file-pdf-fill me-2"></i>Ver PDF Generado</button>
+                                <button class="btn-secondary" id="btn-view-pdf" style="display: none; border-color: var(--accent-purple); color: var(--accent-purple);" onclick="openPdfViewerModal('/api/case/' + activeCaseNumber + '/download?filepath=03_Results_(Resultados_Extraidos)/Reporte_Legal_Final_' + activeCaseNumber + '.pdf')"><i class="bi bi-file-pdf-fill me-2"></i>Ver PDF Generado</button>
                             </div>
                             <!-- Progress Bar Reporte -->
                             <forensys-progress id="report-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-purple)"></forensys-progress>
@@ -2020,7 +2020,7 @@
                                 <label class="form-check-label" for="toggle-telemetry" style="color: var(--text-muted); font-size: 0.72rem; cursor: pointer; margin-bottom: 0;">Modo Telemetría</label>
                             </div>
                             <!-- View Telemetry PDF button -->
-                            <button id="btn-view-telemetry" title="Ver Reporte PDF de Rendimiento" onclick="if(activeCaseNumber) { window.open(`/api/case/${activeCaseNumber}/telemetry_pdf`, '_blank'); } else { alert('Abre un caso primero'); }"
+                            <button id="btn-view-telemetry" title="Ver Reporte PDF de Rendimiento" onclick="if(activeCaseNumber) { openPdfViewerModal(`/api/case/${activeCaseNumber}/telemetry_pdf`); } else { alert('Abre un caso primero'); }"
                                 style="background:none; border:1px solid var(--accent-purple); color:var(--accent-purple); border-radius:6px; padding:3px 12px; font-size:0.72rem; cursor:pointer; display:flex; align-items:center; gap:5px; transition: all 0.2s; margin-right: 10px;">
                                 <i class="bi bi-file-earmark-pdf"></i> Ver Telemetría
                             </button>
@@ -2428,6 +2428,21 @@
             <button class="btn-modal-close" style="background: var(--bg-body); color: var(--text-muted);" onclick="closeExplorerModal()"><i class="bi bi-x-lg me-2"></i>Cancelar</button>
             <button class="btn-modal-close" id="btn-confirm-explorer"><i class="bi bi-check-lg me-2"></i>Seleccionar</button>
         </div>
+    </div>
+</div>
+
+<!-- ================================================================
+     KIOSK VIEWER MODAL
+     ================================================================ -->
+<div class="fs-modal-overlay" id="iframe-viewer-modal" style="display: none; padding: 20px; z-index: 10000;">
+    <div style="width: 100%; height: 100%; background: #fff; border-radius: 8px; overflow: hidden; display: flex; flex-direction: column;">
+        <div style="background: var(--bg-card); padding: 10px 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-mid);">
+            <div style="font-weight: 600; color: #fff;"><i class="bi bi-file-text me-2" style="color: var(--accent-purple);"></i> Visualizador de Documentos</div>
+            <button onclick="document.getElementById('viewer-iframe').src=''; document.getElementById('iframe-viewer-modal').style.display='none';" style="background: var(--accent-red); color: #fff; border: none; border-radius: 4px; padding: 6px 16px; font-weight: 600; cursor: pointer;">
+                <i class="bi bi-x-circle-fill me-2"></i>Cerrar Visor
+            </button>
+        </div>
+        <iframe id="viewer-iframe" style="flex: 1; width: 100%; border: none; background: #525659;"></iframe>
     </div>
 </div>
 
@@ -2910,7 +2925,7 @@ function verResultadosOSINT(alias) {
 
 function verReporteOSINT(alias) {
     if (!activeCaseNumber || !alias) return;
-    window.open(`/api/osint/report/${activeCaseNumber}?alias=${encodeURIComponent(alias)}`, '_blank');
+    openViewerModal(`/api/osint/report/${activeCaseNumber}?alias=${encodeURIComponent(alias)}`);
 }
 
 function cargarHistorialOSINT() {
@@ -6128,6 +6143,18 @@ document.addEventListener('DOMContentLoaded', function() {
     `;
     document.head.appendChild(style);
 });
+
+// Global Viewer Function for Kiosk Mode (PDFs, Logs, JSONs)
+function openViewerModal(url) {
+    const modal = document.getElementById('iframe-viewer-modal');
+    const iframe = document.getElementById('viewer-iframe');
+    if(modal && iframe) {
+        iframe.src = url;
+        modal.style.display = 'flex';
+    } else {
+        window.open(url, '_blank');
+    }
+}
 </script>
 </body>
 </html>
