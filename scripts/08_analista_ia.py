@@ -1308,10 +1308,9 @@ if __name__ == "__main__":
     if args.model:
         MODELO_LLM = args.model.strip()
 
-    # Escalar presupuesto de evidencia según el contexto (NUM_CTX) para motores remotos
-    global MAX_CARACTERES_EVIDENCIA
-    # Asumimos que 1 token ≈ 3.5 a 4 caracteres. Reservamos tokens para prompt y salida.
-    MAX_CARACTERES_EVIDENCIA = int(NUM_CTX * 3.5)
+    # Escalar presupuesto de evidencia según el contexto (NUM_CTX) del motor elegido
+    # 1 token ≈ 3.5 caracteres. Dejamos 30% reservado para el prompt y la respuesta del LLM.
+    MAX_CARACTERES_EVIDENCIA = int(NUM_CTX * 3.5 * 0.70)
 
     imprimir_banner()
     print(f"[PROGRESO:5] Iniciando Análisis Asistido por IA para el caso: {caso_id}")
