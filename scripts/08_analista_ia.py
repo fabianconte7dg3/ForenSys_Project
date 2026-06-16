@@ -643,20 +643,22 @@ def recopilar_inteligencia_ram(carpeta_resultados, es_local=True):
         for f in os.listdir(carpeta_ram) if f.endswith('.txt')
     }
 
-    # Procesar en orden de relevancia primero, luego el resto
+    # Procesar en orden INVERSO de relevancia, para que los más importantes
+    # (pslist, netscan) queden al FINAL del texto. Así, si el motor LLM (Ollama)
+    # trunca el texto por falta de memoria nativa (truncamiento por la izquierda),
+    # se pierden los plugins menos útiles (handles, userassist) pero sobreviven los críticos.
     nombres_ordenados = ORDEN_RELEVANCIA + [k for k in sorted(archivos_ram.keys())
                                              if k not in ORDEN_RELEVANCIA]
-    # Solo los que realmente existen en el caso
     nombres_a_procesar = [n for n in nombres_ordenados if n in archivos_ram]
+    nombres_a_procesar.reverse()
     total_plugins = len(nombres_a_procesar)
 
     for idx, nombre_base in enumerate(nombres_a_procesar):
         ruta_txt = archivos_ram[nombre_base]
 
-        # Para modo local (RPi5), evitamos saturar su poca memoria.
-        # Para modo remoto, NO HAY LÍMITE (el usuario solicitó análisis completo de todos los archivos).
-        if es_local and presupuesto <= 500:
-            print(f"    [!] Límite estricto de contexto local alcanzado. Omitiendo: {nombre_base}")
+        # Reservamos siempre 100 chars de margen
+        if presupuesto <= 100:
+            print(f"    [!] Presupuesto agotado. Omitiendo: {nombre_base}")
             continue
 
         try:
@@ -666,9 +668,19 @@ def recopilar_inteligencia_ram(carpeta_resultados, es_local=True):
                 continue
             etiqueta = PLUGIN_LABELS.get(nombre_base, f"Plugin RAM: {nombre_base}")
 
-            # En motor remoto, metemos el archivo completo sin importar su tamaño
-            if es_local and len(contenido) > presupuesto:
-                contenido = contenido[:presupuesto] + "\n[...TRUNCADO por límite físico de tokens (num_ctx)...]"
+            # Repartir presupuesto restante proporcionalmente entre los plugins pendientes.
+            # Esto garantiza que TODOS los plugins relevantes (netscan, malfind, etc.)
+            # siempre tengan espacio, independientemente del motor (local o remoto).
+            plugins_pendientes = max(total_plugins - idx, 1)
+            cuota_equitativa = presupuesto // plugins_pendientes
+
+            # Para el motor local (RPi5), la cuota máxima es 1500 por plugin.
+            # Para el motor remoto, la cuota es generosa (25000) para aprovechar el contexto largo.
+            cuota_maxima = 1500 if es_local else 25000
+            limite_por_plugin = min(cuota_equitativa, cuota_maxima)
+
+            if len(contenido) > limite_por_plugin:
+                contenido = contenido[:limite_por_plugin] + "\n[...TRUNCADO — contenido completo disponible en el archivo .txt del caso...]"
 
             evidencia_texto, presupuesto = _agregar_bloque(
                 evidencia_texto, presupuesto, etiqueta, contenido + "\n")
@@ -677,11 +689,9 @@ def recopilar_inteligencia_ram(carpeta_resultados, es_local=True):
             print(f"    [!] Error leyendo {nombre_base}.txt: {e}")
 
     caracteres_total = len(evidencia_texto)
-    # descontar 'Metadatos volcado' si se agregó
-    count_plugins_reales = len([f for f in fuentes_cargadas if f != "Metadatos volcado"])
-    if count_plugins_reales > 0:
-        print(f"    [+] Plugins cargados ({count_plugins_reales}/{total_plugins}): {', '.join(fuentes_cargadas)}")
-        print(f"    [+] Evidencia RAM empaquetada (Análisis Completo): {caracteres_total} caracteres")
+    if fuentes_cargadas:
+        print(f"    [+] Plugins cargados ({len(fuentes_cargadas)}/{total_plugins}): {', '.join(fuentes_cargadas)}")
+        print(f"    [+] Evidencia RAM empaquetada: {caracteres_total} caracteres (límite: {MAX_CARACTERES_EVIDENCIA})")
     else:
         print("    [!] ADVERTENCIA: No se encontraron reportes .txt de plugins RAM.")
 
@@ -901,10 +911,6 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido
     # Selección del prompt según el modo (RAM exclusivo vs. disco completo)
     prompt_plantilla = PROMPT_RAM_FORENSE if modo_ram else PROMPT_ASISTENTE
     prompt_final = prompt_plantilla.format(evidencia_cruda=evidencia_sanitizada)
-
-    # DEBUG: Guardar el prompt exacto enviado a Ollama para inspeccionar
-    with open('/tmp/debug_prompt_ollama.txt', 'w', encoding='utf-8') as fdebug:
-        fdebug.write(prompt_final)
 
     is_local = "localhost" in OLLAMA_BASE_URL or "127.0.0.1" in OLLAMA_BASE_URL
 
@@ -1299,8 +1305,7 @@ if __name__ == "__main__":
             sys.exit(1)
         OLLAMA_BASE_URL   = host_remoto
         OLLAMA_URL        = OLLAMA_BASE_URL + "/api/generate"
-        
-        # Leer 'num_ctx' o 'ctx' del json
+        # Leer 'num_ctx' o 'ctx' del json para mayor flexibilidad
         config_ctx = ia_cfg.get('num_ctx') or ia_cfg.get('ctx')
         NUM_CTX = args.ctx or (int(config_ctx) if config_ctx else PC_CTX)
         
@@ -1327,9 +1332,8 @@ if __name__ == "__main__":
         # RPi5 local: 2048 tokens * 3.5 chars/token * 70% libre = ~5000 chars
         MAX_CARACTERES_EVIDENCIA = int(NUM_CTX * 3.5 * 0.70)
     else:
-        # PC Remoto: Se desactiva el límite de recolección según instrucción del usuario
-        # Se pone un número gigante para que recopilar_inteligencia no trunque.
-        MAX_CARACTERES_EVIDENCIA = 50_000_000
+        # PC Remoto: usar el contexto configurado o un mínimo de 50,000 chars seguros
+        MAX_CARACTERES_EVIDENCIA = max(int(NUM_CTX * 3.5 * 0.70), 50000)
 
     imprimir_banner()
     print(f"[PROGRESO:5] Iniciando Análisis Asistido por IA para el caso: {caso_id}")
