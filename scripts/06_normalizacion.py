@@ -1654,13 +1654,22 @@ def parsear_ntuser(ruta_ntuser, maestro_file, nombre_usuario="Desconocido"):
 
 def integrar_fuentes_externas(carpeta_caso, caso_id, maestro):
     carpeta_base = os.path.dirname(carpeta_caso)
-    carpeta_ram = os.path.join(carpeta_base, f"{caso_id}_RAM")
+    
+    # Nueva estructura de RAM (dentro del caso)
+    carpeta_ram = os.path.join(carpeta_caso, "03_Results_(Resultados_Extraidos)", "RAM")
     if os.path.exists(carpeta_ram):
         maestro.write("\n\n=== FUENTE: MEMORIA RAM (Volatility 3) ===\n")
-        for archivo in ['ram_procesos.txt', 'ram_malware.txt']:
-            ruta = os.path.join(carpeta_ram, archivo)
-            if os.path.exists(ruta):
-                with open(ruta, 'r') as f: maestro.write(f"\n--- {archivo} ---\n{f.read()}\n")
+        # Leer todos los reportes de texto de RAM (procesos, red, malware, etc.)
+        for archivo in sorted(os.listdir(carpeta_ram)):
+            if archivo.endswith('.txt'):
+                ruta = os.path.join(carpeta_ram, archivo)
+                try:
+                    with open(ruta, 'r', encoding='utf-8', errors='ignore') as f:
+                        contenido = f.read()
+                        if contenido.strip():
+                            maestro.write(f"\n--- {archivo} ---\n{contenido[:2000]}\n") # Truncar a 2000 chars por reporte para no asfixiar la IA
+                except Exception:
+                    pass
 
     carpeta_mobile = os.path.join(carpeta_base, f"{caso_id}_MOBILE")
     if os.path.exists(carpeta_mobile):
