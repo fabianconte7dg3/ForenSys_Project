@@ -137,7 +137,16 @@ REGLAS CRÍTICAS DE SEGURIDAD (GRADO 0.0 ALUCINACIONES):
 - BAJO NINGUNA CIRCUNSTANCIA alteres o cambies la información técnica (hashes, IPs, rutas, fechas).
 - Si no hay información suficiente sobre un punto, indicar explícitamente "Sin datos disponibles".
 - Manten un tono estrictamente formal y técnico. Indicar la fuente exacta de cada afirmación.
-- Esta síntesis DEBE ser revisada y firmada por un perito antes de uso legal."""
+- Esta síntesis DEBE ser revisada y firmada por un perito antes de uso legal.
+
+==================================================
+EVIDENCIA RECOPILADA:
+==================================================
+{evidencia_cruda}
+
+---
+Basado estrictamente en las INSTRUCCIONES y la EVIDENCIA proporcionada arriba, genera AHORA la síntesis forense paso a paso en formato Markdown:
+"""
 
 
 # ==========================================
@@ -198,6 +207,9 @@ REGLAS CRÍTICAS DE INTEGRIDAD FORENSE (GRADO 0.0 ALUCINACIONES):
 EVIDENCIA DE MEMORIA VOLÁTIL (Volatility3):
 ==================================================
 {evidencia_cruda}
+
+---
+Basado estrictamente en las INSTRUCCIONES y la EVIDENCIA proporcionada arriba, genera AHORA el reporte forense paso a paso en formato Markdown:
 """
 
 
