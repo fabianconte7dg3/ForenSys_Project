@@ -6042,6 +6042,10 @@ document.addEventListener('DOMContentLoaded', function() {
     closeBtn.addEventListener('click', () => {
         keyboardContainer.style.display = 'none';
         selectedInput = null;
+        
+        // Remove padding from content area
+        const contentArea = document.getElementById('content-area');
+        if (contentArea) contentArea.style.paddingBottom = '';
     });
 
     // Detect all text inputs to trigger the keyboard
@@ -6060,6 +6064,10 @@ document.addEventListener('DOMContentLoaded', function() {
         keyboard.setInput(event.target.value);
         keyboardContainer.style.display = 'block';
         
+        // Add padding bottom to content-area so we can scroll past the keyboard
+        const contentArea = document.getElementById('content-area');
+        if (contentArea) contentArea.style.paddingBottom = '320px';
+
         // Scroll slightly so the keyboard doesn't hide the input
         setTimeout(() => {
             selectedInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
