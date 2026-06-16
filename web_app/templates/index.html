@@ -1687,6 +1687,7 @@
                             <label class="form-label-custom">Volcado de Memoria (.raw / .dmp / .mem / .vmem)</label>
                             <div style="display:flex; gap:8px; align-items:center;">
                                 <div id="ram-file-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin archivo seleccionado — Explorar USB, /media o /mnt</div>
+                                <button class="btn-secondary" id="btn-mount-evidence" style="white-space:nowrap; border-color: var(--accent-cyan); color: var(--accent-cyan);"><i class="bi bi-usb-drive me-2"></i>Montar USB</button>
                                 <button class="btn-primary" id="btn-browse-ram" style="white-space:nowrap;"><i class="bi bi-folder2-open me-2"></i>Explorar...</button>
                             </div>
                             
@@ -4519,6 +4520,33 @@ if (btnBrowseRam) {
             display.innerHTML = `<i class="bi bi-file-earmark-binary me-2" style="color:var(--accent-cyan);"></i>${path}`;
             addLogEntry(`[RAM] Archivo seleccionado: ${path}`, 'log-info');
         });
+    });
+}
+
+const btnMountEvidence = document.getElementById('btn-mount-evidence');
+if (btnMountEvidence) {
+    btnMountEvidence.addEventListener('click', async () => {
+        btnMountEvidence.disabled = true;
+        btnMountEvidence.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Montando...';
+        
+        try {
+            const resp = await fetch('/api/usb/mount_evidence', { method: 'POST' });
+            const data = await resp.json();
+            
+            if (data.status === 'success') {
+                alert(`✅ Éxito:\n${data.message}`);
+                addLogEntry(`[SISTEMA] USBs montados: ${data.rutas.join(', ')}`, 'log-success');
+            } else if (data.status === 'warning') {
+                alert(`⚠️ Atención:\n${data.message}`);
+            } else {
+                alert(`❌ Error al montar:\n${data.message}`);
+            }
+        } catch (e) {
+            alert(`Error de red al intentar montar: ${e}`);
+        } finally {
+            btnMountEvidence.disabled = false;
+            btnMountEvidence.innerHTML = '<i class="bi bi-usb-drive me-2"></i>Montar USB';
+        }
     });
 }
 

@@ -1144,6 +1144,67 @@ def list_devices():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
+@app.route('/api/usb/mount_evidence', methods=['POST'])
+def mount_evidence():
+    """
+    Monta todas las particiones de dispositivos externos detectados.
+    SEGURIDAD FORENSE: Todo se monta estrictamente en modo SOLO-LECTURA (ro)
+    para garantizar la integridad de la evidencia.
+    """
+    try:
+        result = subprocess.run(
+            ['lsblk', '-J', '-o', 'NAME,TYPE,MOUNTPOINT,RM,PKNAME'],
+            capture_output=True, text=True, check=True
+        )
+        lsblk_data = json.loads(result.stdout)
+        
+        montados = []
+        errores = []
+
+        def process_device(dev):
+            # ── PROTECCIÓN: omitir el disco del sistema y sus particiones ──
+            if dev['name'] in SYSTEM_DISK_NAMES:
+                return
+
+            # Solo montar particiones (part) que no estén montadas aún
+            if dev.get('type') == 'part' and not dev.get('mountpoint'):
+                path = f"/dev/{dev['name']}"
+                punto_montaje = f"/mnt/Evidencia_{dev['name']}"
+                
+                try:
+                    # Crear el directorio base si no existe
+                    subprocess.run(['sudo', 'mkdir', '-p', punto_montaje], check=True)
+                    
+                    # Montar usando 'mount -o ro' para garantizar que no se alteren los datos (Write-Block lógico)
+                    out = subprocess.run(['sudo', 'mount', '-o', 'ro', path, punto_montaje], capture_output=True, text=True)
+                    if out.returncode == 0:
+                        montados.append(punto_montaje)
+                    else:
+                        errores.append(f"Fallo en {path}: {out.stderr.strip()}")
+                except Exception as e:
+                    errores.append(str(e))
+                    
+            for child in dev.get('children', []):
+                process_device(child)
+
+        for dev in lsblk_data.get('blockdevices', []):
+            process_device(dev)
+
+        if not montados and not errores:
+            return jsonify({"status": "warning", "message": "No se encontraron particiones externas nuevas para montar."})
+        elif montados:
+            msg = f"Se montaron {len(montados)} particiones en modo de SOLO-LECTURA por seguridad."
+            if errores: msg += f" (Errores: {len(errores)})"
+            return jsonify({"status": "success", "message": msg, "rutas": montados})
+        else:
+            return jsonify({"status": "error", "message": f"Errores al montar: {', '.join(errores)}"})
+
+    except subprocess.CalledProcessError as e:
+        return jsonify({"status": "error", "message": f"lsblk error: {e.stderr}"}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/verify_disk', methods=['POST'])
 def verify_disk():
     """Realiza las validaciones ISO/IEC 27037 previas a la extracción forense."""
