@@ -38,12 +38,17 @@ def push_log(message: str, level: str = 'info'):
 # Definir la ruta base de tus scripts
 SCRIPTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'scripts'))
 
-# Ruta base donde se almacenan los casos forenses (local)
-CASES_BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'Casos_ForenSys'))
-# Registro centralizado de casos
-CASES_REGISTRY = os.path.join(CASES_BASE_DIR, 'casos_registro.json')
 # Dispositivo externo forense — toda la evidencia real vive aquí
 DESTINO_FORENSYS = '/mnt/Destino_ForenSys'
+# Ruta base donde se almacenan los casos forenses (fallback local)
+LOCAL_CASES_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'Casos_ForenSys'))
+
+# Resolver dinámicamente dónde se guardan los casos si creas uno nuevo desde la web:
+# Si el USB está montado o existe la carpeta segura, usarla por defecto. Si no, usar local.
+CASES_BASE_DIR = DESTINO_FORENSYS if (os.path.ismount(DESTINO_FORENSYS) or os.path.exists(DESTINO_FORENSYS)) else LOCAL_CASES_DIR
+
+# Registro centralizado de casos
+CASES_REGISTRY = os.path.join(CASES_BASE_DIR, 'casos_registro.json')
 
 # ── Protección: Disco del Sistema Operativo ────────────────────────────────
 def get_system_disk():
