@@ -423,8 +423,11 @@ def list_case_results(raw_caso_id):
 
         stat = os.stat(ruta_archivo)
         size_kb = round(stat.st_size / 1024, 1)
+        # Determinar base dinámicamente
+        base_dest = get_case_base_from_registry(caso_id) or CASES_BASE_DIR
+        caso_dir = os.path.join(base_dest, caso_id)
         # Use relative path from case_dir so file_content API can resolve it safely
-        rel_filepath = os.path.relpath(ruta_archivo, os.path.join(CASES_BASE_DIR, caso_id))
+        rel_filepath = os.path.relpath(ruta_archivo, caso_dir)
         resultado.append({
             "key":      arch["key"],
             "filename": filename_real,
@@ -437,12 +440,14 @@ def list_case_results(raw_caso_id):
         })
 
     # Directorios adicionales a escanear dinámicamente
+    base_dest = get_case_base_from_registry(caso_id) or CASES_BASE_DIR
+    caso_dir = os.path.join(base_dest, caso_id)
     rutas_a_buscar = [
-        os.path.join(CASES_BASE_DIR, caso_id, "02_Views_(Vistas)", "File_Types"),
-        os.path.join(CASES_BASE_DIR, caso_id, "01_Images_(Fuentes_de_datos)"),
-        os.path.join(CASES_BASE_DIR, caso_id, "03_Results_(Resultados_Extraidos)", "RAM"),
-        os.path.join(CASES_BASE_DIR, caso_id, "03_Results_(Resultados_Extraidos)", "Mobile"),
-        os.path.join(CASES_BASE_DIR, caso_id, "03_Results_(Resultados_Extraidos)", "OSINT"),
+        os.path.join(caso_dir, "02_Views_(Vistas)", "File_Types"),
+        os.path.join(caso_dir, "01_Images_(Fuentes_de_datos)"),
+        os.path.join(caso_dir, "03_Results_(Resultados_Extraidos)", "RAM"),
+        os.path.join(caso_dir, "03_Results_(Resultados_Extraidos)", "Mobile"),
+        os.path.join(caso_dir, "03_Results_(Resultados_Extraidos)", "OSINT"),
     ]
     archivos_encontrados = 0
     for ruta_recuperados in rutas_a_buscar:
@@ -569,7 +574,8 @@ def download_case_file(raw_caso_id):
     if not filepath or '..' in filepath:
         return "Path traversal no permitido.", 403
 
-    case_dir = os.path.join(CASES_BASE_DIR, caso_id)
+    base_dest = get_case_base_from_registry(caso_id) or CASES_BASE_DIR
+    case_dir = os.path.join(base_dest, caso_id)
     # Validar que el archivo exista dentro del case_dir
     ruta_absoluta = os.path.abspath(os.path.join(case_dir, filepath))
     if not ruta_absoluta.startswith(os.path.abspath(case_dir)):
@@ -613,7 +619,8 @@ def get_file_content(raw_caso_id):
     if not filename or '..' in filename:
         return jsonify({"status": "error", "message": "Nombre de archivo o ruta inválida."}), 400
 
-    case_dir = os.path.join(CASES_BASE_DIR, caso_id)
+    base_dest = get_case_base_from_registry(caso_id) or CASES_BASE_DIR
+    case_dir = os.path.join(base_dest, caso_id)
     ruta_archivo = os.path.abspath(os.path.join(case_dir, filename))
     # Prevenir path traversal verificando que el archivo esté dentro de case_dir
     if not ruta_archivo.startswith(os.path.abspath(case_dir) + os.sep):

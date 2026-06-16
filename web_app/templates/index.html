@@ -1996,7 +1996,7 @@
                             <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Consolidación de cadena de custodia, hash maestro, hallazgos de IA y anexos en un único documento legal.</p>
                             <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
                                 <button class="btn-primary" id="btn-run-report" style="background: var(--accent-purple); border-color: var(--accent-purple);"><i class="bi bi-play-fill me-2"></i>Generar y Sellar Reporte PDF</button>
-                                <button class="btn-secondary" id="btn-view-pdf" style="display: none; border-color: var(--accent-purple); color: var(--accent-purple);" onclick="openPdfViewerModal('/api/case/' + activeCaseNumber + '/download?filepath=03_Results_(Resultados_Extraidos)/Reporte_Legal_Final_' + activeCaseNumber + '.pdf')"><i class="bi bi-file-pdf-fill me-2"></i>Ver PDF Generado</button>
+                                <button class="btn-secondary" id="btn-view-pdf" style="display: none; border-color: var(--accent-purple); color: var(--accent-purple);" onclick="openViewerModal('/api/case/' + activeCaseNumber + '/download?filepath=03_Results_(Resultados_Extraidos)/Reporte_Legal_Final_' + activeCaseNumber + '.pdf')"><i class="bi bi-file-pdf-fill me-2"></i>Ver PDF Generado</button>
                             </div>
                             <!-- Progress Bar Reporte -->
                             <forensys-progress id="report-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-purple)"></forensys-progress>
@@ -2021,7 +2021,7 @@
                                 <label class="form-check-label" for="toggle-telemetry" style="color: var(--text-muted); font-size: 0.72rem; cursor: pointer; margin-bottom: 0;">Modo Telemetría</label>
                             </div>
                             <!-- View Telemetry PDF button -->
-                            <button id="btn-view-telemetry" title="Ver Reporte PDF de Rendimiento" onclick="if(activeCaseNumber) { openPdfViewerModal(`/api/case/${activeCaseNumber}/telemetry_pdf`); } else { alert('Abre un caso primero'); }"
+                            <button id="btn-view-telemetry" title="Ver Reporte PDF de Rendimiento" onclick="if(activeCaseNumber) { openViewerModal(`/api/case/${activeCaseNumber}/telemetry_pdf`); } else { alert('Abre un caso primero'); }"
                                 style="background:none; border:1px solid var(--accent-purple); color:var(--accent-purple); border-radius:6px; padding:3px 12px; font-size:0.72rem; cursor:pointer; display:flex; align-items:center; gap:5px; transition: all 0.2s; margin-right: 10px;">
                                 <i class="bi bi-file-earmark-pdf"></i> Ver Telemetría
                             </button>
