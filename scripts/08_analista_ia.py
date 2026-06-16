@@ -569,11 +569,12 @@ def recopilar_inteligencia(carpeta_resultados):
 # artefactos de disco. Cada bloque incluye el nombre del plugin
 # como fuente explícita (requisito de integridad forense).
 # ==========================================
-def recopilar_inteligencia_ram(carpeta_resultados):
+def recopilar_inteligencia_ram(carpeta_resultados, es_local=True):
     """
     Lee todos los reportes .txt de la subcarpeta RAM/ y los empaqueta
     como evidencia para el LLM, identificando cada bloque con el plugin
     de Volatility3 que lo generó.
+    Aplica límites de truncamiento diferentes si el motor es local o remoto.
     Retorna el texto de evidencia o '' si no hay nada.
     """
     carpeta_ram = os.path.join(carpeta_resultados, "RAM")
@@ -659,8 +660,9 @@ def recopilar_inteligencia_ram(carpeta_resultados):
             etiqueta = PLUGIN_LABELS.get(nombre_base, f"Plugin RAM: {nombre_base}")
             
             # Algunos plugins como pslist o pstree son inmensos.
-            # Limitar el tamaño por plugin para que NO se devoren todo el presupuesto de una
-            limite_por_plugin = min(presupuesto - 150, 4000) # Máximo 4000 chars por archivo
+            # Diferenciamos el límite si es la RPi5 local o un PC Remoto
+            tope_chars = 1500 if es_local else 8000
+            limite_por_plugin = min(presupuesto - 150, tope_chars)
             
             if len(contenido) > limite_por_plugin:
                 contenido = contenido[:limite_por_plugin] + "\n[...TRUNCADO para permitir otros plugins...]"
@@ -1357,9 +1359,11 @@ if __name__ == "__main__":
 
     # Recopilar evidencia según el modo
     print("[PROGRESO:30] Recopilando y filtrando evidencia...")
+    es_local = ("localhost" in OLLAMA_BASE_URL or "127.0.0.1" in OLLAMA_BASE_URL)
+    
     if modo_ram_exclusivo:
         print("    [*] Modo: ANÁLISIS EXCLUSIVO DE MEMORIA RAM")
-        evidencia_filtrada = recopilar_inteligencia_ram(carpeta_resultados)
+        evidencia_filtrada = recopilar_inteligencia_ram(carpeta_resultados, es_local=es_local)
         if not evidencia_filtrada:
             print("[-] ERROR: No se encontraron reportes de RAM. "
                   "Asegúrate de haber ejecutado el Módulo 3 (Extracción RAM) primero.")
