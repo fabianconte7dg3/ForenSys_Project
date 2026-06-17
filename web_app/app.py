@@ -1274,6 +1274,88 @@ def mount_evidence():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+@app.route('/api/usb/list_destinos_potenciales', methods=['GET'])
+def list_destinos_potenciales():
+    """Lista particiones montables que podrían servir como Disco de Destino (ForenSys), excluyendo SO."""
+    try:
+        result = subprocess.run(
+            ['lsblk', '-J', '-o', 'NAME,SIZE,MODEL,TYPE,MOUNTPOINT,PKNAME'],
+            capture_output=True, text=True, check=True
+        )
+        lsblk_data = json.loads(result.stdout)
+        destinos = []
+
+        def parse_device(dev, model=""):
+            if dev.get('type') == 'disk':
+                model = dev.get('model', '').strip()
+            
+            # Bloquear SO
+            if dev['name'] in SYSTEM_DISK_NAMES:
+                return
+
+            if dev.get('type') == 'part':
+                # No mostrar particiones que ya estén montadas como 'Evidencia' (solo lectura)
+                mountpoint = dev.get('mountpoint') or ''
+                if not mountpoint.startswith('/mnt/Evidencia_'):
+                    destinos.append({
+                        'name': dev['name'],
+                        'path': f"/dev/{dev['name']}",
+                        'size': dev.get('size', ''),
+                        'model': model,
+                        'mountpoint': mountpoint
+                    })
+
+            for child in dev.get('children', []):
+                parse_device(child, model)
+
+        for dev in lsblk_data.get('blockdevices', []):
+            parse_device(dev)
+
+        return jsonify({"status": "success", "destinos": destinos})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@app.route('/api/usb/mount_destino', methods=['POST'])
+def mount_destino():
+    """Monta de forma segura el disco de Casos en /mnt/Destino_ForenSys con permisos RW."""
+    data = request.json or {}
+    target_part = data.get('partition', '').strip()
+    
+    if not target_part or not target_part.startswith('/dev/'):
+        return jsonify({"status": "error", "message": "Partición inválida."}), 400
+
+    disk_name = target_part.replace('/dev/', '')
+    if disk_name in SYSTEM_DISK_NAMES:
+        return jsonify({"status": "error", "message": "Prohibido montar el disco del sistema operativo."}), 403
+
+    punto_montaje = DESTINO_FORENSYS
+    
+    try:
+        # Si hay algo montado en Destino_ForenSys, desmontarlo primero para evitar solapamientos
+        if os.path.ismount(punto_montaje):
+            subprocess.run(['sudo', 'umount', punto_montaje], check=False, capture_output=True)
+
+        if not os.path.exists(punto_montaje):
+            subprocess.run(['sudo', 'mkdir', '-p', punto_montaje], check=True)
+
+        # Montar en modo RW (necesario para que la IA y ForenSys escriban los reportes)
+        subprocess.run(['sudo', 'mount', target_part, punto_montaje], check=True, capture_output=True, text=True)
+        
+        # Validar si es un disco de casos válido comprobando el json
+        registro_path = os.path.join(punto_montaje, 'casos_registro.json')
+        if not os.path.exists(registro_path):
+            return jsonify({
+                "status": "warning", 
+                "message": "Disco montado con éxito, pero no se detectó 'casos_registro.json'. Si es un disco nuevo, se creará al extraer un caso."
+            })
+            
+        return jsonify({"status": "success", "message": f"Disco {disk_name} montado correctamente en {punto_montaje}."})
+
+    except subprocess.CalledProcessError as e:
+        return jsonify({"status": "error", "message": f"Error al montar: {e.stderr}"}), 500
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/verify_disk', methods=['POST'])
 def verify_disk():
     """Realiza las validaciones ISO/IEC 27037 previas a la extracción forense."""

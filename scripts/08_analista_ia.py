@@ -10,7 +10,7 @@ import re
 import sys
 import time
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 
@@ -1027,7 +1027,9 @@ def _llamar_agente(tipo_agente, datos_filtrados, timeout_seg=300):
     # ─────────────────────────────────────────────────────────────────────────
 
     datos_sanitizados = sanitizar_prompt_injection(datos_filtrados)
-    prompt_final = prompt_plantilla.format(datos=datos_sanitizados)
+    # CRÍTICO: usar .replace() en vez de .format() porque los datos forenses
+    # contienen llaves { } (handles de Windows, JSON, reg keys) que rompería .format()
+    prompt_final = prompt_plantilla.replace('{datos}', datos_sanitizados)
 
     is_local = 'localhost' in OLLAMA_BASE_URL or '127.0.0.1' in OLLAMA_BASE_URL
     options = {
@@ -1146,15 +1148,16 @@ def ejecutar_agente_maestro(hallazgos, metadatos_txt, ruta_salida, ruta_auditori
     h_malware  = hallazgos.get('malware',  {})
     h_archivos = hallazgos.get('archivos', {})
 
-    prompt_maestro = PROMPT_AGENTE_MAESTRO.format(
-        nivel_red=h_red.get('nivel_amenaza_red', '?'),
-        nivel_malware=h_malware.get('nivel_amenaza_malware', '?'),
-        nivel_archivos=h_archivos.get('nivel_amenaza_archivos', '?'),
-        hallazgos_red=_json_pretty(h_red),
-        hallazgos_malware=_json_pretty(h_malware),
-        hallazgos_archivos=_json_pretty(h_archivos),
-        metadatos=metadatos_txt or 'No disponibles',
-    )
+    # CRÍTICO: usar .replace() secuencial en vez de .format() porque el JSON de los
+    # hallazgos contiene llaves { } que romperían str.format().
+    prompt_maestro = PROMPT_AGENTE_MAESTRO
+    prompt_maestro = prompt_maestro.replace('{nivel_red}',      h_red.get('nivel_amenaza_red', '?'))
+    prompt_maestro = prompt_maestro.replace('{nivel_malware}',  h_malware.get('nivel_amenaza_malware', '?'))
+    prompt_maestro = prompt_maestro.replace('{nivel_archivos}', h_archivos.get('nivel_amenaza_archivos', '?'))
+    prompt_maestro = prompt_maestro.replace('{hallazgos_red}',      _json_pretty(h_red))
+    prompt_maestro = prompt_maestro.replace('{hallazgos_malware}',  _json_pretty(h_malware))
+    prompt_maestro = prompt_maestro.replace('{hallazgos_archivos}', _json_pretty(h_archivos))
+    prompt_maestro = prompt_maestro.replace('{metadatos}',          metadatos_txt or 'No disponibles')
 
     prompt_sanitizado = sanitizar_prompt_injection(prompt_maestro)
 
@@ -1179,7 +1182,7 @@ def ejecutar_agente_maestro(hallazgos, metadatos_txt, ruta_salida, ruta_auditori
     }
 
     auditoria = {
-        'timestamp_inicio_utc': datetime.utcnow().isoformat(),
+        'timestamp_inicio_utc': datetime.now(timezone.utc).isoformat(),
         'modelo':               MODELO_LLM,
         'motor_url':            OLLAMA_BASE_URL,
         'modo_analisis':        'EMBUDO_FORENSE_MAESTRO',
@@ -1230,7 +1233,7 @@ def ejecutar_agente_maestro(hallazgos, metadatos_txt, ruta_salida, ruta_auditori
                 f.write(cabecera + reporte_maestro)
 
             auditoria['sintesis_sha256']   = hashlib.sha256(reporte_maestro.encode('utf-8', errors='replace')).hexdigest()
-            auditoria['timestamp_fin_utc'] = datetime.utcnow().isoformat()
+            auditoria['timestamp_fin_utc'] = datetime.now(timezone.utc).isoformat()
             auditoria['estado']            = 'COMPLETADO'
             exito = True
             print(f"\n[+] Reporte maestro guardado: {ruta_salida}")
@@ -1492,7 +1495,7 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido
 
     # Registro de auditoría inicial [CRÍTICA 4]
     auditoria = {
-        "timestamp_inicio_utc": datetime.utcnow().isoformat(),
+        "timestamp_inicio_utc": datetime.now(timezone.utc).isoformat(),
         "modelo": MODELO_LLM,
         "motor_url": OLLAMA_BASE_URL,
         "modo_analisis": "RAM_EXCLUSIVO" if modo_ram else "DISCO_COMPLETO",
@@ -1564,7 +1567,7 @@ def analizar_con_ia(evidencia_cruda, ruta_salida, ruta_auditoria, modelo_elegido
             auditoria["sintesis_sha256"] = hashlib.sha256(
                 sintesis_final.encode('utf-8', errors='replace')
             ).hexdigest()
-            auditoria["timestamp_fin_utc"] = datetime.utcnow().isoformat()
+            auditoria["timestamp_fin_utc"] = datetime.now(timezone.utc).isoformat()
             auditoria["estado"] = "COMPLETADO"
 
             print(f"\n[+] Síntesis completada. Guardada en:")
