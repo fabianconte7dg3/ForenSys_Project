@@ -1,5 +1,6 @@
 import argparse
 import base64
+import concurrent.futures
 import csv
 import glob
 import hashlib
@@ -700,6 +701,521 @@ def recopilar_inteligencia_ram(carpeta_resultados, es_local=True):
 
 
 
+# ==========================================
+# EMBUDO FORENSE — FASE 1: FILTRADO HEURÍSTICO KNOWN-GOOD
+# ==========================================
+
+KNOWN_GOOD_PATHS = (
+    r'\Windows\System32\\',
+    r'\Windows\SysWOW64\\',
+    r'\Windows\winsxs\\',
+    r'\Windows\WinSxS\\',
+    r'\Device\HarddiskVolume\Windows\\',
+    r'\SystemRoot\System32\\',
+    'C:\\Windows\\System32\\',
+    'C:\\Windows\\SysWOW64\\',
+    'C:\\Windows\\WinSxS\\',
+    'C:\\ProgramData\\Microsoft\\Windows Defender\\',
+)
+
+KNOWN_GOOD_PROCS = {
+    'System', 'smss.exe', 'csrss.exe', 'wininit.exe', 'winlogon.exe',
+    'services.exe', 'lsass.exe', 'lsm.exe', 'dwm.exe', 'fontdrvhost.exe',
+    'spoolsv.exe', 'WmiPrvSE.exe', 'dllhost.exe', 'taskhost.exe',
+    'taskhostw.exe', 'conhost.exe', 'audiodg.exe', 'SearchIndexer.exe',
+    'sihost.exe', 'ShellExperienceHost.exe', 'StartMenuExperienceHost.exe',
+}
+
+_RFC1918_PATTERNS = re.compile(
+    r'^(127\.\d+\.\d+\.\d+|'
+    r'10\.\d+\.\d+\.\d+|'
+    r'172\.(1[6-9]|2\d|3[01])\.\d+\.\d+|'
+    r'192\.168\.\d+\.\d+|'
+    r'::1|'
+    r'0\.0\.0\.0)$'
+)
+
+KNOWN_GOOD_LISTEN_PORTS = {135, 445, 5040, 7680, 49664, 49665, 49666, 49667,
+                            49668, 49669, 49670, 49671, 49672}
+
+
+def _ip_es_local(ip_str):
+    """Devuelve True si la IP es privada/loopback RFC 1918."""
+    ip = ip_str.strip().split('%')[0]
+    return bool(_RFC1918_PATTERNS.match(ip))
+
+
+def filtrar_plugin_heuristico(nombre_plugin, contenido_raw):
+    """
+    Fase 1 del Embudo Forense: aplica filtros Known-Good al contenido de un
+    plugin de Volatility3 y retorna SOLO las líneas anómalas.
+    """
+    if not contenido_raw or not contenido_raw.strip():
+        return contenido_raw
+
+    lineas_orig = contenido_raw.splitlines(keepends=True)
+    n_orig = len(lineas_orig)
+    plugin = nombre_plugin.lower()
+
+    # ── netscan / netstat ──────────────────────────────────────────────────
+    if plugin in ('netscan', 'netstat'):
+        filtradas = []
+        for linea in lineas_orig:
+            partes = linea.split()
+            if not partes or partes[0] in ('Offset', 'Proto', 'Volatility', '#'):
+                filtradas.append(linea)
+                continue
+            ip_remota = ''
+            puerto_local = 0
+            estado = ''
+            try:
+                if len(partes) >= 5:
+                    local_part  = partes[1] if ':' in partes[1] else partes[2]
+                    remote_part = partes[2] if ':' in partes[2] else partes[3]
+                    estado = partes[3] if len(partes) > 3 else ''
+                    if ':' in local_part:
+                        puerto_local = int(local_part.rsplit(':', 1)[-1]) if local_part.rsplit(':', 1)[-1].isdigit() else 0
+                    if ':' in remote_part:
+                        ip_remota = remote_part.rsplit(':', 1)[0]
+            except Exception:
+                pass
+            if estado.upper() in ('LISTENING', 'CLOSED', 'CLOSE_WAIT') and \
+               puerto_local in KNOWN_GOOD_LISTEN_PORTS:
+                continue
+            if ip_remota and _ip_es_local(ip_remota):
+                continue
+            filtradas.append(linea)
+        contenido_raw = ''.join(filtradas)
+
+    # ── pslist / pstree / cmdline ──────────────────────────────────────────
+    elif plugin in ('pslist', 'pstree', 'cmdline'):
+        filtradas = []
+        for linea in lineas_orig:
+            partes = linea.split()
+            if not partes:
+                filtradas.append(linea); continue
+            nombre_proc = os.path.basename(partes[0])
+            if partes[0] in ('PID', 'Volatility', '#', 'PPID', 'Offset', 'Thds'):
+                filtradas.append(linea); continue
+            if nombre_proc in KNOWN_GOOD_PROCS:
+                linea_lower = linea.lower()
+                if any(p.lower() in linea_lower for p in KNOWN_GOOD_PATHS):
+                    continue
+            filtradas.append(linea)
+        contenido_raw = ''.join(filtradas)
+
+    # ── filescan ───────────────────────────────────────────────────────────
+    elif plugin == 'filescan':
+        filtradas = []
+        for linea in lineas_orig:
+            linea_lower = linea.lower()
+            if linea.startswith('#') or 'offset' in linea_lower:
+                filtradas.append(linea); continue
+            if any(p.lower() in linea_lower for p in KNOWN_GOOD_PATHS):
+                continue
+            filtradas.append(linea)
+        contenido_raw = ''.join(filtradas)
+
+    # ── svcscan ────────────────────────────────────────────────────────────
+    elif plugin == 'svcscan':
+        filtradas = []
+        bloque_actual = []
+        es_legit = False
+        for linea in lineas_orig:
+            if linea.startswith('Offset:') or linea.startswith('Service Name:'):
+                if bloque_actual and not es_legit:
+                    filtradas.extend(bloque_actual)
+                bloque_actual = [linea]
+                es_legit = False
+            else:
+                bloque_actual.append(linea)
+                linea_lower = linea.lower()
+                if 'binary path:' in linea_lower:
+                    if 'svchost.exe -k' in linea_lower and 'system32' in linea_lower:
+                        es_legit = True
+                    elif 'system32' in linea_lower and 'running' in linea_lower:
+                        es_legit = True
+        if bloque_actual and not es_legit:
+            filtradas.extend(bloque_actual)
+        contenido_raw = ''.join(filtradas)
+
+    # ── dlllist ────────────────────────────────────────────────────────────
+    elif plugin == 'dlllist':
+        filtradas = []
+        for linea in lineas_orig:
+            linea_lower = linea.lower()
+            if linea.startswith('#') or 'base' in linea_lower or 'pid' in linea_lower:
+                filtradas.append(linea); continue
+            if any(p.lower() in linea_lower for p in KNOWN_GOOD_PATHS):
+                continue
+            filtradas.append(linea)
+        contenido_raw = ''.join(filtradas)
+
+    n_final = len(contenido_raw.splitlines())
+    if n_orig > 0:
+        reduccion = round((1 - n_final / max(n_orig, 1)) * 100)
+        print(f"    [Filtro] {nombre_plugin}: {n_orig} líneas → {n_final} líneas "
+              f"({reduccion}% ruido eliminado)")
+
+    return contenido_raw
+
+
+# ==========================================
+# EMBUDO FORENSE — FASE 2: AGENTES ESPECIALIZADOS
+# ==========================================
+
+PROMPT_AGENTE_RED = """
+Eres un analista de ciberseguridad forense especializado ÚNICAMENTE en tráfico de red.
+Tu ÚNICA fuente de información son los datos del plugin windows.netscan / windows.netstat de Volatility3.
+
+TAREA ESTRICTA: Buscar en los datos proporcionados:
+1. Conexiones ESTABLISHED hacia IPs EXTERNAS (no RFC 1918 — ya fueron filtradas del dataset).
+2. Puertos inusuales (no 80, 443, 53, 8080) en estado ESTABLISHED o LISTENING con IP externa.
+3. Procesos con PID inesperado haciendo conexiones de red (ej. svchost.exe con PID > 4000 hacia IP externa).
+4. Patrones de baliza (beacon): múltiples conexiones al mismo destino en intervalos regulares.
+
+REGLA DE ORO: NO alucines. Si no hay datos anómalos, devuelve JSON con listas vacías.
+Responde ÚNICAMENTE con un JSON sin explicaciones ni markdown:
+{
+  "conexiones_sospechosas": [{"pid": ..., "proceso": ..., "ip_remota": ..., "puerto": ..., "estado": ...}],
+  "ips_externas_detectadas": ["ip1", "ip2"],
+  "pids_con_red_inusual": [pid1, pid2],
+  "nivel_amenaza_red": "ALTO|MEDIO|BAJO|NINGUNO",
+  "notas": "Breve descripción de los hallazgos más críticos o 'Sin anomalías detectadas'"
+}
+
+DATOS netscan/netstat (ya filtrados de IPs locales y puertos estándar del SO):
+{datos}
+"""
+
+PROMPT_AGENTE_MALWARE = """
+Eres un analista de malware forense especializado ÚNICAMENTE en análisis de procesos y detección de código malicioso en memoria RAM.
+Tu fuente son los datos de windows.malfind, windows.pslist y windows.cmdline de Volatility3.
+
+TAREA ESTRICTA: Buscar en los datos proporcionados:
+1. Regiones de memoria PAGE_EXECUTE_READWRITE (shellcode/PE inyectado) en windows.malfind.
+2. Procesos con PPID 0 o PPID inesperado (procesos huérfanos — técnica de evasión).
+3. Nombres de procesos ofuscados, con caracteres extraños o que imitan procesos legítimos (ej. svch0st.exe).
+4. Comandos en cmdline con: PowerShell encodado (-EncodedCommand), rutas de Temp/AppData, descargas.
+5. Procesos con múltiples hilos (Thds > 100) en rutas no-sistema.
+
+REGLA DE ORO: NO alucines. Si no hay datos anómalos, devuelve JSON con listas vacías.
+Responde ÚNICAMENTE con un JSON sin explicaciones ni markdown:
+{
+  "procesos_sospechosos": [{"pid": ..., "nombre": ..., "ppid": ..., "ruta": ..., "motivo": ...}],
+  "pids_con_inyeccion": [pid1, pid2],
+  "comandos_sospechosos": ["cmd1", "cmd2"],
+  "nivel_amenaza_malware": "ALTO|MEDIO|BAJO|NINGUNO",
+  "notas": "Breve descripción de los hallazgos más críticos o 'Sin anomalías detectadas'"
+}
+
+DATOS malfind/pslist/cmdline (ya filtrados de procesos del sistema canónicos):
+{datos}
+"""
+
+PROMPT_AGENTE_ARCHIVOS = """
+Eres un analista de persistencia forense especializado ÚNICAMENTE en mecanismos de persistencia, DLL hijacking y archivos maliciosos.
+Tu fuente son los datos de windows.filescan, windows.svcscan y windows.dlllist de Volatility3.
+
+TAREA ESTRICTA: Buscar en los datos proporcionados:
+1. Archivos ejecutables (.exe, .dll, .bat, .ps1, .vbs, .scr) en rutas de usuario (AppData, Temp, Downloads).
+2. Servicios con BinaryPath en rutas no-sistema (AppData, Temp, rutas de usuario).
+3. DLLs cargadas en procesos críticos desde rutas no-System32 (posible DLL hijacking).
+4. Archivos con nombres que imitan ejecutables legítimos pero en rutas incorrectas.
+
+REGLA DE ORO: NO alucines. Si no hay datos anómalos, devuelve JSON con listas vacías.
+Responde ÚNICAMENTE con un JSON sin explicaciones ni markdown:
+{
+  "archivos_ejecutables_sospechosos": [{"ruta": ..., "motivo": ...}],
+  "servicios_sospechosos": [{"nombre": ..., "binpath": ..., "estado": ..., "motivo": ...}],
+  "dlls_sospechosas": [{"dll": ..., "proceso": ..., "pid": ..., "motivo": ...}],
+  "nivel_amenaza_archivos": "ALTO|MEDIO|BAJO|NINGUNO",
+  "notas": "Breve descripción de los hallazgos más críticos o 'Sin anomalías detectadas'"
+}
+
+DATOS filescan/svcscan/dlllist (ya filtrados de rutas del sistema legítimas):
+{datos}
+"""
+
+PROMPT_AGENTE_MAESTRO = """
+Eres un Perito Informático Forense Senior. Recibirás los hallazgos de 3 agentes especializados
+que analizaron de forma independiente el volcado de memoria RAM de un equipo bajo investigación.
+
+TU TAREA CRÍTICA: CORRELACIONAR los hallazgos de los 3 agentes para detectar amenazas compuestas.
+
+REGLA DE CORRELACIÓN DE ORO:
+- Si un PID aparece en `pids_con_red_inusual` (Agente Red) Y también en `pids_con_inyeccion` (Agente Malware)
+  → Es un IOC CONFIRMADO de MÁXIMA SEVERIDAD (proceso comprometido con C2 activo).
+- Si un proceso en `procesos_sospechosos` (Malware) usa una DLL en `dlls_sospechosas` (Archivos)
+  → Es posible DLL Hijacking o Proceso Hueco (Process Hollowing).
+- Si un servicio en `servicios_sospechosos` (Archivos) tiene el mismo proceso en `procesos_sospechosos` (Malware)
+  → Es un mecanismo de persistencia activo con código malicioso.
+
+GENERA EL REPORTE FINAL en formato Markdown con estas secciones EXACTAS:
+
+## 🔴 IoCs Confirmados (Correlación Cruzada)
+(Lista los hallazgos donde 2+ agentes coinciden en el mismo PID/proceso/archivo. Severidad: CRÍTICA/ALTA/MEDIA)
+
+## 🟠 Hallazgos por Agente
+### Red: {nivel_red}
+(Lista los hallazgos del Agente Red)
+### Malware: {nivel_malware}
+(Lista los hallazgos del Agente Malware)
+### Archivos/Persistencia: {nivel_archivos}
+(Lista los hallazgos del Agente de Archivos)
+
+## 📊 Evaluación de Riesgo Global
+(Párrafo corto: nivel de riesgo general del equipo basado en la correlación. NO inventes datos no presentes.)
+
+REGLA CRÍTICA: Solo menciona datos que estén EXPLÍCITAMENTE presentes en los JSON de los agentes.
+Si una lista está vacía, indicar 'Sin hallazgos en este dominio'.
+
+==================================================
+HALLAZGOS DEL AGENTE DE RED:
+{hallazgos_red}
+
+HALLAZGOS DEL AGENTE DE MALWARE:
+{hallazgos_malware}
+
+HALLAZGOS DEL AGENTE DE ARCHIVOS:
+{hallazgos_archivos}
+
+METADATOS DEL VOLCADO:
+{metadatos}
+==================================================
+
+Genera ahora el reporte de correlación forense:
+"""
+
+
+def _llamar_agente(tipo_agente, datos_filtrados, timeout_seg=300):
+    """
+    Llama a Ollama con el prompt del agente especializado.
+    Retorna un dict Python con los hallazgos, o un dict de error.
+    """
+    prompts = {
+        'red':      PROMPT_AGENTE_RED,
+        'malware':  PROMPT_AGENTE_MALWARE,
+        'archivos': PROMPT_AGENTE_ARCHIVOS,
+    }
+    prompt_plantilla = prompts.get(tipo_agente, '')
+    if not prompt_plantilla:
+        return {'error': f'Tipo de agente desconocido: {tipo_agente}'}
+
+    datos_sanitizados = sanitizar_prompt_injection(datos_filtrados)
+    prompt_final = prompt_plantilla.format(datos=datos_sanitizados)
+
+    is_local = 'localhost' in OLLAMA_BASE_URL or '127.0.0.1' in OLLAMA_BASE_URL
+    options = {
+        'temperature': 0.0,
+        'top_p':       0.3,
+        'num_ctx':     NUM_CTX,
+        'num_thread':  NUM_THREAD,
+    }
+    if not is_local:
+        options['num_gpu']        = 42
+        options['top_k']          = 5
+        options['repeat_penalty'] = 1.2
+
+    payload = {
+        'model':      MODELO_LLM,
+        'prompt':     prompt_final,
+        'stream':     False,
+        'options':    options,
+        'keep_alive': '0',
+    }
+
+    print(f"    [Agente {tipo_agente.upper()}] Enviando {len(datos_filtrados):,} chars al LLM...")
+    try:
+        resp = requests.post(OLLAMA_URL, json=payload, timeout=timeout_seg)
+        resp.raise_for_status()
+        texto = resp.json().get('response', '').strip()
+
+        json_match = re.search(r'\{.*\}', texto, re.DOTALL)
+        if json_match:
+            hallazgos = json.loads(json_match.group())
+            nivel_key = f'nivel_amenaza_{tipo_agente}'
+            print(f"    [Agente {tipo_agente.upper()}] ✓ Nivel: {hallazgos.get(nivel_key, '?')}")
+            return hallazgos
+        else:
+            print(f"    [Agente {tipo_agente.upper()}] ⚠ La IA no devolvió JSON válido.")
+            return {'respuesta_texto': texto, 'error': 'JSON no encontrado en respuesta'}
+
+    except json.JSONDecodeError as e:
+        print(f"    [Agente {tipo_agente.upper()}] ✗ Error parseando JSON: {e}")
+        return {'error': str(e)}
+    except requests.exceptions.Timeout:
+        print(f"    [Agente {tipo_agente.upper()}] ✗ TIMEOUT ({timeout_seg}s).")
+        return {'error': 'TIMEOUT'}
+    except Exception as e:
+        print(f"    [Agente {tipo_agente.upper()}] ✗ Error de red: {e}")
+        return {'error': str(e)}
+
+
+def ejecutar_agentes_embudo(datos_por_agente, es_local=False):
+    """
+    Fase 2: Ejecuta los 3 agentes especializados.
+    - Motor remoto (GPU): paralelo con ThreadPoolExecutor.
+    - Motor local (RPi5): secuencial para no saturar los 8 GB de RAM.
+    """
+    print("\n[EMBUDO FASE 2] Ejecutando agentes especializados...")
+    modo = 'secuencial (RPi5)' if es_local else 'paralelo (Motor Remoto GPU)'
+    print(f"    Modo de ejecución: {modo}")
+    timeout_agente = 180 if es_local else 300
+
+    resultados = {}
+
+    if es_local:
+        for tipo, datos in datos_por_agente.items():
+            if datos.strip():
+                resultados[tipo] = _llamar_agente(tipo, datos, timeout_agente)
+            else:
+                print(f"    [Agente {tipo.upper()}] Omitido (sin datos filtrados).")
+                resultados[tipo] = {'notas': 'Sin datos disponibles para este dominio.'}
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+            futuros = {}
+            for tipo, datos in datos_por_agente.items():
+                if datos.strip():
+                    futuros[executor.submit(_llamar_agente, tipo, datos, timeout_agente)] = tipo
+                else:
+                    print(f"    [Agente {tipo.upper()}] Omitido (sin datos filtrados).")
+                    resultados[tipo] = {'notas': 'Sin datos disponibles para este dominio.'}
+
+            for futuro in concurrent.futures.as_completed(futuros):
+                tipo = futuros[futuro]
+                try:
+                    resultados[tipo] = futuro.result()
+                except Exception as e:
+                    print(f"    [Agente {tipo.upper()}] ✗ Error en hilo: {e}")
+                    resultados[tipo] = {'error': str(e)}
+
+    return resultados
+
+
+def ejecutar_agente_maestro(hallazgos, metadatos_txt, ruta_salida, ruta_auditoria):
+    """
+    Fase 3: El Agente Maestro correlaciona los 3 JSONs y genera el reporte Markdown final.
+    """
+    print("\n[EMBUDO FASE 3] Agente Maestro ejecutando correlación cruzada...")
+
+    def _json_pretty(d):
+        return json.dumps(d, indent=2, ensure_ascii=False) if isinstance(d, dict) else str(d)
+
+    h_red      = hallazgos.get('red',      {})
+    h_malware  = hallazgos.get('malware',  {})
+    h_archivos = hallazgos.get('archivos', {})
+
+    prompt_maestro = PROMPT_AGENTE_MAESTRO.format(
+        nivel_red=h_red.get('nivel_amenaza_red', '?'),
+        nivel_malware=h_malware.get('nivel_amenaza_malware', '?'),
+        nivel_archivos=h_archivos.get('nivel_amenaza_archivos', '?'),
+        hallazgos_red=_json_pretty(h_red),
+        hallazgos_malware=_json_pretty(h_malware),
+        hallazgos_archivos=_json_pretty(h_archivos),
+        metadatos=metadatos_txt or 'No disponibles',
+    )
+
+    prompt_sanitizado = sanitizar_prompt_injection(prompt_maestro)
+
+    is_local = 'localhost' in OLLAMA_BASE_URL or '127.0.0.1' in OLLAMA_BASE_URL
+    options = {
+        'temperature': 0.0,
+        'top_p':       0.5,
+        'num_ctx':     NUM_CTX,
+        'num_thread':  NUM_THREAD,
+    }
+    if not is_local:
+        options['num_gpu']        = 42
+        options['top_k']          = 10
+        options['repeat_penalty'] = 1.2
+
+    payload = {
+        'model':      MODELO_LLM,
+        'prompt':     prompt_sanitizado,
+        'stream':     True,
+        'options':    options,
+        'keep_alive': '0',
+    }
+
+    auditoria = {
+        'timestamp_inicio_utc': datetime.utcnow().isoformat(),
+        'modelo':               MODELO_LLM,
+        'motor_url':            OLLAMA_BASE_URL,
+        'modo_analisis':        'EMBUDO_FORENSE_MAESTRO',
+        'hallazgos_agentes':    hallazgos,
+        'prompt_sha256':        hashlib.sha256(prompt_sanitizado.encode('utf-8', errors='replace')).hexdigest(),
+        'estado':               'EN_PROGRESO',
+    }
+
+    print("[*] Agente Maestro analizando correlaciones (streaming)...\n" + '=' * 60)
+    tokens = []
+    exito  = False
+
+    try:
+        resp = requests.post(OLLAMA_URL, json=payload, stream=True, timeout=TIMEOUT_SOLICITUD)
+        resp.raise_for_status()
+        for linea in resp.iter_lines():
+            if linea:
+                try:
+                    fragmento = json.loads(linea)
+                    token = fragmento.get('response', '')
+                    tokens.append(token)
+                    sys.stdout.write(token)
+                    sys.stdout.flush()
+                    if fragmento.get('done', False):
+                        break
+                except json.JSONDecodeError:
+                    continue
+        print('\n' + '=' * 60)
+
+        reporte_maestro = ''.join(tokens)
+        if reporte_maestro.strip():
+            resultado_alucinaciones = detectar_alucinaciones(
+                reporte_maestro, _json_pretty(hallazgos))
+            auditoria['alucinaciones'] = resultado_alucinaciones
+            nivel_confianza = resultado_alucinaciones.get('confianza', 'MEDIA')
+
+            ts_gen = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            cabecera = (
+                f"{DISCLAIMER_LEGAL}\n\n---\n"
+                f"**Generado:** {ts_gen} | **Modelo:** {MODELO_LLM} | "
+                f"**Confianza IA:** {nivel_confianza} | **Arquitectura:** Embudo Forense 3-Fases\n\n"
+                f"**ESTADO:** BORRADOR — REQUIERE REVISIÓN Y FIRMA DE PERITO CERTIFICADO\n\n---\n\n"
+                f"# SÍNTESIS DE INTELIGENCIA FORENSE (EMBUDO — CORRELACIÓN CRUZADA)\n\n"
+                f"> ⚠️ Este documento es una síntesis automática. No es un Dictamen Pericial.\n\n"
+            )
+
+            with open(ruta_salida, 'w', encoding='utf-8') as f:
+                f.write(cabecera + reporte_maestro)
+
+            auditoria['sintesis_sha256']   = hashlib.sha256(reporte_maestro.encode('utf-8', errors='replace')).hexdigest()
+            auditoria['timestamp_fin_utc'] = datetime.utcnow().isoformat()
+            auditoria['estado']            = 'COMPLETADO'
+            exito = True
+            print(f"\n[+] Reporte maestro guardado: {ruta_salida}")
+            print(f"[+] Confianza: {nivel_confianza}")
+        else:
+            print('[-] Agente Maestro no generó contenido.')
+            auditoria['estado'] = 'SIN_CONTENIDO'
+
+    except Exception as e:
+        print(f'\n[-] Error en Agente Maestro: {e}')
+        auditoria['estado'] = f'ERROR: {e}'
+
+    finally:
+        try:
+            with open(ruta_auditoria, 'w', encoding='utf-8') as f:
+                json.dump(auditoria, f, indent=2, ensure_ascii=False)
+            os.chmod(ruta_auditoria, 0o600)
+            print(f'[+] Auditoría Agente Maestro: {ruta_auditoria}')
+        except Exception as e:
+            print(f'[!] No se pudo guardar auditoría del maestro: {e}')
+
+    return exito
+
+
+# ==========================================
 PROMPT_VISION_FORENSE = (
     "Eres un asistente forense digital. Analiza esta imagen recuperada de un "
     "dispositivo bajo investigación judicial. Describe con precisión:\n"
@@ -1261,6 +1777,10 @@ if __name__ == "__main__":
     parser.add_argument("--ram-only", action="store_true", default=False,
                         help="Analizar EXCLUSIVAMENTE los resultados de RAM (sin normalización de disco). "
                              "Usa el prompt forense especializado en memoria volátil.")
+    parser.add_argument("--modo", required=False, default=None,
+                        choices=["clasico", "embudo"],
+                        help="Arquitectura de análisis: 'clasico' = un solo LLM (comportamiento anterior), "
+                             "'embudo' = 3 agentes especializados + correlación cruzada (default en motor remoto).")
     args = parser.parse_args()
 
     # Validar y limpiar ID de caso (anti path-traversal)
@@ -1382,60 +1902,134 @@ if __name__ == "__main__":
     # Recopilar evidencia según el modo
     print("[PROGRESO:30] Recopilando y filtrando evidencia...")
     es_local = ("localhost" in OLLAMA_BASE_URL or "127.0.0.1" in OLLAMA_BASE_URL)
-    
+
+    # Determinar arquitectura de análisis
+    # 'embudo' es el default en motor remoto; 'clasico' es el default en RPi5 local
+    modo_analisis = args.modo
+    if modo_analisis is None:
+        modo_analisis = 'clasico' if es_local else 'embudo'
+    print(f"    [*] Arquitectura de análisis: {modo_analisis.upper()} "
+          f"({'Agentes Especializados + Correlación' if modo_analisis == 'embudo' else 'LLM Monolítico'})")
+
     if modo_ram_exclusivo:
-        print("    [*] Modo: ANÁLISIS EXCLUSIVO DE MEMORIA RAM")
-        evidencia_filtrada = recopilar_inteligencia_ram(carpeta_resultados, es_local=es_local)
-        if not evidencia_filtrada:
+        print("    [*] Fuente de datos: ANÁLISIS EXCLUSIVO DE MEMORIA RAM")
+        evidencia_bruta = recopilar_inteligencia_ram(carpeta_resultados, es_local=es_local)
+        if not evidencia_bruta:
             print("[-] ERROR: No se encontraron reportes de RAM. "
                   "Asegúrate de haber ejecutado el Módulo 3 (Extracción RAM) primero.")
             sys.exit(1)
     else:
-        print("    [*] Modo: ANÁLISIS DE DISCO COMPLETO (con integración de RAM si existe)")
-        evidencia_filtrada = recopilar_inteligencia(carpeta_resultados)
-        if len(evidencia_filtrada) < 50:
+        print("    [*] Fuente de datos: ANÁLISIS DE DISCO COMPLETO (con integración de RAM si existe)")
+        evidencia_bruta = recopilar_inteligencia(carpeta_resultados)
+        if len(evidencia_bruta) < 50:
             print("[-] Advertencia: Poca evidencia disponible. ¿Ejecutaste el Módulo 6?")
             print("[-] Continuando con la evidencia disponible...")
 
-    # FASE 2 (OPCIONAL): Análisis Visual Masivo
-    resumen_visual = ''
-    if args.vision:
-        carpeta_caso_base = os.path.join(directorio_base_actual, caso_id)
-        resumen_visual = analizar_imagenes_en_masa(carpeta_caso_base, OLLAMA_BASE_URL, MODELO_LLM)
-        if resumen_visual:
-            # Inyectar el resumen visual en la evidencia textual antes de la síntesis
-            bloque_vision = (
-                "\n--- ANÁLISIS VISUAL DE IMÁGENES (IA) ---\n"
-                + resumen_visual
-                + "\n--- FIN ANÁLISIS VISUAL ---\n"
-            )
-            evidencia_filtrada += bloque_vision
-            print(f"[+] Análisis visual integrado en la evidencia ({len(resumen_visual)} chars adicionales).")
-    else:
-        print("[INFO] Análisis visual omitido (usa --vision para activarlo con motor remoto).")
+    # ═══════════════════════════════════════════════════════════════
+    # CAMINO A: MODO EMBUDO (3 fases)
+    # Solo disponible para análisis RAM (donde hay los plugins de Volatility3 separados)
+    # ═══════════════════════════════════════════════════════════════
+    if modo_analisis == 'embudo' and modo_ram_exclusivo:
+        print("\n[EMBUDO FASE 1] Aplicando filtros heurísticos Known-Good a los plugins de Volatility3...")
+        carpeta_ram = os.path.join(carpeta_resultados, "RAM")
 
-    # FASE 2.5 (OPCIONAL): Análisis Documental Masivo
-    resumen_documental = ''
-    if args.docs:
-        carpeta_caso_base = os.path.join(directorio_base_actual, caso_id)
-        resumen_documental = analizar_documentos_en_masa(carpeta_caso_base, OLLAMA_BASE_URL, MODELO_LLM)
-        if resumen_documental:
-            # Inyectar el resumen documental en la evidencia textual antes de la síntesis
-            bloque_docs = (
-                "\n--- ANÁLISIS DE DOCUMENTOS (IA) ---\n"
-                + resumen_documental
-                + "\n--- FIN ANÁLISIS DE DOCUMENTOS ---\n"
-            )
-            evidencia_filtrada += bloque_docs
-            print(f"[+] Análisis documental integrado en la evidencia ({len(resumen_documental)} chars adicionales).")
-    else:
-        print("[INFO] Análisis documental omitido (usa --docs para activarlo con motor remoto).")
+        # Leer cada plugin por separado y aplicar el filtro heurístico
+        plugins_filtrados = {}
+        for nombre_txt in os.listdir(carpeta_ram):
+            if not nombre_txt.endswith('.txt'):
+                continue
+            nombre_plugin = os.path.splitext(nombre_txt)[0]
+            ruta_txt = os.path.join(carpeta_ram, nombre_txt)
+            try:
+                with open(ruta_txt, 'r', encoding='utf-8', errors='ignore') as f:
+                    contenido = f.read()
+                plugins_filtrados[nombre_plugin] = filtrar_plugin_heuristico(nombre_plugin, contenido)
+            except Exception as e:
+                print(f"    [!] Error leyendo {nombre_txt}: {e}")
 
-    # Análisis IA (FASE 3: Síntesis final)
-    print(f"[PROGRESO:60] Transmitiendo evidencia al LLM (motor: {perfil_nombre})...")
-    if modo_ram_exclusivo:
-        print("    [*] Usando prompt especializado: PROMPT_RAM_FORENSE")
-    analizar_con_ia(evidencia_filtrada, ruta_sintesis, ruta_auditoria, modo_ram=modo_ram_exclusivo)
+        # Agrupar datos por dominio de agente
+        PLUGINS_RED      = ('netscan', 'netstat')
+        PLUGINS_MALWARE  = ('malfind', 'pslist', 'pstree', 'cmdline', 'hashdump')
+        PLUGINS_ARCHIVOS = ('filescan', 'svcscan', 'dlllist')
+
+        datos_agente_red      = '\n'.join(plugins_filtrados.get(p, '') for p in PLUGINS_RED)
+        datos_agente_malware  = '\n'.join(plugins_filtrados.get(p, '') for p in PLUGINS_MALWARE)
+        datos_agente_archivos = '\n'.join(plugins_filtrados.get(p, '') for p in PLUGINS_ARCHIVOS)
+
+        print(f"\n    Datos por agente (post-filtro):")
+        print(f"      Red:      {len(datos_agente_red):>8,} chars")
+        print(f"      Malware:  {len(datos_agente_malware):>8,} chars")
+        print(f"      Archivos: {len(datos_agente_archivos):>8,} chars")
+        print(f"      (Datos brutos originales: {len(evidencia_bruta):>8,} chars)")
+
+        datos_por_agente = {
+            'red':      datos_agente_red,
+            'malware':  datos_agente_malware,
+            'archivos': datos_agente_archivos,
+        }
+
+        # FASE 2: Agentes especializados
+        print(f"\n[PROGRESO:45]")
+        hallazgos = ejecutar_agentes_embudo(datos_por_agente, es_local=es_local)
+
+        # Extraer metadatos del volcado para el Agente Maestro
+        metadatos_txt = plugins_filtrados.get('info', '') or plugins_filtrados.get('resumen_analisis_ram', '')
+
+        # FASE 3: Agente Maestro — correlación y síntesis
+        print(f"\n[PROGRESO:70]")
+        ruta_auditoria_maestro = ruta_auditoria.replace('.json', '_maestro.json')
+        exito = ejecutar_agente_maestro(hallazgos, metadatos_txt, ruta_sintesis, ruta_auditoria_maestro)
+
+        if exito:
+            print(f"[PROGRESO:100] Síntesis Embudo completada: {ruta_sintesis}")
+        else:
+            print("[-] ERROR: El Agente Maestro no pudo generar el reporte.")
+            sys.exit(1)
+
+    # ═══════════════════════════════════════════════════════════════
+    # CAMINO B: MODO CLÁSICO (un solo LLM + pipeline de visión/docs)
+    # ═══════════════════════════════════════════════════════════════
+    else:
+        if modo_analisis == 'embudo' and not modo_ram_exclusivo:
+            print("[INFO] Modo Embudo requiere --ram-only (plugins separados). Usando modo Clásico para disco.")
+
+        evidencia_filtrada = evidencia_bruta
+
+        # FASE VISUAL (OPCIONAL)
+        resumen_visual = ''
+        if args.vision:
+            carpeta_caso_base = os.path.join(directorio_base_actual, caso_id)
+            resumen_visual = analizar_imagenes_en_masa(carpeta_caso_base, OLLAMA_BASE_URL, MODELO_LLM)
+            if resumen_visual:
+                evidencia_filtrada += (
+                    "\n--- ANÁLISIS VISUAL DE IMÁGENES (IA) ---\n"
+                    + resumen_visual
+                    + "\n--- FIN ANÁLISIS VISUAL ---\n"
+                )
+                print(f"[+] Análisis visual integrado ({len(resumen_visual)} chars).")
+        else:
+            print("[INFO] Análisis visual omitido (usa --vision para activarlo con motor remoto).")
+
+        # FASE DOCUMENTAL (OPCIONAL)
+        resumen_documental = ''
+        if args.docs:
+            carpeta_caso_base = os.path.join(directorio_base_actual, caso_id)
+            resumen_documental = analizar_documentos_en_masa(carpeta_caso_base, OLLAMA_BASE_URL, MODELO_LLM)
+            if resumen_documental:
+                evidencia_filtrada += (
+                    "\n--- ANÁLISIS DE DOCUMENTOS (IA) ---\n"
+                    + resumen_documental
+                    + "\n--- FIN ANÁLISIS DE DOCUMENTOS ---\n"
+                )
+                print(f"[+] Análisis documental integrado ({len(resumen_documental)} chars).")
+        else:
+            print("[INFO] Análisis documental omitido (usa --docs para activarlo con motor remoto).")
+
+        # SÍNTESIS CLÁSICA
+        print(f"[PROGRESO:60] Transmitiendo evidencia al LLM (motor: {perfil_nombre})...")
+        if modo_ram_exclusivo:
+            print("    [*] Usando prompt especializado: PROMPT_RAM_FORENSE")
+        analizar_con_ia(evidencia_filtrada, ruta_sintesis, ruta_auditoria, modo_ram=modo_ram_exclusivo)
 
     if os.path.exists(ruta_sintesis):
         print(f"[PROGRESO:100] Síntesis de inteligencia guardada en: {ruta_sintesis}")
