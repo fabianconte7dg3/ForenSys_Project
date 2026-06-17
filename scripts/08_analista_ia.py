@@ -818,25 +818,27 @@ def filtrar_plugin_heuristico(nombre_plugin, contenido_raw):
 
     # ── svcscan ────────────────────────────────────────────────────────────
     elif plugin == 'svcscan':
+        # Volatility3 svcscan genera una tabla columnar (no bloques por registro).
+        # Formato típico: Offset  Order  Start  PID  Name  Display  Type  State  BinPath
+        # Filtramos filas donde la ruta del binario es una ruta canónica de sistema.
         filtradas = []
-        bloque_actual = []
-        es_legit = False
         for linea in lineas_orig:
-            if linea.startswith('Offset:') or linea.startswith('Service Name:'):
-                if bloque_actual and not es_legit:
-                    filtradas.extend(bloque_actual)
-                bloque_actual = [linea]
-                es_legit = False
-            else:
-                bloque_actual.append(linea)
-                linea_lower = linea.lower()
-                if 'binary path:' in linea_lower:
-                    if 'svchost.exe -k' in linea_lower and 'system32' in linea_lower:
-                        es_legit = True
-                    elif 'system32' in linea_lower and 'running' in linea_lower:
-                        es_legit = True
-        if bloque_actual and not es_legit:
-            filtradas.extend(bloque_actual)
+            linea_lower = linea.lower()
+            # Conservar cabecera y líneas vacías
+            if not linea.strip() or 'offset' in linea_lower[:30] or linea.startswith('#'):
+                filtradas.append(linea); continue
+            # Si la línea contiene una ruta de sistema AND svchost con -k → ruido del SO
+            es_sistema = any(p.lower() in linea_lower for p in KNOWN_GOOD_PATHS)
+            es_svchost = 'svchost.exe' in linea_lower and '-k' in linea_lower
+            if es_sistema and es_svchost:
+                continue
+            # Ruta en system32 con estado RUNNING y tipo Win32ShareProcess → ruido del SO
+            es_running_std = ('system32' in linea_lower
+                              and 'running' in linea_lower
+                              and ('win32shareprocess' in linea_lower or 'win32ownprocess' in linea_lower))
+            if es_running_std:
+                continue
+            filtradas.append(linea)
         contenido_raw = ''.join(filtradas)
 
     # ── dlllist ────────────────────────────────────────────────────────────
@@ -991,6 +993,7 @@ Genera ahora el reporte de correlación forense:
 def _llamar_agente(tipo_agente, datos_filtrados, timeout_seg=300):
     """
     Llama a Ollama con el prompt del agente especializado.
+    Trunca los datos al presupuesto del contexto antes de enviar.
     Retorna un dict Python con los hallazgos, o un dict de error.
     """
     prompts = {
@@ -1001,6 +1004,27 @@ def _llamar_agente(tipo_agente, datos_filtrados, timeout_seg=300):
     prompt_plantilla = prompts.get(tipo_agente, '')
     if not prompt_plantilla:
         return {'error': f'Tipo de agente desconocido: {tipo_agente}'}
+
+    # ── TRUNCACIÓN DEFENSIVA ─────────────────────────────────────────────────
+    # Presupuesto: el contexto del modelo (NUM_CTX tokens) a ~2.5 chars/token,
+    # dejando 30% libre para el prompt fijo y la respuesta JSON.
+    # Para ctx=8192: presupuesto ≈ 8192 * 2.5 * 0.70 ≈ 14,336 chars.
+    chars_por_token = 2.5
+    fraccion_datos  = 0.65   # reservar 35% para prompt fijo + respuesta
+    max_chars_datos = int(NUM_CTX * chars_por_token * fraccion_datos)
+    max_chars_datos = max(max_chars_datos, 8000)   # mínimo 8K chars siempre
+
+    n_bruto = len(datos_filtrados)
+    if n_bruto > max_chars_datos:
+        # Tomar el bloque final (más reciente / más relevante en análisis RAM)
+        datos_filtrados = (
+            f"[NOTA: datos truncados de {n_bruto:,} a {max_chars_datos:,} chars "
+            f"por límite de contexto. Se preserva la sección más relevante.]\n\n"
+            + datos_filtrados[-max_chars_datos:]
+        )
+        print(f"    [Agente {tipo_agente.upper()}] ⚠ Datos truncados: "
+              f"{n_bruto:,} → {max_chars_datos:,} chars (ctx={NUM_CTX})")
+    # ─────────────────────────────────────────────────────────────────────────
 
     datos_sanitizados = sanitizar_prompt_injection(datos_filtrados)
     prompt_final = prompt_plantilla.format(datos=datos_sanitizados)
@@ -1031,15 +1055,31 @@ def _llamar_agente(tipo_agente, datos_filtrados, timeout_seg=300):
         resp.raise_for_status()
         texto = resp.json().get('response', '').strip()
 
-        json_match = re.search(r'\{.*\}', texto, re.DOTALL)
+        json_match = re.search(r'\{[\s\S]*\}', texto)
         if json_match:
-            hallazgos = json.loads(json_match.group())
-            nivel_key = f'nivel_amenaza_{tipo_agente}'
-            print(f"    [Agente {tipo_agente.upper()}] ✓ Nivel: {hallazgos.get(nivel_key, '?')}")
-            return hallazgos
+            try:
+                hallazgos = json.loads(json_match.group())
+                nivel_key = f'nivel_amenaza_{tipo_agente}'
+                print(f"    [Agente {tipo_agente.upper()}] ✓ Nivel: {hallazgos.get(nivel_key, '?')}")
+                return hallazgos
+            except json.JSONDecodeError:
+                # Intentar reparar: extraer manualmente el bloque más externo
+                raw = texto
+                start = raw.find('{')
+                end   = raw.rfind('}')
+                if start != -1 and end != -1 and end > start:
+                    try:
+                        hallazgos = json.loads(raw[start:end + 1])
+                        nivel_key = f'nivel_amenaza_{tipo_agente}'
+                        print(f"    [Agente {tipo_agente.upper()}] ✓ (reparado) Nivel: {hallazgos.get(nivel_key, '?')}")
+                        return hallazgos
+                    except json.JSONDecodeError:
+                        pass
+                print(f"    [Agente {tipo_agente.upper()}] ⚠ JSON inválido. Guardando respuesta como texto.")
+                return {'respuesta_texto': texto[:2000], 'error': 'JSON inválido en respuesta'}
         else:
             print(f"    [Agente {tipo_agente.upper()}] ⚠ La IA no devolvió JSON válido.")
-            return {'respuesta_texto': texto, 'error': 'JSON no encontrado en respuesta'}
+            return {'respuesta_texto': texto[:2000], 'error': 'JSON no encontrado en respuesta'}
 
     except json.JSONDecodeError as e:
         print(f"    [Agente {tipo_agente.upper()}] ✗ Error parseando JSON: {e}")
