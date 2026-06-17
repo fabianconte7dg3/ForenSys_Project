@@ -27,10 +27,13 @@ RPI_CTX     = 2048   # Ventana de contexto conservadora
 RPI_THREAD  = 4      # 4 cores físicos
 RPI_TIMEOUT = 900    # 15 minutos
 
-# --- PERFIL: PC Escritorio (Ryzen 5600G + RX 6600 XT) ---
-PC_CTX     = 4096   # Ventana de contexto amplia
+# --- PERFIL: PC Escritorio (Ryzen 5600G + RX 6600 XT, 8 GB VRAM) ---
+# RX 6600 XT: 8 GB VRAM. Gemma 3 4B cuantizado ocupa ~2.5-3 GB.
+# Presupuesto restante para KV-cache: ~5 GB → ~32K-64K tokens posibles.
+# Usamos 32768 como valor conservador-seguro que cabe bien en los 5 GB libres.
+PC_CTX     = 32768  # 32K tokens — cabe cómodo en los 5 GB VRAM libres
 PC_THREAD  = 12     # 6c/12t del 5600G
-PC_TIMEOUT = 300    # 5 minutos (GPU/CPU más rápida)
+PC_TIMEOUT = 600    # 10 minutos (GPU maneja bien, pero contexto grande tarda más)
 
 # Valores activos (se sobrescriben en main según el motor elegido)
 NUM_CTX    = RPI_CTX
@@ -888,6 +891,9 @@ Responde ÚNICAMENTE con un JSON sin explicaciones ni markdown:
 
 DATOS netscan/netstat (ya filtrados de IPs locales y puertos estándar del SO):
 {datos}
+
+RECUERDA: Tu respuesta debe ser EXCLUSIVAMENTE el JSON sin texto adicional, sin markdown, sin explicaciones.
+Comienza con { y termina con }.
 """
 
 PROMPT_AGENTE_MALWARE = """
@@ -913,6 +919,9 @@ Responde ÚNICAMENTE con un JSON sin explicaciones ni markdown:
 
 DATOS malfind/pslist/cmdline (ya filtrados de procesos del sistema canónicos):
 {datos}
+
+RECUERDA: Tu respuesta debe ser EXCLUSIVAMENTE el JSON sin texto adicional, sin markdown, sin explicaciones.
+Comienza con { y termina con }.
 """
 
 PROMPT_AGENTE_ARCHIVOS = """
@@ -937,6 +946,9 @@ Responde ÚNICAMENTE con un JSON sin explicaciones ni markdown:
 
 DATOS filescan/svcscan/dlllist (ya filtrados de rutas del sistema legítimas):
 {datos}
+
+RECUERDA: Tu respuesta debe ser EXCLUSIVAMENTE el JSON sin texto adicional, sin markdown, sin explicaciones.
+Comienza con { y termina con }.
 """
 
 PROMPT_AGENTE_MAESTRO = """
