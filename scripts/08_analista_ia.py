@@ -1002,6 +1002,84 @@ Genera ahora el reporte de correlación forense:
 """
 
 
+# ── Esquemas esperados por agente ──────────────────────────────────────────
+# Usados por _normalizar_hallazgos para inyectar claves faltantes.
+_ESQUEMA_AGENTE = {
+    'red': {
+        'nivel_key':   'nivel_amenaza_red',
+        'listas':      ['conexiones_sospechosas', 'ips_externas_detectadas', 'pids_con_red_inusual'],
+        'notas_key':   'notas',
+    },
+    'malware': {
+        'nivel_key':   'nivel_amenaza_malware',
+        'listas':      ['procesos_sospechosos', 'pids_con_inyeccion', 'comandos_sospechosos'],
+        'notas_key':   'notas',
+    },
+    'archivos': {
+        'nivel_key':   'nivel_amenaza_archivos',
+        'listas':      ['archivos_ejecutables_sospechosos', 'servicios_sospechosos', 'dlls_sospechosas'],
+        'notas_key':   'notas',
+    },
+}
+
+# Variantes de nombre que el modelo puede usar para el nivel de amenaza
+_NIVEL_ALIASES = [
+    'nivel_amenaza', 'nivel_riesgo', 'nivel', 'threat_level',
+    'risk_level', 'severity', 'riesgo', 'amenaza',
+    'nivel_amenaza_red', 'nivel_amenaza_malware', 'nivel_amenaza_archivos',
+]
+
+_NIVEL_VALIDOS = {'ALTO', 'MEDIO', 'BAJO', 'NINGUNO', 'CRÍTICO', 'CRITICO'}
+
+
+def _normalizar_hallazgos(raw: dict, tipo_agente: str) -> dict:
+    """
+    Normaliza el JSON devuelto por un agente LLM:
+    1. Encuentra la clave de nivel de amenaza independientemente del nombre que usó el modelo.
+    2. La renombra al nombre canónico que espera el Agente Maestro.
+    3. Inyecta listas vacías para cualquier clave faltante del esquema.
+    """
+    esquema = _ESQUEMA_AGENTE.get(tipo_agente, {})
+    nivel_key_canon = esquema.get('nivel_key', f'nivel_amenaza_{tipo_agente}')
+
+    # 1. Si ya tiene la clave canónica, no hacer nada con el nivel
+    if nivel_key_canon not in raw:
+        # Buscar entre todos los aliases posibles (búsqueda insensible a mayúsculas)
+        raw_lower = {k.lower(): (k, v) for k, v in raw.items()}
+        for alias in _NIVEL_ALIASES:
+            if alias.lower() in raw_lower:
+                orig_key, valor = raw_lower[alias.lower()]
+                # Normalizar el valor a uno de los estándar
+                valor_upper = str(valor).upper()
+                if valor_upper not in _NIVEL_VALIDOS:
+                    valor_upper = 'BAJO'
+                raw[nivel_key_canon] = valor_upper
+                # Eliminar la clave con nombre no-canónico para no confundir al Maestro
+                if orig_key != nivel_key_canon:
+                    raw.pop(orig_key, None)
+                break
+        else:
+            # No se encontró ningún alias → inferir del texto de notas
+            notas = str(raw.get(esquema.get('notas_key', 'notas'), '')).upper()
+            if any(w in notas for w in ('ALTO', 'CRÍTICO', 'CRITICO', 'MALICIOSO')):
+                raw[nivel_key_canon] = 'ALTO'
+            elif 'MEDIO' in notas or 'SOSPECHOSO' in notas:
+                raw[nivel_key_canon] = 'MEDIO'
+            else:
+                raw[nivel_key_canon] = 'BAJO'
+
+    # 2. Inyectar listas vacías para claves faltantes
+    for lista_key in esquema.get('listas', []):
+        if lista_key not in raw:
+            raw[lista_key] = []
+
+    # 3. Asegurar clave de notas
+    if esquema.get('notas_key') and esquema['notas_key'] not in raw:
+        raw[esquema['notas_key']] = 'Sin información adicional.'
+
+    return raw
+
+
 def _llamar_agente(tipo_agente, datos_filtrados, timeout_seg=300):
     """
     Llama a Ollama con el prompt del agente especializado.
@@ -1073,6 +1151,7 @@ def _llamar_agente(tipo_agente, datos_filtrados, timeout_seg=300):
         if json_match:
             try:
                 hallazgos = json.loads(json_match.group())
+                hallazgos = _normalizar_hallazgos(hallazgos, tipo_agente)
                 nivel_key = f'nivel_amenaza_{tipo_agente}'
                 print(f"    [Agente {tipo_agente.upper()}] ✓ Nivel: {hallazgos.get(nivel_key, '?')}")
                 return hallazgos
