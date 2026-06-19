@@ -1781,8 +1781,8 @@
                             
                             <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                                 <button class="fsbtn fsbtn-red" id="btn-run-wiping"><span class="fsbtn-spinner"></span><i class="bi bi-play-fill"></i>Ejecutar Wiping</button>
-                                <button class="btn-secondary" onclick="openViewerModal('/api/logs/wiping')"><i class="bi bi-journal-text me-2"></i>Log Forense (NIST)</button>
-                                <button class="btn-secondary" onclick="openViewerModal('/api/logs/coc')"><i class="bi bi-shield-check me-2"></i>Cadena de Custodia</button>
+                                <button class="fsbtn fsbtn-ghost fsbtn-sm" onclick="openViewerModal('/api/logs/wiping')"><i class="bi bi-journal-text"></i>Log Forense (NIST)</button>
+                                <button class="fsbtn fsbtn-ghost fsbtn-sm" onclick="openViewerModal('/api/logs/coc')"><i class="bi bi-shield-check"></i>Cadena de Custodia</button>
                             </div>
 
                             <!-- Progress Bar -->
@@ -1824,8 +1824,8 @@
 
                             <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                                 <button class="fsbtn fsbtn-blue" id="btn-run-disk" style="display:none;"><span class="fsbtn-spinner"></span><i class="bi bi-play-fill"></i>Ejecutar Extracción Forense</button>
-                                <button class="btn-secondary" id="btn-view-report-deadbox" onclick="openViewerModal('/api/deadbox/report/' + document.getElementById('case-number').value.trim())"><i class="bi bi-file-earmark-code me-2"></i>Ver Reporte JSON</button>
-                                <button class="btn-secondary" id="btn-view-sig-deadbox" onclick="openViewerModal('/api/deadbox/signature/' + document.getElementById('case-number').value.trim())"><i class="bi bi-key me-2"></i>Descargar Firma RSA</button>
+                                <button class="fsbtn fsbtn-ghost-blue fsbtn-sm" id="btn-view-report-deadbox" onclick="openViewerModal('/api/deadbox/report/' + document.getElementById('case-number').value.trim())"><i class="bi bi-file-earmark-code"></i>Ver Reporte JSON</button>
+                                <button class="fsbtn fsbtn-ghost fsbtn-sm" id="btn-view-sig-deadbox" onclick="openViewerModal('/api/deadbox/signature/' + document.getElementById('case-number').value.trim())"><i class="bi bi-key"></i>Descargar Firma RSA</button>
                             </div>
                         </div>
 
@@ -1903,8 +1903,8 @@
                             
                             <div style="margin-top: 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                                 <button class="fsbtn fsbtn-cyan" id="btn-run-ram"><span class="fsbtn-spinner"></span><i class="bi bi-cpu-fill"></i>Iniciar Análisis RAM</button>
-                                <button class="fsbtn fsbtn-ghost-cyan fsbtn-sm" id="btn-view-report-ram" onclick="window.open('/api/ram/report/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-file-earmark-code"></i>Ver Reporte JSON</button>
-                                <button class="fsbtn fsbtn-ghost fsbtn-sm" id="btn-view-sig-ram" onclick="window.open('/api/ram/signature/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-key"></i>Firma RSA</button>
+                                <button class="fsbtn fsbtn-ghost-cyan fsbtn-sm" id="btn-view-report-ram" onclick="openViewerModal('/api/ram/report/' + document.getElementById('case-number').value.trim())"><i class="bi bi-file-earmark-code"></i>Ver Reporte JSON</button>
+                                <button class="fsbtn fsbtn-ghost fsbtn-sm" id="btn-view-sig-ram" onclick="openViewerModal('/api/ram/signature/' + document.getElementById('case-number').value.trim())"><i class="bi bi-key"></i>Firma RSA</button>
                             </div>
                             
                             <!-- Progress Bar -->
@@ -1968,8 +1968,8 @@
                                     <span class="fsbtn-spinner"></span>
                                     <i class="bi bi-phone-vibrate-fill me-2"></i>Iniciar Extracción Forense
                                 </button>
-                                <button class="btn-secondary" id="btn-view-report-mobile" onclick="openViewerModal('/api/mobile/report/' + document.getElementById('case-number').value.trim())"><i class="bi bi-file-earmark-code me-2"></i>Ver Reporte JSON</button>
-                                <button class="btn-secondary" id="btn-view-sig-mobile" onclick="openViewerModal('/api/mobile/signature/' + document.getElementById('case-number').value.trim())"><i class="bi bi-key me-2"></i>Descargar Firma RSA</button>
+                                <button class="fsbtn fsbtn-ghost-yellow fsbtn-sm" id="btn-view-report-mobile" onclick="openViewerModal('/api/mobile/report/' + document.getElementById('case-number').value.trim())"><i class="bi bi-file-earmark-code"></i>Ver Reporte JSON</button>
+                                <button class="fsbtn fsbtn-ghost fsbtn-sm" id="btn-view-sig-mobile" onclick="openViewerModal('/api/mobile/signature/' + document.getElementById('case-number').value.trim())"><i class="bi bi-key"></i>Descargar Firma RSA</button>
                             </div>
 
                             <!-- Progress Bar -->
@@ -2036,8 +2036,8 @@
                                     <span class="fsbtn-spinner"></span>
                                     <i class="bi bi-search me-2"></i>Iniciar Rastreo OSINT
                                 </button>
-                                <button class="btn-secondary" id="btn-show-mount-modal" onclick="document.getElementById('modal-montar-destino').style.display='flex'">
-                                    <i class="bi bi-usb-drive me-2"></i>Montar Disco USB
+                                <button class="fsbtn fsbtn-ghost-blue fsbtn-sm" id="btn-show-mount-modal" onclick="document.getElementById('modal-montar-destino').style.display='flex'">
+                                    <i class="bi bi-hdd-fill"></i> Opciones de Montaje
                                 </button>
                             </div>
 
@@ -2282,7 +2282,7 @@
                             <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Consolidación de cadena de custodia, hash maestro, hallazgos de IA y anexos en un único documento legal.</p>
                             <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
                                 <button class="fsbtn fsbtn-purple" id="btn-run-report"><span class="fsbtn-spinner"></span><i class="bi bi-shield-fill-check"></i>Generar y Sellar Reporte PDF</button>
-                                <button class="btn-secondary" id="btn-view-pdf" style="display: none; border-color: var(--accent-purple); color: var(--accent-purple);" onclick="openViewerModal('/api/case/' + activeCaseNumber + '/download?filepath=03_Results_(Resultados_Extraidos)/Reporte_Legal_Final_' + activeCaseNumber + '.pdf')"><i class="bi bi-file-pdf-fill me-2"></i>Ver PDF Generado</button>
+                                <button class="fsbtn fsbtn-ghost-purple fsbtn-sm" id="btn-view-pdf" style="display: none;" onclick="openViewerModal('/api/case/' + activeCaseNumber + '/download?filepath=03_Results_(Resultados_Extraidos)/Reporte_Legal_Final_' + activeCaseNumber + '.pdf')"><i class="bi bi-file-pdf-fill"></i>Ver PDF Generado</button>
                             </div>
                             <!-- Progress Bar Reporte -->
                             <forensys-progress id="report-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-purple)"></forensys-progress>
