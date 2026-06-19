@@ -41,8 +41,10 @@ cd ForenSys_Project
 ./start_forensys.sh
 ```
 
-**Nota para Raspberry Pi (Modo Kiosko Autónomo)**
-Si vas a instalarlo permanentemente en una Pi para uso en campo, puedes usar el script de Kiosko:
+**Nota para Raspberry Pi 5 (Modo Kiosko Autónomo)**
+El instalador está altamente optimizado para ejecutarse de forma nativa en **Raspberry Pi OS (Bookworm) de 64 bits** aprovechando la composición moderna Wayland/Wayfire. Configura aceleración por hardware (V3D) y software-rendering fallback (`pixman`) para evitar congelamientos en Kiosko.
+Además, instala y configura automáticamente todas las herramientas base: `dc3dd`, `dcfldd`, `sleuthkit`, `yara`, `capstone`.
+
 ```bash
 sudo bash scripts/kiosk/install_services.sh
 sudo reboot

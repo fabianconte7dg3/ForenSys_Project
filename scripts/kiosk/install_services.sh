@@ -132,6 +132,8 @@ ok "forensys.service instalado"
 cp "$SCRIPT_DIR/kiosk.service" /etc/systemd/system/kiosk.service
 sed -i "s|/home/ciber-admin|$USER_HOME|g" /etc/systemd/system/kiosk.service
 sed -i "s|User=ciber-admin|User=$USER_NAME|g" /etc/systemd/system/kiosk.service
+USER_UID=$(id -u "$USER_NAME")
+sed -i "s|/run/user/1000|/run/user/$USER_UID|g" /etc/systemd/system/kiosk.service
 ok "kiosk.service instalado"
 
 # -- Auto-login en TTY1 (arranca el kiosko sin intervención) --

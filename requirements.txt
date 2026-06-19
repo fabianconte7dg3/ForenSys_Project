@@ -59,3 +59,5 @@ regipy==6.2.1
 pefile==2024.8.26
 maigret==0.6.1
 reportlab==4.4.3
+capstone==5.0.1
+yara-python==4.5.0

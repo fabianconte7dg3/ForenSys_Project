@@ -51,8 +51,14 @@ echo "[*] 4. Compilando estilos Frontend (Tailwind CSS)..."
 mkdir -p "$PROJECT_DIR/web_app/tools"
 if [ ! -f "$PROJECT_DIR/web_app/tools/tailwindcss" ]; then
     echo "   -> Descargando Tailwind CLI Standalone..."
-    curl -sLO https://github.com/tailwindlabs/tailwindcss/releases/latest/download/tailwindcss-linux-arm64
-    mv tailwindcss-linux-arm64 "$PROJECT_DIR/web_app/tools/tailwindcss"
+    ARCH=$(uname -m)
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+        TAILWIND_BIN="tailwindcss-linux-arm64"
+    else
+        TAILWIND_BIN="tailwindcss-linux-x64"
+    fi
+    curl -sLO "https://github.com/tailwindlabs/tailwindcss/releases/latest/download/$TAILWIND_BIN"
+    mv "$TAILWIND_BIN" "$PROJECT_DIR/web_app/tools/tailwindcss"
     chmod +x "$PROJECT_DIR/web_app/tools/tailwindcss"
 fi
 
