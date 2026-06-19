@@ -575,6 +575,20 @@ def _severity_from_source(source: str, subtype: str, event_type: str) -> tuple:
     st = (subtype or '').lower()
     et = (event_type or '').lower()
 
+    # ── RAM (Volatility 3) ─────────────────────────────────────────────────────
+    if s == 'RAM':
+        # Shellcode / inyección detectada por malfind → crítico
+        if 'malfind' in st:
+            return 'critical', 0.92
+        # Conexión de red externa detectada en netscan/netstat → alto
+        if st in ('netscan', 'netstat') and 'external' in et:
+            return 'high', 0.88
+        # Servicios, comandos sospechosos, dlllist → medio
+        if st in ('svcscan', 'cmdline', 'dlllist', 'handles'):
+            return 'medium', 0.72
+        # pslist, pstree → bajo (datos de contexto forense)
+        return 'low', 0.60
+    # ── Fuentes clásicas ───────────────────────────────────────────────────────
     if any(k in st for k in ('malfind', 'hollowing', 'dllinjection', 'psxview')):
         return 'critical', 0.90
     if any(k in et for k in ('4625', '4720', '4732', '1102', 'account_lockout')):
@@ -1652,9 +1666,220 @@ def parsear_ntuser(ruta_ntuser, maestro_file, nombre_usuario="Desconocido"):
     except Exception:
         pass
 
+# ─────────────────────────────────────────────────────────────────────────────
+# INTEGRADOR DE EVENTOS RAM → SuperTimeline v2
+# Lector universal de resultados Volatility 3 (.json) con mapeo de timestamps.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Campos de timestamp conocidos por plugin de Volatility 3
+_RAM_PLUGIN_TS_FIELDS = {
+    'pslist':           ['CreateTime', 'ExitTime'],
+    'pstree':           ['CreateTime', 'ExitTime'],
+    'netscan':          ['Created'],
+    'netstat':          ['Created'],
+    'userassist':       ['LastWrite'],
+    'malfind':          [],   # Sin timestamp directo → usar hora del análisis
+    'svcscan':          [],
+    'cmdline':          [],
+    'dlllist':          [],
+    'handles':          [],
+    'filescan':         [],
+    'registry_hivelist':[], 
+    'info':             [],
+    'hashdump':         [],
+}
+
+
+def _ts_iso_a_unix(ts_str: str) -> int:
+    """Convierte una cadena ISO 8601 de Volatility a UNIX timestamp (int).
+    Retorna None si la conversión falla."""
+    if not ts_str:
+        return None
+    try:
+        # Formato típico Volatility: '2025-06-21T17:18:35+00:00'
+        from datetime import timezone
+        dt = datetime.fromisoformat(ts_str)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp())
+    except Exception:
+        return None
+
+
+def integrar_eventos_ram(carpeta_caso: str, f_jsonl, conn) -> int:
+    """
+    Lee todos los archivos .json de la carpeta RAM de Volatility 3 del caso
+    y los inserta como eventos en el SuperTimeline SQLite (eventos_v2).
+
+    Mapeo:
+      source   = 'RAM'
+      subtype  = nombre del plugin (ej. 'pslist', 'netscan')
+      event_type = descripcion corta del evento (ej. 'PID:1234 explorer.exe RUNNING')
+      description = texto completo legible
+      metadata = todos los campos del registro JSON original
+      timestamp = campo de fecha del plugin, si existe; si no, hora actual del análisis
+
+    Retorna: número de eventos insertados.
+    """
+    carpeta_ram = os.path.join(carpeta_caso, '03_Results_(Resultados_Extraidos)', 'RAM')
+    if not os.path.exists(carpeta_ram):
+        print('    [!] RAM: Carpeta de resultados no encontrada. Saltando integración RAM.')
+        return 0
+
+    print('\n[*] Integrando eventos de Memoria RAM en SuperTimeline v2...')
+    ts_analisis = int(datetime.now().timestamp())   # Fallback cuando no hay timestamp
+    total_insertados = 0
+    lote_v2 = []
+
+    for nombre_json in sorted(os.listdir(carpeta_ram)):
+        if not nombre_json.endswith('.json'):
+            continue
+
+        plugin_name = nombre_json.replace('.json', '')
+        ruta_json = os.path.join(carpeta_ram, nombre_json)
+
+        try:
+            with open(ruta_json, 'r', encoding='utf-8', errors='ignore') as f:
+                datos = json.load(f)
+        except Exception as e:
+            print(f'    [!] RAM/{nombre_json}: Error leyendo JSON — {e}')
+            continue
+
+        if not isinstance(datos, list) or not datos:
+            continue
+
+        campos_ts = _RAM_PLUGIN_TS_FIELDS.get(plugin_name, [])
+        n_plugin = 0
+
+        for registro in datos:
+            if not isinstance(registro, dict):
+                continue
+
+            # ── Construir descripción legible ──────────────────────────────
+            pid  = registro.get('PID', '')
+            proc = registro.get('Process', registro.get('Owner', registro.get('Name', '')))
+            desc_campos = []
+            if pid:  desc_campos.append(f'PID:{pid}')
+            if proc: desc_campos.append(str(proc))
+
+            # Campos extra legibles según plugin
+            if plugin_name in ('netscan', 'netstat'):
+                proto     = registro.get('Proto', '')
+                local     = f"{registro.get('LocalAddr','')}:{registro.get('LocalPort','')}"
+                remote    = f"{registro.get('ForeignAddr','')}:{registro.get('ForeignPort','')}"
+                state     = registro.get('State', '')
+                desc_campos += [proto, f'{local} → {remote}', state]
+                # Marcar si la IP remota es externa (no RFC 1918 / no ::/:: )
+                fa = str(registro.get('ForeignAddr', ''))
+                is_external = (
+                    fa and fa not in ('0.0.0.0', '::', '') and
+                    not fa.startswith('127.') and
+                    not fa.startswith('10.') and
+                    not fa.startswith('192.168.') and
+                    not (fa.startswith('172.') and 16 <= int(fa.split('.')[1] or 0) <= 31)
+                )
+                event_type = 'conexion_externa' if is_external else 'conexion_red'
+            elif plugin_name == 'malfind':
+                prot = registro.get('Protection', '')
+                vpn  = registro.get('Start VPN', '')
+                desc_campos += [prot, f'VPN:{vpn}']
+                event_type = 'inyeccion_memoria'
+            elif plugin_name in ('pslist', 'pstree'):
+                thds = registro.get('Threads', '')
+                ppid = registro.get('PPID', '')
+                if ppid: desc_campos.append(f'PPID:{ppid}')
+                if thds: desc_campos.append(f'Thds:{thds}')
+                event_type = 'proceso_activo'
+            elif plugin_name == 'svcscan':
+                state = registro.get('State', '')
+                binp  = registro.get('Binary', '') or registro.get('Binary (Registry)', '')
+                desc_campos += [state, str(binp)]
+                event_type = 'servicio_sistema'
+            elif plugin_name == 'cmdline':
+                args = str(registro.get('Args', '') or '')
+                desc_campos.append(args[:200])
+                event_type = 'linea_comando'
+            elif plugin_name == 'dlllist':
+                path = str(registro.get('Path', '') or '')
+                desc_campos.append(path[:200])
+                event_type = 'dll_cargada'
+            elif plugin_name == 'handles':
+                htype = str(registro.get('Type', ''))
+                hname = str(registro.get('Name', '') or '')
+                desc_campos += [htype, hname[:100]]
+                event_type = 'handle_proceso'
+            elif plugin_name == 'userassist':
+                path = str(registro.get('Path', '') or '')
+                desc_campos.append(path)
+                event_type = 'actividad_usuario'
+            elif plugin_name == 'filescan':
+                path = str(registro.get('Name', '') or '')
+                desc_campos.append(path[:200])
+                event_type = 'archivo_abierto_ram'
+            else:
+                event_type = plugin_name
+
+            description = f'[RAM/{plugin_name}] ' + ' | '.join(str(c) for c in desc_campos if c)
+
+            # ── Extraer timestamps ─────────────────────────────────────────
+            ts_eventos = []
+            for campo in campos_ts:
+                val = registro.get(campo)
+                if val:
+                    ts_unix = _ts_iso_a_unix(str(val))
+                    if ts_unix:
+                        ts_eventos.append((ts_unix, campo))
+
+            if not ts_eventos:
+                # Sin timestamp → usar la hora del análisis como referencia
+                ts_eventos = [(ts_analisis, 'ts_analisis')]
+
+            # ── Un evento por cada timestamp encontrado ─────────────────────
+            for ts_unix, campo_ts in ts_eventos:
+                meta = {k: v for k, v in registro.items() if k != '__children'}
+                meta['campo_timestamp_origen'] = campo_ts
+
+                lote_v2.append({
+                    'timestamp':      ts_unix,
+                    'source':         'RAM',
+                    'subtype':        plugin_name,
+                    'event_type':     event_type,
+                    'description':    description,
+                    'mapping':        f'RAM/{plugin_name}/{campo_ts}',
+                    'metadata':       meta,
+                })
+                n_plugin += 1
+
+                # Escribir al JSONL maestro también
+                evento_jsonl = {
+                    'timestamp':   datetime.fromtimestamp(ts_unix).isoformat(),
+                    'fuente':      'RAM',
+                    'tipo':        event_type,
+                    'plugin':      plugin_name,
+                    'descripcion': description,
+                    'metadatos':   meta,
+                }
+                f_jsonl.write(json.dumps(evento_jsonl, ensure_ascii=False) + '\n')
+
+                # Insertar en lotes de 2000 para no saturar RAM de la RPi
+                if len(lote_v2) >= 2000:
+                    insertar_eventos_v2_lote(conn, lote_v2)
+                    lote_v2 = []
+
+        total_insertados += n_plugin
+        print(f'    [+] RAM/{plugin_name}: {n_plugin} eventos integrados')
+
+    # Insertar remanente
+    if lote_v2:
+        insertar_eventos_v2_lote(conn, lote_v2)
+
+    print(f'    [✓] Total eventos RAM integrados en SuperTimeline: {total_insertados}')
+    return total_insertados
+
+
 def integrar_fuentes_externas(carpeta_caso, caso_id, maestro):
     carpeta_base = os.path.dirname(carpeta_caso)
-    
+
     # Nueva estructura de RAM (dentro del caso)
     carpeta_ram = os.path.join(carpeta_caso, "03_Results_(Resultados_Extraidos)", "RAM")
     if os.path.exists(carpeta_ram):
@@ -1731,7 +1956,7 @@ def organizar_estilo_autopsy(ruta_fuente, ruta_vistas, ruta_resultados, carpeta_
         'total': 0, 'multimedia': 0, 'documentos': 0, 'ejecutables': 0,
         'emails': 0, 'con_gps': 0, 'alta_entropia': 0,
         'navegadores_detectados': [], 'programas': 0,
-        'eventos_sistema': 0, 'persistencia': 0
+        'eventos_sistema': 0, 'persistencia': 0, 'eventos_ram': 0
     }
     multimedia_meta = []  # Colector de metadatos multimedia
 
@@ -1910,6 +2135,9 @@ def organizar_estilo_autopsy(ruta_fuente, ruta_vistas, ruta_resultados, carpeta_
         # Migrar timeline_real a eventos_v2 (viene de importar_timeline_real que escribe v1)
         poblar_eventos_v2_desde_v1(conn)
 
+        # --- 10. INTEGRAR EVENTOS DE MEMORIA RAM (Volatility 3 → SuperTimeline v2) ---
+        estadisticas['eventos_ram'] = integrar_eventos_ram(carpeta_caso, f_jsonl, conn)
+
         # Generar Dashboard GUI
         generar_gui_timeline(conn, html_timeline_path)
         conn.close()
@@ -1943,6 +2171,8 @@ def organizar_estilo_autopsy(ruta_fuente, ruta_vistas, ruta_resultados, carpeta_
         flog(f"    [+] Programas instalados extraídos: {estadisticas['programas']}")
     if estadisticas['persistencia'] > 0:
         flog(f"    [!] Mecanismos de persistencia: {estadisticas['persistencia']}", 'warning')
+    if estadisticas.get('eventos_ram', 0) > 0:
+        flog(f"    [+] Eventos RAM integrados en SuperTimeline: {estadisticas['eventos_ram']}")
 
 # ==========================================
 # INICIO
