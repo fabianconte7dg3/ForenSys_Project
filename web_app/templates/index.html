@@ -917,6 +917,197 @@
         .btn-modal-close:hover { background: rgba(59,130,246,.25); }
 
         /* ================================================================
+           FORENSYS MODULE BUTTONS — Sistema unificado fsbtn
+           Offline-safe, sin dependencias externas.
+           ================================================================ */
+
+        /* Base */
+        .fsbtn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 22px;
+            border-radius: 8px;
+            font-family: var(--font-ui);
+            font-size: 0.84rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            cursor: pointer;
+            border: 1px solid transparent;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.18s ease, box-shadow 0.22s ease, opacity 0.2s;
+            white-space: nowrap;
+            text-decoration: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Shimmer sweep on hover */
+        .fsbtn::before {
+            content: '';
+            position: absolute;
+            top: 0; left: -100%;
+            width: 60%;
+            height: 100%;
+            background: linear-gradient(105deg, transparent 20%, rgba(255,255,255,0.12) 50%, transparent 80%);
+            transition: left 0.5s ease;
+            pointer-events: none;
+        }
+        .fsbtn:hover:not(:disabled)::before { left: 160%; }
+
+        .fsbtn:hover:not(:disabled) { transform: translateY(-2px); }
+        .fsbtn:active:not(:disabled) { transform: translateY(0px) scale(0.98); }
+
+        .fsbtn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* Size variants */
+        .fsbtn-sm { padding: 6px 14px; font-size: 0.78rem; border-radius: 6px; }
+        .fsbtn-lg { padding: 13px 30px; font-size: 0.92rem; border-radius: 10px; }
+
+        /* ── Colour themes ────────────────────────────────────────────── */
+
+        /* Solid accent themes (primary actions per module) */
+        .fsbtn-blue {
+            background: linear-gradient(135deg, #2563eb, #3b82f6);
+            border-color: rgba(59,130,246,0.6);
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(59,130,246,0.25);
+        }
+        .fsbtn-blue:hover:not(:disabled) {
+            box-shadow: 0 6px 24px rgba(59,130,246,0.45), 0 0 0 1px rgba(59,130,246,0.5);
+        }
+
+        .fsbtn-cyan {
+            background: linear-gradient(135deg, #0891b2, #06b6d4);
+            border-color: rgba(6,182,212,0.6);
+            color: #001a1f;
+            box-shadow: 0 2px 12px rgba(6,182,212,0.25);
+        }
+        .fsbtn-cyan:hover:not(:disabled) {
+            box-shadow: 0 6px 24px rgba(6,182,212,0.45), 0 0 0 1px rgba(6,182,212,0.5);
+        }
+
+        .fsbtn-green {
+            background: linear-gradient(135deg, #059669, #10b981);
+            border-color: rgba(16,185,129,0.6);
+            color: #001a0d;
+            box-shadow: 0 2px 12px rgba(16,185,129,0.25);
+        }
+        .fsbtn-green:hover:not(:disabled) {
+            box-shadow: 0 6px 24px rgba(16,185,129,0.45), 0 0 0 1px rgba(16,185,129,0.5);
+        }
+
+        .fsbtn-yellow {
+            background: linear-gradient(135deg, #d97706, #f59e0b);
+            border-color: rgba(245,158,11,0.6);
+            color: #1c0f00;
+            box-shadow: 0 2px 12px rgba(245,158,11,0.25);
+        }
+        .fsbtn-yellow:hover:not(:disabled) {
+            box-shadow: 0 6px 24px rgba(245,158,11,0.4), 0 0 0 1px rgba(245,158,11,0.5);
+        }
+
+        .fsbtn-red {
+            background: linear-gradient(135deg, #dc2626, #ef4444);
+            border-color: rgba(239,68,68,0.6);
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(239,68,68,0.25);
+        }
+        .fsbtn-red:hover:not(:disabled) {
+            box-shadow: 0 6px 24px rgba(239,68,68,0.45), 0 0 0 1px rgba(239,68,68,0.5);
+        }
+
+        .fsbtn-purple {
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+            border-color: rgba(168,85,247,0.6);
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(168,85,247,0.25);
+        }
+        .fsbtn-purple:hover:not(:disabled) {
+            box-shadow: 0 6px 24px rgba(168,85,247,0.45), 0 0 0 1px rgba(168,85,247,0.5);
+        }
+
+        /* Ghost / secondary variants (outline style) */
+        .fsbtn-ghost {
+            background: rgba(255,255,255,0.03);
+            border-color: var(--border-mid);
+            color: var(--text-primary);
+            box-shadow: none;
+        }
+        .fsbtn-ghost:hover:not(:disabled) {
+            background: rgba(255,255,255,0.07);
+            border-color: var(--border-mid);
+            box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+        }
+
+        .fsbtn-ghost-cyan {
+            background: rgba(6,182,212,0.05);
+            border-color: rgba(6,182,212,0.35);
+            color: #67e8f9;
+        }
+        .fsbtn-ghost-cyan:hover:not(:disabled) {
+            background: rgba(6,182,212,0.12);
+            box-shadow: 0 0 16px rgba(6,182,212,0.2);
+        }
+
+        .fsbtn-ghost-blue {
+            background: rgba(59,130,246,0.05);
+            border-color: rgba(59,130,246,0.35);
+            color: #93c5fd;
+        }
+        .fsbtn-ghost-blue:hover:not(:disabled) {
+            background: rgba(59,130,246,0.12);
+            box-shadow: 0 0 16px rgba(59,130,246,0.2);
+        }
+
+        .fsbtn-ghost-green {
+            background: rgba(16,185,129,0.05);
+            border-color: rgba(16,185,129,0.35);
+            color: #6ee7b7;
+        }
+        .fsbtn-ghost-green:hover:not(:disabled) {
+            background: rgba(16,185,129,0.12);
+            box-shadow: 0 0 16px rgba(16,185,129,0.2);
+        }
+
+        /* Running state — pulsing border glow */
+        .fsbtn.fsbtn-running {
+            animation: fsbtn-pulse 1.6s ease-in-out infinite;
+        }
+        @keyframes fsbtn-pulse {
+            0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+            50%       { box-shadow: 0 0 0 6px transparent; opacity: 0.85; }
+        }
+
+        /* Spinner inside fsbtn */
+        .fsbtn-spinner {
+            width: 13px; height: 13px;
+            border: 2px solid rgba(255,255,255,0.35);
+            border-top-color: currentColor;
+            border-radius: 50%;
+            animation: spin .75s linear infinite;
+            display: none;
+            flex-shrink: 0;
+        }
+        .fsbtn.fsbtn-running .fsbtn-spinner { display: inline-block; }
+
+        /* Row of buttons in module panels */
+        .fsbtn-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+            margin-top: 18px;
+        }
+
+
+        /* ================================================================
            EVIDENCE EXPLORER
            ================================================================ */
         #section-explorer {
@@ -1551,7 +1742,7 @@
                             <label class="form-label-custom">Disco Destino a Esterilizar</label>
                             <div style="display:flex; gap:8px; align-items:center; margin-bottom:10px;">
                                 <div id="wiping-device-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin dispositivo seleccionado</div>
-                                <button class="btn-primary" id="btn-scan-wiping" style="white-space:nowrap;"><i class="bi bi-hdd-fill me-2"></i>Escanear Discos</button>
+                                <button class="fsbtn fsbtn-ghost" id="btn-scan-wiping"><i class="bi bi-hdd-fill"></i>Escanear Discos</button>
                             </div>
                             <div id="wiping-device-list" style="display:none; margin-top:0px; margin-bottom:14px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
 
@@ -1589,7 +1780,7 @@
                             </div>
                             
                             <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                                <button class="btn-primary" id="btn-run-wiping" style="background: var(--accent-red); border-color: var(--accent-red);"><i class="bi bi-play-fill me-2"></i>Ejecutar Wiping</button>
+                                <button class="fsbtn fsbtn-red" id="btn-run-wiping"><span class="fsbtn-spinner"></span><i class="bi bi-play-fill"></i>Ejecutar Wiping</button>
                                 <button class="btn-secondary" onclick="openViewerModal('/api/logs/wiping')"><i class="bi bi-journal-text me-2"></i>Log Forense (NIST)</button>
                                 <button class="btn-secondary" onclick="openViewerModal('/api/logs/coc')"><i class="bi bi-shield-check me-2"></i>Cadena de Custodia</button>
                             </div>
@@ -1606,7 +1797,7 @@
                             <label class="form-label-custom">Disco Sospechoso (Origen)</label>
                             <div style="display:flex; gap:8px; align-items:center;">
                                 <div id="disco-device-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin dispositivo seleccionado</div>
-                                <button class="btn-primary" id="btn-scan-disco" style="white-space:nowrap;"><i class="bi bi-hdd-fill me-2"></i>Escanear Discos</button>
+                                <button class="fsbtn fsbtn-ghost" id="btn-scan-disco"><i class="bi bi-hdd-fill"></i>Escanear Discos</button>
                             </div>
                             <div id="disco-device-list" style="display:none; margin-top:10px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
                             
@@ -1614,7 +1805,7 @@
                             <div style="margin-top:20px; background:var(--bg-body); border:1px solid var(--border-dim); border-radius:8px; padding:15px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                                     <h6 style="color:var(--text-main); margin:0; font-size:0.9rem;"><i class="bi bi-shield-check me-2" style="color:var(--accent-green);"></i>Checklist ISO/IEC 27037</h6>
-                                    <button class="btn-primary" id="btn-verify-disk" style="background:var(--accent-cyan); border-color:var(--accent-cyan); font-size:0.75rem; padding:4px 10px;">
+                                    <button class="fsbtn fsbtn-ghost-cyan fsbtn-sm" id="btn-verify-disk">
                                         <i class="bi bi-check2-all me-1"></i>Verificar Pre-requisitos
                                     </button>
                                 </div>
@@ -1632,7 +1823,7 @@
                             </div>
 
                             <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                                <button class="btn-primary" id="btn-run-disk" style="display:none;"><i class="bi bi-play-fill me-2"></i>Ejecutar Extracción Forense</button>
+                                <button class="fsbtn fsbtn-blue" id="btn-run-disk" style="display:none;"><span class="fsbtn-spinner"></span><i class="bi bi-play-fill"></i>Ejecutar Extracción Forense</button>
                                 <button class="btn-secondary" id="btn-view-report-deadbox" onclick="openViewerModal('/api/deadbox/report/' + document.getElementById('case-number').value.trim())"><i class="bi bi-file-earmark-code me-2"></i>Ver Reporte JSON</button>
                                 <button class="btn-secondary" id="btn-view-sig-deadbox" onclick="openViewerModal('/api/deadbox/signature/' + document.getElementById('case-number').value.trim())"><i class="bi bi-key me-2"></i>Descargar Firma RSA</button>
                             </div>
@@ -1653,7 +1844,7 @@
                             <label class="form-label-custom">USB a Formatear</label>
                             <div style="display:flex; gap:8px; align-items:center;">
                                 <div id="usb-device-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin dispositivo seleccionado</div>
-                                <button class="btn-primary" id="btn-scan-usb" style="white-space:nowrap;"><i class="bi bi-hdd-fill me-2"></i>Escanear Discos</button>
+                                <button class="fsbtn fsbtn-ghost" id="btn-scan-usb"><i class="bi bi-hdd-fill"></i>Escanear Discos</button>
                             </div>
                             <div id="usb-device-list" style="display:none; margin-top:10px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
                             
@@ -1667,7 +1858,7 @@
                             </div>
 
                             <div style="margin-top: 20px;">
-                                <button class="btn-primary" id="btn-run-creator" style="background: #a855f7; border-color: #a855f7;"><i class="bi bi-lightning-charge-fill me-2"></i>Preparar USB Forense</button>
+                                <button class="fsbtn fsbtn-purple" id="btn-run-creator"><span class="fsbtn-spinner"></span><i class="bi bi-lightning-charge-fill"></i>Preparar USB Forense</button>
                             </div>
                             
                             <!-- Progress Bar -->
@@ -1690,8 +1881,8 @@
                             <label class="form-label-custom">Volcado de Memoria (.raw / .dmp / .mem / .vmem)</label>
                             <div style="display:flex; gap:8px; align-items:center;">
                                 <div id="ram-file-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin archivo seleccionado — Explorar USB, /media o /mnt</div>
-                                <button class="btn-secondary" id="btn-mount-evidence" style="white-space:nowrap; border-color: var(--accent-cyan); color: var(--accent-cyan);"><i class="bi bi-usb-drive me-2"></i>Montar USB</button>
-                                <button class="btn-primary" id="btn-browse-ram" style="white-space:nowrap;"><i class="bi bi-folder2-open me-2"></i>Explorar...</button>
+                                <button class="fsbtn fsbtn-ghost-cyan fsbtn-sm" id="btn-mount-evidence"><i class="bi bi-usb-drive"></i>Montar USB</button>
+                                <button class="fsbtn fsbtn-ghost" id="btn-browse-ram"><i class="bi bi-folder2-open"></i>Explorar...</button>
                             </div>
                             
                             <!-- Plugins que se ejecutarán -->
@@ -1711,9 +1902,9 @@
                             </div>
                             
                             <div style="margin-top: 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                                <button class="btn-primary" id="btn-run-ram" style="background: var(--accent-cyan); border-color: var(--accent-cyan); color: #000;"><i class="bi bi-cpu-fill me-2"></i>Iniciar Análisis RAM</button>
-                                <button class="btn-secondary" id="btn-view-report-ram" onclick="window.open('/api/ram/report/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-file-earmark-code me-2"></i>Ver Reporte JSON</button>
-                                <button class="btn-secondary" id="btn-view-sig-ram" onclick="window.open('/api/ram/signature/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-key me-2"></i>Descargar Firma RSA</button>
+                                <button class="fsbtn fsbtn-cyan" id="btn-run-ram"><span class="fsbtn-spinner"></span><i class="bi bi-cpu-fill"></i>Iniciar Análisis RAM</button>
+                                <button class="fsbtn fsbtn-ghost-cyan fsbtn-sm" id="btn-view-report-ram" onclick="window.open('/api/ram/report/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-file-earmark-code"></i>Ver Reporte JSON</button>
+                                <button class="fsbtn fsbtn-ghost fsbtn-sm" id="btn-view-sig-ram" onclick="window.open('/api/ram/signature/' + document.getElementById('case-number').value.trim(), '_blank')"><i class="bi bi-key"></i>Firma RSA</button>
                             </div>
                             
                             <!-- Progress Bar -->
@@ -1773,7 +1964,8 @@
                             </div>
 
                             <div style="margin-top: 4px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-                                <button class="btn-primary" id="btn-run-mobile" style="background: var(--accent-yellow); border-color: var(--accent-yellow); color: #000;">
+                                <button class="fsbtn fsbtn-yellow" id="btn-run-mobile">
+                                    <span class="fsbtn-spinner"></span>
                                     <i class="bi bi-phone-vibrate-fill me-2"></i>Iniciar Extracción Forense
                                 </button>
                                 <button class="btn-secondary" id="btn-view-report-mobile" onclick="openViewerModal('/api/mobile/report/' + document.getElementById('case-number').value.trim())"><i class="bi bi-file-earmark-code me-2"></i>Ver Reporte JSON</button>
@@ -1840,7 +2032,8 @@
 
                             <!-- Botones acción principal -->
                             <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                                <button class="btn-primary" id="btn-run-cloud" style="background: #475569; border-color: #475569;">
+                                <button class="fsbtn fsbtn-ghost" id="btn-run-cloud">
+                                    <span class="fsbtn-spinner"></span>
                                     <i class="bi bi-search me-2"></i>Iniciar Rastreo OSINT
                                 </button>
                                 <button class="btn-secondary" id="btn-show-mount-modal" onclick="document.getElementById('modal-montar-destino').style.display='flex'">
@@ -1918,7 +2111,7 @@
                             <label class="form-label-custom">Imagen Forense Origen (.dd / .raw)</label>
                             <div style="display:flex; gap:8px; align-items:center; margin-bottom:14px;">
                                 <div id="timeline-file-display" style="flex:1; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:10px 14px; font-family:var(--font-mono); font-size:0.85rem; color:var(--text-muted); min-height:42px;">Sin imagen seleccionada</div>
-                                <button class="btn-primary" id="btn-browse-timeline" style="white-space:nowrap;"><i class="bi bi-folder2-open me-2"></i>Escanear Caso</button>
+                                <button class="fsbtn fsbtn-ghost" id="btn-browse-timeline"><i class="bi bi-folder2-open"></i>Escanear Caso</button>
                             </div>
                             <div id="timeline-file-list" style="display:none; margin-top:0px; margin-bottom:14px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
 
@@ -1944,7 +2137,7 @@
                             </div>
 
                             <div style="margin-top: 20px;">
-                                <button class="btn-primary" id="btn-run-timeline" style="background: var(--accent-blue); border-color: var(--accent-blue);"><i class="bi bi-play-fill me-2"></i>Generar Super Timeline</button>
+                                <button class="fsbtn fsbtn-blue" id="btn-run-timeline"><span class="fsbtn-spinner"></span><i class="bi bi-play-fill"></i>Generar Super Timeline</button>
                             </div>
 
                             <!-- Progress Bar -->
@@ -1980,7 +2173,7 @@
                                     <label class="form-label-custom">URL Motor Remoto (Ollama Desktop PC)</label>
                                     <div style="display:flex; gap:8px;">
                                         <input type="text" id="ia-host-input" class="form-control-custom" value="http://192.168.2.3:11434" placeholder="Ej: http://192.168.2.3:11434">
-                                        <button class="btn-secondary" onclick="saveIaConfig()"><i class="bi bi-save me-1"></i>Guardar</button>
+                                        <button class="fsbtn fsbtn-ghost-green fsbtn-sm" onclick="saveIaConfig()"><i class="bi bi-save"></i>Guardar</button>
                                     </div>
                                     <div style="font-size:0.75rem; color:var(--text-muted); margin-top:5px;">Asegúrate de que Ollama en el PC tenga configurada la variable <code>OLLAMA_HOST=0.0.0.0</code></div>
                                 </div>
@@ -1989,7 +2182,7 @@
                             <!-- Botón de estado dictamen -->
                             <div id="ia-report-status" style="margin-bottom:12px; font-size:0.82rem;"></div>
                             <div style="margin-top: 12px;">
-                                <button class="btn-primary" id="btn-run-ia" style="background: var(--accent-green); border-color: var(--accent-green); color: #000;"><i class="bi bi-play-fill me-2"></i>Iniciar Análisis Inteligente</button>
+                                <button class="fsbtn fsbtn-green" id="btn-run-ia"><span class="fsbtn-spinner"></span><i class="bi bi-play-fill"></i>Iniciar Análisis Inteligente</button>
                             </div>
                             <!-- Progress Bar IA -->
                             <forensys-progress id="ia-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-green)"></forensys-progress>
@@ -2001,7 +2194,7 @@
                             <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-file-earmark-pdf-fill me-2" style="color: var(--accent-purple);"></i>9. Generar Reporte PDF</h5>
                             <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 15px;">Consolidación de cadena de custodia, hash maestro, hallazgos de IA y anexos en un único documento legal.</p>
                             <div style="margin-top: 20px; display: flex; gap: 10px; align-items: center;">
-                                <button class="btn-primary" id="btn-run-report" style="background: var(--accent-purple); border-color: var(--accent-purple);"><i class="bi bi-play-fill me-2"></i>Generar y Sellar Reporte PDF</button>
+                                <button class="fsbtn fsbtn-purple" id="btn-run-report"><span class="fsbtn-spinner"></span><i class="bi bi-shield-fill-check"></i>Generar y Sellar Reporte PDF</button>
                                 <button class="btn-secondary" id="btn-view-pdf" style="display: none; border-color: var(--accent-purple); color: var(--accent-purple);" onclick="openViewerModal('/api/case/' + activeCaseNumber + '/download?filepath=03_Results_(Resultados_Extraidos)/Reporte_Legal_Final_' + activeCaseNumber + '.pdf')"><i class="bi bi-file-pdf-fill me-2"></i>Ver PDF Generado</button>
                             </div>
                             <!-- Progress Bar Reporte -->
