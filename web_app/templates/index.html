@@ -2145,45 +2145,132 @@
                         </div>
 
                         <!-- 8. TRIAJE IA -->
-                        <div class="module-panel" id="panel-TRIAJE-IA" style="display: none; padding: 20px; border-top: 1px solid var(--border-dim); background: rgba(16,185,129,0.03);">
-                            <h5 style="color: var(--text-main); font-weight: 600; margin-bottom: 10px;"><i class="bi bi-robot me-2" style="color: var(--accent-green);"></i>8. Triaje IA (Ollama)</h5>
-                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 8px;">Análisis forense automatizado con LLM local o remoto. Lee los reportes generados por el Módulo 7 y genera un Dictamen Pericial en Markdown.</p>
-                            
-                            <!-- AI Engine Configuration -->
-                            <div style="background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:6px; padding:12px 14px; margin-bottom:14px;">
-                                <div style="display:flex; gap:15px; flex-wrap:wrap; margin-bottom:10px;">
-                                    <div style="flex:1; min-width:200px;">
-                                        <label class="form-label-custom">Motor de Inferencia</label>
-                                        <select id="ia-motor-select" class="form-control-custom" onchange="toggleIaRemoteHost()">
-                                            <option value="local">Raspberry Pi 5 (Local - Menor Potencia)</option>
-                                            <option value="remoto">PC Escritorio (Remoto Ryzen/RX - Máx Potencia)</option>
+                        <div class="module-panel" id="panel-TRIAJE-IA" style="display: none; padding: 24px; border-top: 1px solid var(--border-dim); background: linear-gradient(180deg, rgba(16,185,129,0.04) 0%, transparent 100%);">
+
+                            <!-- Header -->
+                            <div style="display:flex; align-items:center; gap:12px; margin-bottom:6px;">
+                                <div style="width:38px;height:38px;border-radius:10px;background:linear-gradient(135deg,rgba(16,185,129,0.25),rgba(6,182,212,0.15));border:1px solid rgba(16,185,129,0.35);display:flex;align-items:center;justify-content:center;font-size:1.1rem;color:var(--accent-green);flex-shrink:0;">
+                                    <i class="bi bi-robot"></i>
+                                </div>
+                                <div>
+                                    <h5 style="color:#fff;font-weight:700;margin:0;font-size:0.95rem;letter-spacing:0.2px;">8. Triaje IA — Análisis Inteligente</h5>
+                                    <p style="color:var(--text-muted);font-size:0.8rem;margin:2px 0 0;">LLM local o remoto lee los reportes del Módulo 7 y genera un Dictamen Pericial forense.</p>
+                                </div>
+                            </div>
+
+                            <div style="height:1px;background:linear-gradient(90deg,rgba(16,185,129,0.3),transparent);margin:16px 0;"></div>
+
+                            <!-- ── SECCIÓN 1: Motor de Inferencia ── -->
+                            <div style="margin-bottom:20px;">
+                                <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                                    <i class="bi bi-cpu-fill" style="color:var(--accent-green);"></i>Motor de Inferencia
+                                </div>
+
+                                <!-- Hidden real select for JS compatibility -->
+                                <select id="ia-motor-select" style="display:none;" onchange="toggleIaRemoteHost()">
+                                    <option value="local">local</option>
+                                    <option value="remoto">remoto</option>
+                                </select>
+
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;" id="ia-engine-cards">
+
+                                    <!-- Card: Local RPi -->
+                                    <label id="engine-card-local" style="cursor:pointer;display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:10px;border:2px solid rgba(16,185,129,0.5);background:rgba(16,185,129,0.08);transition:all 0.2s;position:relative;overflow:hidden;" onclick="selectIaEngine('local')">
+                                        <div style="position:absolute;top:10px;right:10px;">
+                                            <div id="engine-dot-local" style="width:9px;height:9px;border-radius:50%;background:var(--accent-green);box-shadow:0 0 8px rgba(16,185,129,0.8);"></div>
+                                        </div>
+                                        <div style="display:flex;align-items:center;gap:10px;">
+                                            <div style="width:34px;height:34px;border-radius:8px;background:rgba(16,185,129,0.15);border:1px solid rgba(16,185,129,0.3);display:flex;align-items:center;justify-content:center;font-size:1rem;color:var(--accent-green);">
+                                                <i class="bi bi-hdd-rack-fill"></i>
+                                            </div>
+                                            <div>
+                                                <div style="font-size:0.84rem;font-weight:700;color:#fff;">Raspberry Pi 5</div>
+                                                <div style="font-size:0.72rem;color:var(--accent-green);">Local · Sin red</div>
+                                            </div>
+                                        </div>
+                                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                            <span style="font-size:0.68rem;padding:2px 8px;border-radius:20px;background:rgba(16,185,129,0.12);border:1px solid rgba(16,185,129,0.25);color:#6ee7b7;">Offline 100%</span>
+                                            <span style="font-size:0.68rem;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,0.05);border:1px solid var(--border-dim);color:var(--text-muted);">RAM Limitada</span>
+                                        </div>
+                                    </label>
+
+                                    <!-- Card: Remote PC -->
+                                    <label id="engine-card-remoto" style="cursor:pointer;display:flex;flex-direction:column;gap:8px;padding:14px 16px;border-radius:10px;border:2px solid var(--border-dim);background:rgba(255,255,255,0.02);transition:all 0.2s;position:relative;overflow:hidden;" onclick="selectIaEngine('remoto')">
+                                        <div style="position:absolute;top:10px;right:10px;">
+                                            <div id="engine-dot-remoto" style="width:9px;height:9px;border-radius:50%;background:var(--border-mid);"></div>
+                                        </div>
+                                        <div style="display:flex;align-items:center;gap:10px;">
+                                            <div style="width:34px;height:34px;border-radius:8px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.25);display:flex;align-items:center;justify-content:center;font-size:1rem;color:var(--accent-blue);">
+                                                <i class="bi bi-pc-display-horizontal"></i>
+                                            </div>
+                                            <div>
+                                                <div style="font-size:0.84rem;font-weight:700;color:#fff;">PC Escritorio</div>
+                                                <div style="font-size:0.72rem;color:var(--accent-blue);">Remoto · Ryzen + GPU</div>
+                                            </div>
+                                        </div>
+                                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                                            <span style="font-size:0.68rem;padding:2px 8px;border-radius:20px;background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.2);color:#93c5fd;">Máx. Potencia</span>
+                                            <span style="font-size:0.68rem;padding:2px 8px;border-radius:20px;background:rgba(255,255,255,0.05);border:1px solid var(--border-dim);color:var(--text-muted);">Red LAN</span>
+                                        </div>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- ── SECCIÓN 2: URL Remota (condicional) ── -->
+                            <div id="ia-remote-host-container" style="display:none; margin-bottom:18px;">
+                                <div style="background:rgba(59,130,246,0.05);border:1px solid rgba(59,130,246,0.2);border-radius:10px;padding:14px 16px;">
+                                    <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--accent-blue);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                                        <i class="bi bi-wifi"></i> Conexión al Motor Remoto
+                                    </div>
+                                    <div style="display:flex; gap:8px;">
+                                        <div style="position:relative;flex:1;">
+                                            <i class="bi bi-link-45deg" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:0.9rem;pointer-events:none;"></i>
+                                            <input type="text" id="ia-host-input" class="form-control-custom" value="http://192.168.2.3:11434"
+                                                placeholder="http://192.168.X.X:11434"
+                                                style="padding-left:32px;border-color:rgba(59,130,246,0.3);">
+                                        </div>
+                                        <button class="fsbtn fsbtn-ghost-blue" onclick="saveIaConfig()"><i class="bi bi-save"></i>Guardar</button>
+                                    </div>
+                                    <div style="font-size:0.72rem;color:var(--text-muted);margin-top:7px;display:flex;align-items:center;gap:5px;">
+                                        <i class="bi bi-info-circle"></i>
+                                        El PC debe tener <code style="background:rgba(255,255,255,0.08);padding:1px 5px;border-radius:3px;font-size:0.7rem;">OLLAMA_HOST=0.0.0.0</code> configurado.
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ── SECCIÓN 3: Modelo LLM ── -->
+                            <div style="margin-bottom:20px;">
+                                <div style="font-size:0.7rem;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--text-muted);margin-bottom:10px;display:flex;align-items:center;gap:6px;">
+                                    <i class="bi bi-stars" style="color:var(--accent-green);"></i>Modelo LLM
+                                </div>
+                                <div style="display:flex;gap:10px;align-items:stretch;">
+                                    <div style="flex:1;position:relative;">
+                                        <i class="bi bi-box-seam" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text-muted);font-size:0.9rem;pointer-events:none;"></i>
+                                        <select id="ia-model-input" class="form-control-custom" style="padding-left:32px;">
+                                            <option value="">(Haz clic en Escanear para cargar modelos)</option>
                                         </select>
                                     </div>
-                                    <div style="flex:1; min-width:200px;">
-                                        <label class="form-label-custom">Modelo LLM</label>
-                                        <div style="display:flex; gap:8px;">
-                                            <select id="ia-model-input" class="form-control-custom">
-                                                <option value="">(Haz clic en Escanear...)</option>
-                                            </select>
-                                            <button class="btn-secondary" onclick="loadIaModels()" title="Escanear Modelos Disponibles"><i class="bi bi-search"></i> Escanear</button>
-                                        </div>
-                                    </div>
+                                    <button class="fsbtn fsbtn-ghost-green" onclick="loadIaModels()" title="Escanear modelos disponibles en el motor seleccionado">
+                                        <i class="bi bi-arrow-repeat"></i>Escanear
+                                    </button>
                                 </div>
-                                <div id="ia-remote-host-container" style="display:none;">
-                                    <label class="form-label-custom">URL Motor Remoto (Ollama Desktop PC)</label>
-                                    <div style="display:flex; gap:8px;">
-                                        <input type="text" id="ia-host-input" class="form-control-custom" value="http://192.168.2.3:11434" placeholder="Ej: http://192.168.2.3:11434">
-                                        <button class="fsbtn fsbtn-ghost-green fsbtn-sm" onclick="saveIaConfig()"><i class="bi bi-save"></i>Guardar</button>
-                                    </div>
-                                    <div style="font-size:0.75rem; color:var(--text-muted); margin-top:5px;">Asegúrate de que Ollama en el PC tenga configurada la variable <code>OLLAMA_HOST=0.0.0.0</code></div>
+                                <div id="ia-model-hint" style="font-size:0.72rem;color:var(--text-muted);margin-top:7px;display:flex;align-items:center;gap:5px;">
+                                    <i class="bi bi-info-circle"></i>
+                                    Selecciona el motor primero, luego escanea para ver los modelos disponibles.
                                 </div>
                             </div>
-                            
-                            <!-- Botón de estado dictamen -->
-                            <div id="ia-report-status" style="margin-bottom:12px; font-size:0.82rem;"></div>
-                            <div style="margin-top: 12px;">
-                                <button class="fsbtn fsbtn-green" id="btn-run-ia"><span class="fsbtn-spinner"></span><i class="bi bi-play-fill"></i>Iniciar Análisis Inteligente</button>
-                            </div>
+
+                            <!-- ── SEPARADOR ── -->
+                            <div style="height:1px;background:linear-gradient(90deg,rgba(16,185,129,0.2),transparent);margin-bottom:18px;"></div>
+
+                            <!-- ── Estado dictamen + Botón principal ── -->
+                            <div id="ia-report-status" style="margin-bottom:12px;font-size:0.82rem;"></div>
+                            <button class="fsbtn fsbtn-green fsbtn-lg" id="btn-run-ia" style="width:100%;">
+                                <span class="fsbtn-spinner"></span>
+                                <i class="bi bi-lightning-charge-fill"></i>
+                                Iniciar Análisis Inteligente
+                            </button>
+
                             <!-- Progress Bar IA -->
                             <forensys-progress id="ia-progress-container" style="display: none; margin-top: 20px;" color="var(--accent-green)"></forensys-progress>
                         </div>
@@ -5261,6 +5348,43 @@ function updateIaModelDropdown(forceModel) {
     if (previousModel && [...select.options].some(o => o.value === previousModel)) {
         select.value = previousModel;
     }
+}
+
+function selectIaEngine(motor) {
+    // Update hidden select so existing JS keeps working
+    const sel = document.getElementById('ia-motor-select');
+    if (sel) { sel.value = motor; }
+
+    // Visual state: green active card vs inactive card
+    const cardLocal  = document.getElementById('engine-card-local');
+    const cardRemoto = document.getElementById('engine-card-remoto');
+    const dotLocal   = document.getElementById('engine-dot-local');
+    const dotRemoto  = document.getElementById('engine-dot-remoto');
+
+    if (!cardLocal || !cardRemoto) { toggleIaRemoteHost(); return; }
+
+    if (motor === 'local') {
+        cardLocal.style.border  = '2px solid rgba(16,185,129,0.5)';
+        cardLocal.style.background = 'rgba(16,185,129,0.08)';
+        cardRemoto.style.border = '2px solid var(--border-dim)';
+        cardRemoto.style.background = 'rgba(255,255,255,0.02)';
+        dotLocal.style.background  = 'var(--accent-green)';
+        dotLocal.style.boxShadow   = '0 0 8px rgba(16,185,129,0.8)';
+        dotRemoto.style.background = 'var(--border-mid)';
+        dotRemoto.style.boxShadow  = 'none';
+    } else {
+        cardRemoto.style.border = '2px solid rgba(59,130,246,0.5)';
+        cardRemoto.style.background = 'rgba(59,130,246,0.08)';
+        cardLocal.style.border  = '2px solid var(--border-dim)';
+        cardLocal.style.background = 'rgba(255,255,255,0.02)';
+        dotRemoto.style.background = 'var(--accent-blue)';
+        dotRemoto.style.boxShadow  = '0 0 8px rgba(59,130,246,0.8)';
+        dotLocal.style.background  = 'var(--border-mid)';
+        dotLocal.style.boxShadow   = 'none';
+    }
+
+    // Trigger existing logic
+    toggleIaRemoteHost();
 }
 
 function toggleIaRemoteHost() {
