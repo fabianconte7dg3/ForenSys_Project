@@ -133,19 +133,28 @@ def crear_imagen_dd(origen, destino_base, caso_id, hash_original):
     print(f"\n[*] 3/4: Iniciando extracción bit a bit con dc3dd...")
     print(f"[*] Guardando imagen en: {ruta_imagen}")
     
-    comando = [
-        'dc3dd',
-        f'if={origen}',
-        f'of={ruta_imagen}',
-        'hash=sha256',
-        f'log={ruta_log}'
-    ]
-    
-    try:
-        subprocess.run(comando, check=True)
-    except subprocess.CalledProcessError as e:
-        print(f"\n[X] Error fatal al ejecutar dc3dd: {e}")
-        sys.exit(1)
+    import shutil
+    if shutil.which('pv'):
+        print("[!] Aplicando límite de velocidad (80 MB/s) con 'pv' para prevenir caída de voltaje USB...")
+        comando_sh = f"pv -q -L 80M {origen} | dc3dd of={ruta_imagen} hash=sha256 log={ruta_log}"
+        try:
+            subprocess.run(comando_sh, shell=True, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"\n[X] Error fatal al ejecutar dc3dd: {e}")
+            sys.exit(1)
+    else:
+        comando = [
+            'dc3dd',
+            f'if={origen}',
+            f'of={ruta_imagen}',
+            'hash=sha256',
+            f'log={ruta_log}'
+        ]
+        try:
+            subprocess.run(comando, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"\n[X] Error fatal al ejecutar dc3dd: {e}")
+            sys.exit(1)
         
     # Verificar hash en el log de dc3dd (Verificación Post-Imaging)
     print("\n[*] Validando Hash Post-Imaging...")
