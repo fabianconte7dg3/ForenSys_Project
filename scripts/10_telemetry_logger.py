@@ -57,7 +57,7 @@ def monitor_process(pid, module_name, case_dir):
     start_io = None
 
     try:
-        start_io = proc.io_counters()
+        start_io = psutil.disk_io_counters()
     except Exception:
         pass
 
@@ -93,9 +93,9 @@ def monitor_process(pid, module_name, case_dir):
 
     try:
         if start_io:
-            end_io = proc.io_counters()
+            end_io = psutil.disk_io_counters()
             metrics["io_read_mb"] = (end_io.read_bytes - start_io.read_bytes) / (1024 * 1024)
-            metrics["io_write_mb"] = (end_io.write_chars - start_io.write_chars) / (1024 * 1024)
+            metrics["io_write_mb"] = (end_io.write_bytes - start_io.write_bytes) / (1024 * 1024)
     except Exception:
         pass
 
