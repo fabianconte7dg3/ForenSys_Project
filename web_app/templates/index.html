@@ -3527,16 +3527,7 @@ caseForm.addEventListener('submit', function(e) {
         btnCloseCase.classList.add('visible');
         btnUnloadCase.classList.add('visible');
 
-        // Unlock Operaciones nav
-        navOps.classList.remove('disabled-nav');
-        opsLockBadge.textContent = '';
-        const opsIcon = document.createElement('i');
-        opsIcon.className = 'bi bi-unlock-fill me-1';
-        opsLockBadge.appendChild(opsIcon);
-        opsLockBadge.appendChild(document.createTextNode('Activo'));
-        opsLockBadge.style.background = 'rgba(16,185,129,.15)';
-        opsLockBadge.style.borderColor = 'rgba(16,185,129,.3)';
-        opsLockBadge.style.color = 'var(--accent-green)';
+        // Unlock Operaciones nav is always unlocked
 
         // Unlock Explorador nav
         navExplorer.classList.remove('disabled-nav');
@@ -3672,7 +3663,6 @@ btnUnloadCase.addEventListener('click', function() {
 
     // Lock Navigation Tabs
     const tabsToLock = [
-        {nav: navOps, badge: opsLockBadge},
         {nav: navExplorer, badge: explorerLockBadge},
         {nav: navSuperTimeline, badge: supertimelineLockBadge}
     ];
@@ -3831,17 +3821,7 @@ function resetCaseForm() {
     activeCaseBar.classList.remove('visible');
     caseIndicator.classList.remove('visible');
 
-    // Bloquear Operaciones y Explorador
-    navOps.classList.add('disabled-nav');
-    opsLockBadge.textContent = '';
-    const lockIcon1 = document.createElement('i');
-    lockIcon1.className = 'bi bi-lock-fill me-1';
-    opsLockBadge.appendChild(lockIcon1);
-    opsLockBadge.appendChild(document.createTextNode('Bloqueado'));
-    opsLockBadge.style.background = 'rgba(239,68,68,.15)';
-    opsLockBadge.style.borderColor = 'rgba(239,68,68,.3)';
-    opsLockBadge.style.color = 'var(--accent-red)';
-
+    // Bloquear Explorador
     navExplorer.classList.add('disabled-nav');
     explorerLockBadge.textContent = '';
     const lockIcon2 = document.createElement('i');
@@ -4115,16 +4095,6 @@ function loadCaseInUI(caso, notasTxt) {
     btnUnloadCase.classList.add('visible');
 
     // Desbloquear navegación
-    navOps.classList.remove('disabled-nav');
-    opsLockBadge.textContent = '';
-    const opsIcon = document.createElement('i');
-    opsIcon.className = 'bi bi-unlock-fill me-1';
-    opsLockBadge.appendChild(opsIcon);
-    opsLockBadge.appendChild(document.createTextNode('Activo'));
-    opsLockBadge.style.background = 'rgba(16,185,129,.15)';
-    opsLockBadge.style.borderColor = 'rgba(16,185,129,.3)';
-    opsLockBadge.style.color = 'var(--accent-green)';
-
     navExplorer.classList.remove('disabled-nav');
     explorerLockBadge.textContent = '';
     const expIcon = document.createElement('i');
