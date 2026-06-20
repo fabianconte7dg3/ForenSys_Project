@@ -571,6 +571,11 @@ def main():
     if dev_info['size_bytes'] > 0 and t_total > 0:
         velocidad = dev_info['size_bytes'] / t_total
         log(f"[*] Velocidad promedio: {_human(velocidad)}/s")
+        try:
+            with open("/tmp/wiping_speed.txt", "w") as f:
+                f.write(f"{velocidad / (1024*1024):.2f} MB/s")
+        except:
+            pass
 
     # Verificación post-wiping
     if not verify_wiping(disco):
