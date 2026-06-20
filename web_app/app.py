@@ -1801,7 +1801,7 @@ def get_telemetry_pdf(raw_caso_id):
     if not caso_id:
         return "caso_id inválido.", 400
     base_dest = get_case_base_from_registry(caso_id) or DESTINO_FORENSYS
-    pdf_path = os.path.join(base_dest, caso_id, "Reporte_Rendimiento_Hardware.pdf")
+    pdf_path = os.path.join(base_dest, caso_id, "Reporte_Rendimiento_Hardware.pdf") if caso_id != 'MANUAL' else os.path.join(base_dest, "Reporte_Rendimiento_Hardware.pdf")
     if os.path.exists(pdf_path):
         return send_file(pdf_path, mimetype='application/pdf')
     else:
