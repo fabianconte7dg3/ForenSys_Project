@@ -514,10 +514,21 @@ def main():
     wiping_exitoso = False
     t_inicio = time.time()
 
-    # Intentar blkdiscard si --fast y SSD/NVMe
-    if args.fast and dev_info['trim_ok']:
-        log("[*] Dispositivo flash detectado con soporte TRIM → usando blkdiscard")
+    # Intentar blkdiscard si --fast en dispositivo flash
+    # Se intenta aunque trim_ok sea False: el kernel puede bloquear TRIM a nivel
+    # de flag (por ejemplo, cuando el driver usb-storage en lugar de uas maneja
+    # el dispositivo), pero blkdiscard --force lo envía de todas formas al hardware.
+    # El usuario eligió --fast explícitamente: sabe que el dispositivo es SSD/NVMe.
+    if args.fast and not dev_info['rotacional']:
+        if dev_info['trim_ok']:
+            log("[*] Dispositivo flash detectado con soporte TRIM → usando blkdiscard")
+        else:
+            log("[!] El kernel marcó TRIM como no disponible (posible driver usb-storage en lugar de uas)")
+            log("[*] Intentando blkdiscard --force de todas formas (modo explícito --fast)")
         wiping_exitoso = wiping_blkdiscard(disco)
+        if not wiping_exitoso:
+            log("[!] blkdiscard falló incluso con --force. El hardware no soporta TRIM por este bus.")
+            log("[*] Fallback automático a modo estándar (dd + ceros)...")
 
     if not wiping_exitoso:
         # Pasada 1 (NIST Clear / DoD Pass 1): Usar dd + oflag=direct
