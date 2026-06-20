@@ -1375,10 +1375,9 @@
                 <div class="nav-item-icon"><i class="bi bi-speedometer2"></i></div>
                 <span>Visión General</span>
             </a>
-            <a class="nav-item-custom disabled-nav" data-section="section-ops" href="#" id="nav-ops">
+            <a class="nav-item-custom" data-section="section-ops" href="#" id="nav-ops">
                 <div class="nav-item-icon"><i class="bi bi-cpu"></i></div>
                 <span>Operaciones Forenses</span>
-                <span class="nav-lock-badge" id="ops-lock-badge"><i class="bi bi-lock-fill me-1"></i>Bloqueado</span>
             </a>
             <a class="nav-item-custom disabled-nav" data-section="section-explorer" href="#" id="nav-explorer">
                 <div class="nav-item-icon"><i class="bi bi-folder-symlink"></i></div>
@@ -4177,8 +4176,11 @@ function enableAllPipeBtns() {
 }
 
 function runOperation(btnId) {
-    if (!activeCaseNumber) {
-        addLogEntry('[ERROR] No hay caso activo. Abra un caso antes de iniciar operaciones.', 'log-error');
+    // Módulos que NO requieren un caso abierto
+    const noCaseRequired = ['btn-wiping', 'btn-usb-ram'];
+
+    if (!activeCaseNumber && !noCaseRequired.includes(btnId)) {
+        addLogEntry('[ERROR] No hay caso activo. Abra un caso antes de iniciar operaciones forenses (excepto Preparación de Discos).', 'log-error');
         return;
     }
 
