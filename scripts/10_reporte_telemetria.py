@@ -71,6 +71,14 @@ def generate_pdf(case_dir):
             pdf.set_font("Arial", size=10)
             
             # Formateo visual
+            cmd_device = data.get("cmd_device")
+            cmd_mode = data.get("cmd_wiping_mode")
+            if "Wiping" in module and cmd_device and cmd_device != "N/A":
+                pdf.cell(50, 8, "Dispositivo Destino:", 0, 0)
+                pdf.cell(0, 8, f"{cmd_device}", 0, 1)
+                pdf.cell(50, 8, "Modo de Wiping:", 0, 0)
+                pdf.cell(0, 8, f"{cmd_mode}", 0, 1)
+            
             pdf.cell(50, 8, "Tiempo Ejecución:", 0, 0)
             pdf.cell(0, 8, f"{duration:.2f} segundos", 0, 1)
             

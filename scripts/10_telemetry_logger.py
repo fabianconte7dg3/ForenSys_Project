@@ -115,10 +115,33 @@ def monitor_process(pid, module_name, case_dir):
         except:
             pass
 
-    # Guardar en JSON
+    # Extraer detalles del comando si es Wiping
+    cmd_device = "N/A"
+    cmd_wiping_mode = "N/A"
+    try:
+        cmdline = proc.cmdline()
+        for i, arg in enumerate(cmdline):
+            if arg in ('-t', '--target') and i + 1 < len(cmdline):
+                cmd_device = cmdline[i + 1]
+            elif arg.startswith('--target='):
+                cmd_device = arg.split('=')[1]
+        
+        if "01_wiping.py" in " ".join(cmdline):
+            if '--fast' in cmdline:
+                cmd_wiping_mode = "Rápido (TRIM/UNMAP)"
+            else:
+                cmd_wiping_mode = "Estándar (Ceros)"
+    except Exception:
+        pass
+
+    metrics["cmd_device"] = cmd_device
+    metrics["cmd_wiping_mode"] = cmd_wiping_mode
+
+    # Guardar en JSON (evitar sobreescribir añadiendo timestamp)
     os.makedirs(case_dir, exist_ok=True)
     safe_module = module_name.replace(" ", "_").replace("/", "_")
-    out_file = os.path.join(case_dir, f"telemetry_{safe_module}.json")
+    ts = int(metrics["start_time"])
+    out_file = os.path.join(case_dir, f"telemetry_{safe_module}_{ts}.json")
 
     with open(out_file, 'w') as f:
         json.dump(metrics, f, indent=4)
