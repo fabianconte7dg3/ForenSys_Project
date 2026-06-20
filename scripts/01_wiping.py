@@ -508,6 +508,13 @@ def main():
     else:
         log(f"[+] Disco {disco} en modo lectura-escritura.")
 
+    # Limpiar archivo temporal de velocidad de ejecuciones anteriores
+    try:
+        if os.path.exists("/tmp/wiping_speed.txt"):
+            os.remove("/tmp/wiping_speed.txt")
+    except Exception:
+        pass
+
     # PASO 1: Wiping
     log(f"\n[*] PASO 1/3: Iniciando limpieza...")
 
