@@ -1591,7 +1591,7 @@ def run_command_api():
 
     data = request.json or {}
     cmd = data.get('command', '').strip()
-    caso_id = data.get('caso_id', 'MANUAL')
+    caso_id = data.get('caso_id') or 'MANUAL'
     telemetry = data.get('telemetry', False)
     
     # Determinar destino
