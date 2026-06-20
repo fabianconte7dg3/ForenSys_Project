@@ -159,12 +159,29 @@ systemctl enable kiosk.service
 ok "kiosk.service habilitado (arranca en boot)"
 
 # =============================================================================
-# PASO 4: Comando 'kiosk' Global
+# PASO 5: Comando 'kiosk' Global
 # =============================================================================
-step "5/5 Instalando comando 'kiosk'..."
+step "5/6 Instalando comando 'kiosk'..."
 cp "$SCRIPT_DIR/kiosk_cmd.sh" /usr/local/bin/kiosk
 chmod +x /usr/local/bin/kiosk
 ok "Comando 'kiosk' disponible globalmente"
+
+# =============================================================================
+# PASO 6: Habilitar TRIM/UNMAP para adaptadores NVMe USB (RTL9210)
+# =============================================================================
+step "6/6 Configurando soporte TRIM para adaptadores NVMe USB (RTL9210)..."
+
+# Regla udev: habilita TRIM a nivel de atributos de cola de bloque
+cp "$SCRIPT_DIR/99-forensys-trim.rules" /etc/udev/rules.d/99-forensys-trim.rules
+ok "Regla udev TRIM instalada"
+
+# Modprobe: fuerza el driver UAS en lugar del legado usb-storage
+cp "$SCRIPT_DIR/forensys-uas.conf" /etc/modprobe.d/forensys-uas.conf
+ok "Módulo UAS configurado para RTL9210"
+
+# Recargar reglas y regenerar initramfs
+udevadm control --reload-rules && udevadm trigger
+update-initramfs -u -k all 2>/dev/null && ok "initramfs regenerado" || warn "No se pudo regenerar initramfs (no crítico)"
 
 # =============================================================================
 # RESUMEN FINAL

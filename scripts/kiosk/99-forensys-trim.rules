@@ -1,0 +1,34 @@
+# ForenSys - Habilitar TRIM/UNMAP para adaptadores NVMe USB con chip Realtek RTL9210
+#
+# Por qué existe este archivo:
+#   El kernel de Linux desactiva TRIM por USB de forma global como medida de seguridad
+#   para evitar daños con chips USB baratos con firmware defectuoso.
+#   El chip RTL9210 de Realtek soporta TRIM/UNMAP de forma confiable vía UASP,
+#   pero Linux lo bloquea igualmente. Esta regla lo rehabilita explícitamente.
+#
+# Efecto:
+#   Permite que blkdiscard y el modo rápido de ForenSys (01_wiping.py --fast)
+#   funcionen correctamente en SSDs NVMe conectados por USB con este chip.
+#
+# PIDs conocidos del chip Realtek RTL9210:
+#   0bda:9210, 0bda:9211, 0bda:9215, 0bda:9216
+
+ACTION=="add|change", SUBSYSTEM=="block", \
+    ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="9210", \
+    ATTR{queue/discard_max_bytes}="2199023255040", \
+    ATTR{queue/discard_granularity}="512"
+
+ACTION=="add|change", SUBSYSTEM=="block", \
+    ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="9211", \
+    ATTR{queue/discard_max_bytes}="2199023255040", \
+    ATTR{queue/discard_granularity}="512"
+
+ACTION=="add|change", SUBSYSTEM=="block", \
+    ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="9215", \
+    ATTR{queue/discard_max_bytes}="2199023255040", \
+    ATTR{queue/discard_granularity}="512"
+
+ACTION=="add|change", SUBSYSTEM=="block", \
+    ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="9216", \
+    ATTR{queue/discard_max_bytes}="2199023255040", \
+    ATTR{queue/discard_granularity}="512"

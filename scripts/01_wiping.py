@@ -190,7 +190,24 @@ def get_device_info(disco):
             pass
 
     # ¿Soporta TRIM / blkdiscard?
-    if not info['rotacional'] or info['transport'] in ('nvme', 'mmc'):
+    # Primero verificar atributo sysfs discard_max_bytes (más confiable que blkdiscard -n)
+    discard_path = f"/sys/block/{nombre}/queue/discard_max_bytes"
+    if os.path.exists(discard_path):
+        try:
+            discard_max = int(open(discard_path).read().strip())
+            if discard_max > 0:
+                info['trim_ok'] = True
+            # Si es 0, intentar con blkdiscard dry-run como fallback
+            elif not info['rotacional'] or info['transport'] in ('nvme', 'mmc'):
+                try:
+                    r = subprocess.run(['blkdiscard', '-n', disco],
+                                       capture_output=True, timeout=5)
+                    info['trim_ok'] = (r.returncode == 0)
+                except Exception:
+                    info['trim_ok'] = False
+        except Exception:
+            pass
+    elif not info['rotacional'] or info['transport'] in ('nvme', 'mmc'):
         try:
             r = subprocess.run(['blkdiscard', '-n', disco],  # dry-run
                                capture_output=True, timeout=5)
