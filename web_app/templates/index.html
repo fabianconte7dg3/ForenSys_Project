@@ -1800,6 +1800,20 @@
                             </div>
                             <div id="disco-device-list" style="display:none; margin-top:10px; background:var(--bg-surface); border:1px solid var(--border-dim); border-radius:8px; overflow:hidden;"></div>
                             
+                            <!-- Limitador de Velocidad -->
+                            <div style="margin-top:20px; background: rgba(245,158,11,0.05); border:1px solid rgba(245,158,11,0.2); border-radius:8px; padding:15px;">
+                                <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px;">
+                                    <div class="form-check form-switch custom-switch">
+                                        <input class="form-check-input" type="checkbox" id="throttleCheck" checked>
+                                        <label class="form-check-label fw-bold" for="throttleCheck" style="color: var(--text-main); margin-left: 8px;">Limitar Velocidad Segura (80 MB/s)</label>
+                                    </div>
+                                </div>
+                                <p style="font-size: 0.8rem; color: var(--text-muted); margin: 0; padding-left: 45px;">
+                                    Previene caídas de voltaje de la placa en clonaciones NVMe-a-NVMe. 
+                                    <strong style="color:var(--text-main);">Desactiva esto SÓLO si estás usando un Hub USB alimentado por pared</strong> para liberar la velocidad máxima de tu hardware (hasta 450 MB/s).
+                                </p>
+                            </div>
+
                             <!-- ISO 27037 Checklist -->
                             <div style="margin-top:20px; background:var(--bg-body); border:1px solid var(--border-dim); border-radius:8px; padding:15px;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
@@ -4182,7 +4196,12 @@ function runOperation(btnId) {
             addLogEntry('[ERROR] Seleccione un disco sospechoso para extraer.', 'log-error');
             return;
         }
-        command = `sudo /home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/02_deadbox_v2.py --target "${targetDev}" --case "${activeCaseNumber}" --perito "${activeCasePerito}"`;
+        let throttleFlag = '';
+        const throttleCheck = document.getElementById('throttleCheck');
+        if (throttleCheck && throttleCheck.checked) {
+            throttleFlag = ' --throttle 80M';
+        }
+        command = `sudo /home/ciber-admin/ForenSys_Project/venv/bin/python3 /home/ciber-admin/ForenSys_Project/scripts/02_deadbox_v2.py --target "${targetDev}" --case "${activeCaseNumber}" --perito "${activeCasePerito}"${throttleFlag}`;
     } else if (btnId === 'btn-usb-ram') {
         const targetDev = selectedDevices.usb;
         if (!targetDev) {

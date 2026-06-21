@@ -96,9 +96,42 @@ def calcular_hash(ruta_dispositivo):
     """Calcula el Hash SHA-256 usando sha256sum nativo en C (rápido) o fallback a bloques 8MB en Python."""
     print(f"\n[*] 1/4: Calculando Hash SHA-256 PRE-ADQUISICIÓN de {ruta_dispositivo}...")
     
-    # Intento 1: sha256sum nativo (C) altamente optimizado
+    import shutil
+    if shutil.which('pv'):
+        print("[*] Usando pv + sha256sum para cálculo acelerado con progreso...")
+        try:
+            # Obtener el tamaño del disco usando blockdev
+            r_size = subprocess.run(['blockdev', '--getsize64', ruta_dispositivo], capture_output=True, text=True)
+            size_bytes = r_size.stdout.strip()
+            
+            # Ejecutar pv -n (números de porcentaje)
+            cmd_pv = f"pv -n -s {size_bytes} {ruta_dispositivo} 2>&1"
+            cmd_hash = f"sha256sum"
+            
+            p_pv = subprocess.Popen(cmd_pv, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            p_hash = subprocess.Popen(cmd_hash, shell=True, stdin=p_pv.stdout, stdout=subprocess.PIPE, text=True)
+            
+            last_pct = -1
+            for line in p_pv.stdout:
+                line = line.strip()
+                if line.isdigit():
+                    pct = int(line)
+                    if pct != last_pct:
+                        print(f"[PROGRESO:{pct}] Calculando Hash Original ({pct}%)", flush=True)
+                        last_pct = pct
+            
+            p_pv.wait()
+            out_hash, _ = p_hash.communicate()
+            if p_hash.returncode == 0 and out_hash:
+                hash_resultado = out_hash.split()[0].lower()
+                print(f"[PROGRESO:100] Hash Original Calculado")
+                print(f"[+] HASH ORIGINAL (Rápido): {hash_resultado}")
+                return hash_resultado
+        except Exception as e:
+            print(f"[-] Fallo en pv+sha256sum: {e}")
+            
+    print("[-] Usando motor de hashing acelerado (sha256sum sin progreso)...")
     try:
-        print("[*] Usando motor de hashing acelerado (sha256sum)...")
         result = subprocess.run(
             ['sha256sum', ruta_dispositivo],
             capture_output=True, text=True, check=True
@@ -125,7 +158,7 @@ def calcular_hash(ruta_dispositivo):
         except FileNotFoundError:
             print(f"\n[X] No se encontró el dispositivo {ruta_dispositivo}.")
             sys.exit(1)
-def crear_imagen_dd(origen, destino_base, caso_id, hash_original):
+def crear_imagen_dd(origen, destino_base, caso_id, hash_original, throttle=None):
     """Utiliza dc3dd para crear la imagen física y verifica su hash posteriormente."""
     ruta_imagen = os.path.join(destino_base, f"{caso_id}_evidencia.dd")
     ruta_log = os.path.join(destino_base, f"{caso_id}_dc3dd.log")
@@ -134,9 +167,9 @@ def crear_imagen_dd(origen, destino_base, caso_id, hash_original):
     print(f"[*] Guardando imagen en: {ruta_imagen}")
     
     import shutil
-    if shutil.which('pv'):
-        print("[!] Aplicando límite de velocidad (80 MB/s) con 'pv' para prevenir caída de voltaje USB...")
-        comando_sh = f"pv -q -L 80M {origen} | dc3dd of={ruta_imagen} hash=sha256 log={ruta_log}"
+    if throttle and shutil.which('pv'):
+        print(f"[!] Aplicando límite de velocidad ({throttle}) con 'pv' para prevenir caída de voltaje USB...")
+        comando_sh = f"pv -q -L {throttle} {origen} | dc3dd of={ruta_imagen} hash=sha256 log={ruta_log}"
         try:
             subprocess.run(comando_sh, shell=True, check=True)
         except subprocess.CalledProcessError as e:
@@ -258,11 +291,13 @@ def main():
     parser.add_argument("-c", "--case", required=False, help="ID del Caso")
     parser.add_argument("-p", "--perito", required=False, help="Nombre del perito a cargo")
     parser.add_argument("--set-readonly-only", action="store_true", help="Solo aplicar bloqueador y salir")
+    parser.add_argument("--throttle", type=str, required=False, help="Límite de velocidad pv (ej. 80M)")
     args = parser.parse_args()
     
     origen = args.target
     caso_id = args.case
     perito = args.perito
+    throttle = args.throttle
     
     if not origen.startswith('/dev/'):
         print("[X] ERROR DE SEGURIDAD: Ruta de origen inválida. Debe ser un dispositivo en /dev/")
@@ -295,7 +330,7 @@ def main():
     generar_cadena_custodia(destino_base, caso_id, perito, origen, hash_original)
     
     # 3. Extracción (Copia) con verificación post-imaging
-    ruta_imagen_dd, hash_imagen = crear_imagen_dd(origen, destino_base, caso_id, hash_original)
+    ruta_imagen_dd, hash_imagen = crear_imagen_dd(origen, destino_base, caso_id, hash_original, throttle)
     
     # 4. Recuperación de archivos
     recuperar_borrados(ruta_imagen_dd, destino_base, caso_id)
